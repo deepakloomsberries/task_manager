@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import { updateTask, setTaskStatus, deleteTask, addComment } from "@/lib/actions/tasks";
+import { uploadAttachment, deleteAttachment } from "@/lib/actions/files";
+import { fmtSize } from "@/lib/storage";
 import {
   TASK_STATUSES,
   TASK_PRIORITIES,
@@ -34,6 +36,7 @@ export default async function TaskDetailPage({
         assignee: true,
         createdBy: true,
         comments: { include: { author: true }, orderBy: { createdAt: "asc" } },
+        attachments: { include: { uploadedBy: true }, orderBy: { createdAt: "desc" } },
       },
     }),
     db.user.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
@@ -194,6 +197,60 @@ export default async function TaskDetailPage({
             </div>
           </form>
         )}
+      </div>
+
+      <div className="card p-6">
+        <h2 className="mb-4 font-semibold">
+          Attachments{" "}
+          <span className="text-sm font-normal text-slate-400">({task.attachments.length})</span>
+        </h2>
+        <div className="space-y-2">
+          {task.attachments.map((a) => (
+            <div
+              key={a.id}
+              className="flex items-center gap-3 rounded-lg border border-slate-200 px-4 py-2.5"
+            >
+              <span className="text-lg">📎</span>
+              <div className="min-w-0 flex-1">
+                <a
+                  href={`/api/files/${a.id}`}
+                  target="_blank"
+                  className="block truncate text-sm font-medium text-sky-700 hover:underline"
+                >
+                  {a.originalName}
+                </a>
+                <div className="text-xs text-slate-400">
+                  {fmtSize(a.size)} · {a.uploadedBy.name} · {fmtDateTime(a.createdAt)}
+                </div>
+              </div>
+              <a
+                href={`/api/files/${a.id}?download=1`}
+                className="text-xs text-sky-600 hover:underline"
+              >
+                Download
+              </a>
+              {(a.uploadedById === user.id || user.role === "ADMIN") && (
+                <form action={deleteAttachment}>
+                  <input type="hidden" name="id" value={a.id} />
+                  <button type="submit" className="text-xs text-red-600 hover:underline">
+                    Delete
+                  </button>
+                </form>
+              )}
+            </div>
+          ))}
+          {task.attachments.length === 0 && (
+            <p className="text-sm text-slate-400">No files attached to this task.</p>
+          )}
+        </div>
+        <form action={uploadAttachment} className="mt-4 flex flex-wrap items-center gap-3">
+          <input type="hidden" name="taskId" value={task.id} />
+          <input type="file" name="file" required className="input max-w-md" />
+          <button type="submit" className="btn-secondary">
+            Attach file
+          </button>
+          <span className="text-xs text-slate-400">Max 20 MB.</span>
+        </form>
       </div>
 
       <div className="card p-6">

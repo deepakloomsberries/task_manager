@@ -41,13 +41,15 @@ model User {
   departmentId       Int?
   createdAt          DateTime    @default(now())
 
-  tasksAssigned   Task[]          @relation("assignee")
-  tasksCreated    Task[]          @relation("creator")
-  comments        TaskComment[]
-  notes           Note[]
-  timeEntries     TimeEntry[]
-  projectMembers  ProjectMember[]
-  projectsCreated Project[]
+  tasksAssigned      Task[]              @relation("assignee")
+  tasksCreated       Task[]              @relation("creator")
+  comments           TaskComment[]
+  notes              Note[]
+  timeEntries        TimeEntry[]
+  projectMembers     ProjectMember[]
+  projectsCreated    Project[]
+  attachments        Attachment[]
+  discussionMessages DiscussionMessage[]
 }
 
 model Project {
@@ -92,6 +94,7 @@ model Task {
   completedAt DateTime?
   comments    TaskComment[]
   timeEntries TimeEntry[]
+  attachments Attachment[]
 }
 
 model TaskComment {
@@ -111,6 +114,27 @@ model Note {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    Int
   updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+model Attachment {
+  id           Int      @id @default(autoincrement())
+  storedName   String   @unique // random name on disk inside UPLOAD_DIR
+  originalName String
+  mimeType     String
+  size         Int
+  task         Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId       Int?
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+  uploadedById Int
+  createdAt    DateTime @default(now())
+}
+
+model DiscussionMessage {
+  id        Int      @id @default(autoincrement())
+  body      String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId  Int
   createdAt DateTime @default(now())
 }
 

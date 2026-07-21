@@ -33,6 +33,9 @@ yarn-error.log*
 prisma/*.db
 prisma/*.db-journal
 
+# uploaded files
+/uploads
+
 # vercel
 .vercel
 

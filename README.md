@@ -12,6 +12,13 @@ Built to replace TaskoPad — no per-user subscription, fully self-hosted.
 - **Tasks** — priorities, due dates, statuses (To Do → In Progress → In Review → Done),
   assignees, projects, filters, and a discussion thread (comments) on every task.
 - **Projects** — per company, with member lists and progress bars.
+- **Attachments & Documents** — attach files (max 20 MB) to any task; the Documents page
+  lists every file in the company. Files are stored on your own server disk (`UPLOAD_DIR`)
+  and downloads require login.
+- **Discussion** — company-wide chat visible to all employees across the three companies.
+- **Email notifications** — via your Gmail SMTP app password: employees get an email when a
+  task is assigned to them and when someone comments on their task. If SMTP is not
+  configured the app simply skips sending — nothing breaks.
 - **Time sheet** — employees log hours against tasks/projects; weekly and 30-day totals.
 - **Notes** — private personal notes.
 - **Reports** — task and hour summaries per employee and per project
@@ -52,15 +59,61 @@ Override the seed admin with `ADMIN_EMAIL` / `ADMIN_PASSWORD` env vars before ru
 | -------------- | ---------------------------------------------------- |
 | `DATABASE_URL` | SQLite file location, e.g. `file:./dev.db`           |
 | `AUTH_SECRET`  | Secret for signing session cookies — **set a long random value in production** |
+| `APP_URL`      | Public URL used in email links, e.g. `https://tasks.donetella.com` |
+| `UPLOAD_DIR`   | Folder on the server where attachments are stored (default `./uploads`) |
+| `SMTP_HOST` / `SMTP_PORT` | SMTP server — for Gmail: `smtp.gmail.com` / `465` |
+| `SMTP_USER` / `SMTP_PASS` | Gmail address and its **App Password**. Leave empty to disable email |
+| `SMTP_FROM`    | From header, e.g. `Looms & Berries Tasks <you@gmail.com>` |
 
-## Deployment (any small VPS)
+### Getting a Gmail App Password
 
-1. Install Node.js 20+.
-2. Clone the repo, create `.env` with a strong `AUTH_SECRET` and `DATABASE_URL="file:./prod.db"`.
+1. Google Account → Security → turn on **2-Step Verification** (required).
+2. Security → **App passwords** → create one for "Mail".
+3. Put the 16-character password in `SMTP_PASS` (no spaces) and your Gmail address in `SMTP_USER`.
+
+## Deployment on tasks.donetella.com (same pattern as the b2b app)
+
+1. Install Node.js 20+ on the server.
+2. Clone the repo, copy `.env.example` to `.env` and fill in `AUTH_SECRET`
+   (e.g. `openssl rand -hex 32`), `APP_URL=https://tasks.donetella.com`, `UPLOAD_DIR`,
+   and the SMTP values.
 3. `npm install && npm run setup && npm run build`.
-4. Run `npm start` behind a reverse proxy (nginx/Caddy) with HTTPS. A process manager
-   such as `pm2` keeps it running: `pm2 start npm --name tasks -- start`.
-5. Back up the SQLite file (`prisma/prod.db`) regularly — that file is your whole database.
+4. Create a systemd service (like the b2b app):
+
+   ```ini
+   [Unit]
+   Description=Looms & Berries Task Manager
+   After=network.target
+
+   [Service]
+   WorkingDirectory=/path/to/task_manager
+   ExecStart=/usr/bin/npm start
+   Restart=always
+   EnvironmentFile=/path/to/task_manager/.env
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+
+   `sudo systemctl enable --now task-manager`
+
+5. Point nginx at it with HTTPS (the app listens on port 3000; use `PORT=xxxx` in the
+   service `Environment=` to change it):
+
+   ```nginx
+   server {
+     server_name tasks.donetella.com;
+     client_max_body_size 25m;   # needed for file uploads
+     location / {
+       proxy_pass http://127.0.0.1:3000;
+       proxy_set_header Host $host;
+       proxy_set_header X-Forwarded-Proto $scheme;
+     }
+   }
+   ```
+
+6. Back up regularly: the SQLite file (`prisma/prod.db`) **and** the uploads folder
+   (`UPLOAD_DIR`) — together they are your whole data.
 
 ## Admin workflow for onboarding the team
 

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
+import { notifyTaskAssigned, notifyTaskComment } from "@/lib/mail";
 
 const STATUSES = ["TODO", "IN_PROGRESS", "REVIEW", "DONE"];
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"];
@@ -27,6 +28,22 @@ export async function createTask(formData: FormData) {
   const task = await db.task.create({
     data: { ...data, createdById: user.id },
   });
+
+  if (task.assigneeId && task.assigneeId !== user.id) {
+    const assignee = await db.user.findUnique({ where: { id: task.assigneeId } });
+    if (assignee?.active) {
+      notifyTaskAssigned({
+        to: assignee.email,
+        assigneeName: assignee.name,
+        taskId: task.id,
+        taskTitle: task.title,
+        assignedBy: user.name,
+        dueDate: task.dueDate,
+        priority: task.priority,
+      });
+    }
+  }
+
   revalidatePath("/tasks");
   redirect(`/tasks/${task.id}`);
 }
@@ -44,7 +61,24 @@ export async function updateTask(formData: FormData) {
   const data = parseTaskForm(formData);
   if (!data.title || !PRIORITIES.includes(data.priority)) redirect(`/tasks/${id}?error=invalid`);
 
-  await db.task.update({ where: { id }, data });
+  const updated = await db.task.update({ where: { id }, data });
+
+  const reassigned = updated.assigneeId && updated.assigneeId !== task.assigneeId;
+  if (reassigned && updated.assigneeId !== user.id) {
+    const assignee = await db.user.findUnique({ where: { id: updated.assigneeId! } });
+    if (assignee?.active) {
+      notifyTaskAssigned({
+        to: assignee.email,
+        assigneeName: assignee.name,
+        taskId: updated.id,
+        taskTitle: updated.title,
+        assignedBy: user.name,
+        dueDate: updated.dueDate,
+        priority: updated.priority,
+      });
+    }
+  }
+
   revalidatePath("/tasks");
   revalidatePath(`/tasks/${id}`);
   redirect(`/tasks/${id}`);
@@ -98,7 +132,34 @@ export async function addComment(formData: FormData) {
   const body = String(formData.get("body") ?? "").trim();
   if (!taskId || !body) redirect(`/tasks/${taskId}`);
 
+  const task = await db.task.findUnique({
+    where: { id: taskId },
+    include: { assignee: true, createdBy: true },
+  });
+  if (!task) redirect("/tasks");
+
   await db.taskComment.create({ data: { taskId, body, authorId: user.id } });
+
+  // Notify the assignee and the task creator, except whoever wrote the comment.
+  const recipients = new Map<number, { email: string; name: string }>();
+  if (task.assignee?.active) {
+    recipients.set(task.assignee.id, { email: task.assignee.email, name: task.assignee.name });
+  }
+  if (task.createdBy.active) {
+    recipients.set(task.createdBy.id, { email: task.createdBy.email, name: task.createdBy.name });
+  }
+  recipients.delete(user.id);
+  for (const r of Array.from(recipients.values())) {
+    notifyTaskComment({
+      to: r.email,
+      recipientName: r.name,
+      taskId,
+      taskTitle: task.title,
+      commenter: user.name,
+      comment: body,
+    });
+  }
+
   revalidatePath(`/tasks/${taskId}`);
   redirect(`/tasks/${taskId}`);
 }
