@@ -210,7 +210,7 @@ export default async function TaskDetailPage({
               key={a.id}
               className="flex items-center gap-3 rounded-lg border border-slate-200 px-4 py-2.5"
             >
-              <span className="text-lg">📎</span>
+              <span className="text-lg text-slate-400">⎘</span>
               <div className="min-w-0 flex-1">
                 <a
                   href={`/api/files/${a.id}`}

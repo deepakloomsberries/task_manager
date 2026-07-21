@@ -1,24 +1,25 @@
 # Deployment & Maintenance Guide
 
-The complete operations runbook for this application: installation, updates, backups,
-server migration, and troubleshooting. Every step is written as exact copy-paste
-commands with expected output, so it can be followed without prior server experience.
-It is based on the production deployment on `tasks.donetella.com` (Ubuntu 24.04 VPS),
-and documents the issues encountered there along with their resolutions.
+The operations runbook for this application: installation, updates, backups, server
+migration, and troubleshooting. Every step is written as exact commands with expected
+output, so it can be followed without prior server administration experience. It is
+based on the production deployment on `tasks.donetella.com` (Ubuntu 24.04 VPS) and
+documents the issues encountered there together with their resolutions.
 
-> **The golden rule:** your live data is only 3 things —
-> the database file `prisma/dev.db`, the `uploads/` folder, and the `.env` file.
-> Never delete these. Everything else can be re-downloaded from GitHub any time.
+> **Critical data.** The application's live data consists of exactly three items:
+> the database file `prisma/dev.db`, the `uploads/` directory, and the `.env` file.
+> These must never be deleted or overwritten. Everything else can be restored from
+> this repository at any time.
 
 ---
 
-## Part 1 — Fresh installation on a new Ubuntu server
+## Part 1 — Installation on a new Ubuntu server
 
-Follow this from top to bottom on a brand-new server (or when moving servers).
+Follow this section from top to bottom on a fresh server (also used when migrating servers).
 
-### 1.1 Log in to the server
+### 1.1 Connect to the server
 
-From Windows PowerShell:
+From Windows PowerShell (or any terminal):
 
 ```
 ssh root@YOUR.SERVER.IP
@@ -26,7 +27,8 @@ ssh root@YOUR.SERVER.IP
 
 ### 1.2 Install Node.js 22
 
-Ubuntu's built-in `apt install nodejs` is TOO OLD — always use NodeSource:
+The Node.js package in Ubuntu's default repositories is outdated. Install from
+NodeSource instead:
 
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
@@ -34,9 +36,9 @@ apt install -y nodejs
 node -v        # must print v20 or higher, e.g. v22.23.1
 ```
 
-### 1.3 Get the app code onto the server
+### 1.3 Obtain the application code
 
-**Preferred way (makes future updates easy):**
+Recommended (enables simple future updates):
 
 ```bash
 cd /home/kapil
@@ -44,109 +46,110 @@ git clone -b claude/internal-task-management-app-qrsumh https://github.com/deepa
 cd task_manager
 ```
 
-(Alternative: download the branch as a zip from GitHub, unzip, upload with WinSCP.
-Works too, but updates are more manual.)
+Alternative: download the branch as a zip from GitHub, extract it, and upload with
+WinSCP. This works, but updates become a manual copy process (see Part 2).
 
-> Note: files starting with a dot (`.env.example`, `.gitignore`) are invisible to
-> plain `ls` — use `ls -a` to see them. They ARE there.
+> Note: files whose names start with a dot (`.env.example`, `.gitignore`) are not
+> shown by a plain `ls`. Use `ls -a` to list them; they are present.
 
-### 1.4 Create the settings file (`.env`)
+### 1.4 Create the configuration file (`.env`)
 
 ```bash
 cp .env.example .env
 ```
 
-**Generate the AUTH_SECRET** (this signs the login cookies — every install needs its own):
+Generate the `AUTH_SECRET` (used to sign login session cookies — each installation
+requires its own unique value):
 
 ```bash
 openssl rand -hex 32
 ```
 
-It prints 64 random characters, e.g. `78c71eb7f404...`. Copy them
-(in most SSH windows, selecting text with the mouse copies it automatically;
-right-click pastes).
+This prints a 64-character random string. Copy it (in most SSH clients, selecting
+text with the mouse copies it; right-click pastes).
 
-Now edit the file:
+Edit the file:
 
 ```bash
 nano .env
 ```
 
-Nano basics: move with arrow keys · save = `Ctrl+O` then `Enter` · exit = `Ctrl+X`.
+Nano reference: navigate with arrow keys · save = `Ctrl+O` then `Enter` · exit = `Ctrl+X`.
 
-Fill it like this:
+Set the values as follows:
 
 ```
 DATABASE_URL="file:./dev.db"
-AUTH_SECRET="<paste the 64 characters from openssl here>"
+AUTH_SECRET="<the 64-character string from openssl>"
 APP_URL="https://tasks.donetella.com"
 UPLOAD_DIR="/home/kapil/task_manager/uploads"
 SMTP_HOST="smtp.gmail.com"
 SMTP_PORT="465"
-SMTP_USER="your-gmail@gmail.com"
+SMTP_USER="your-address@gmail.com"
 SMTP_PASS="the16charapppassword"
-SMTP_FROM="Looms & Berries Tasks <your-gmail@gmail.com>"
+SMTP_FROM="Looms & Berries Tasks <your-address@gmail.com>"
 ```
 
-**Common mistakes (both happened in the real deployment):**
+Common configuration errors (both occurred during the original deployment):
 
-- ⚠️ **Gmail shows the app password WITH spaces (`yztr dzlu vhrq wjsq`) — you must type
-  it WITHOUT spaces (`yztrdzluvhrqwjsq`).**
-- ⚠️ **Don't leave `AUTH_SECRET` as the placeholder text** — generate a real one with
+- **Gmail displays the app password with spaces (`abcd efgh ijkl mnop`); it must be
+  entered without spaces (`abcdefghijklmnop`).**
+- **`AUTH_SECRET` must not remain the placeholder text** — generate a real value with
   the `openssl` command above.
-- Keep `UPLOAD_DIR` inside the project folder as shown, so the backup script
-  (Part 3) automatically includes it.
+- Keep `UPLOAD_DIR` inside the project directory as shown so the backup job
+  (Part 3) automatically covers it.
 
-**How to get the Gmail App Password** (needed for email notifications):
+Obtaining a Gmail App Password (required for email notifications):
 
-1. Google Account → **Security** → turn on **2-Step Verification** (required).
-2. Security → **App passwords** → create one (name it anything, e.g. `tasks`).
-3. Google shows 16 characters — use them in `SMTP_PASS` **without spaces**.
-4. Email is optional: leave `SMTP_USER`/`SMTP_PASS` empty and the app works fine,
-   it just doesn't send emails.
+1. Google Account → **Security** → enable **2-Step Verification** (prerequisite).
+2. Security → **App passwords** → create one (any name, e.g. `tasks`).
+3. Google displays 16 characters — enter them in `SMTP_PASS` without spaces.
+4. Email is optional: if `SMTP_USER`/`SMTP_PASS` are left empty, the application
+   runs normally and simply skips sending email.
 
-Verify your edits landed correctly:
+Verify the values were saved correctly:
 
 ```bash
 grep -E "AUTH_SECRET|SMTP_PASS|UPLOAD_DIR" .env
 ```
 
-### 1.5 Install, create the database, build
+### 1.5 Install dependencies, initialize the database, build
 
 ```bash
 npm install
-npm run setup      # creates the database + the admin login
-npm run build      # compiles the app (takes ~a minute)
+npm run setup      # creates the database and the initial admin account
+npm run build      # compiles the application (approximately one minute)
 ```
 
 `npm run setup` prints: `Created admin user sales@loomsberries.com (password: Admin@12345)`.
 
-Warnings during `npm install` (deprecated packages, "5 vulnerabilities") are normal —
-ignore them, and do **not** run `npm audit fix --force` (it can break the app).
+Warnings during `npm install` (deprecated packages, "5 vulnerabilities") are expected
+and can be ignored. Do **not** run `npm audit fix --force` — it can install breaking
+package versions.
 
-### 1.6 Quick test
+### 1.6 Verify the application starts
 
 ```bash
 npm start
 ```
 
-Wait for `✓ Ready`, then from a **second** SSH window:
+Wait for `✓ Ready`, then from a second SSH session:
 
 ```bash
-curl -I http://localhost:3000/login      # expect: HTTP/1.1 200 OK
+curl -I http://localhost:3000/login      # expected: HTTP/1.1 200 OK
 ```
 
-> A running server looks "stuck" — it just sits there silently waiting for visitors.
-> That is normal. Press `Ctrl+C` in the first window to stop it, because the next
-> step runs it properly in the background.
+> A foreground server process produces no further output while it waits for
+> requests — this is normal operation, not a hang. Stop it with `Ctrl+C`; the next
+> step configures it to run as a background service.
 
-### 1.7 Run it permanently (systemd service)
+### 1.7 Configure the systemd service
 
 ```bash
 nano /etc/systemd/system/task-manager.service
 ```
 
-Paste:
+Content:
 
 ```ini
 [Unit]
@@ -163,44 +166,46 @@ EnvironmentFile=/home/kapil/task_manager/.env
 WantedBy=multi-user.target
 ```
 
-Save + exit, then:
+Save, exit, then:
 
 ```bash
 systemctl daemon-reload
 systemctl enable --now task-manager
-systemctl status task-manager       # want: green "active (running)" — press q to exit
+systemctl status task-manager       # expected: "active (running)" — press q to return
 ```
 
-The app now starts automatically after every reboot or power cut.
+The application now starts automatically after every reboot.
 
-> If some other app already uses port 3000 (check: `ss -tlnp | grep ":3000 "`),
-> add `Environment=PORT=3001` under `[Service]` and use 3001 in the nginx step below.
+> If another application already occupies port 3000 (check with
+> `ss -tlnp | grep ":3000 "`), add `Environment=PORT=3001` under `[Service]` and use
+> port 3001 in the nginx configuration below.
 
 ### 1.8 DNS record
 
-In the panel where **donetella.com** is managed, add:
+In the DNS management panel for **donetella.com**, add:
 
 | Type | Name | Value |
 |---|---|---|
-| A | `tasks` | your server IP |
+| A | `tasks` | server IP address |
 
-Then on the server, repeat until it prints the IP (takes 5–60 minutes):
+On the server, repeat the following until it prints the IP (propagation typically
+takes 5–60 minutes):
 
 ```bash
 dig +short tasks.donetella.com
 ```
 
-> If certbot (next step) fails with **NXDOMAIN**, it means this DNS record doesn't
-> exist yet or hasn't propagated — wait and retry. This exact error happened during
-> the first deployment.
+> If certbot (next step) fails with **NXDOMAIN**, the DNS record does not exist yet
+> or has not propagated — wait and retry. This occurred during the original
+> deployment and resolved itself once the record propagated.
 
-### 1.9 nginx + HTTPS
+### 1.9 nginx and HTTPS
 
 ```bash
 nano /etc/nginx/sites-available/tasks.donetella.com
 ```
 
-Paste:
+Content:
 
 ```nginx
 server {
@@ -214,7 +219,8 @@ server {
 }
 ```
 
-⚠️ `client_max_body_size 25m;` is REQUIRED — without it file attachments fail with a 413 error.
+**Important:** `client_max_body_size 25m;` is required — without it, file attachment
+uploads fail with HTTP 413.
 
 ```bash
 ln -s /etc/nginx/sites-available/tasks.donetella.com /etc/nginx/sites-enabled/
@@ -222,26 +228,27 @@ nginx -t && systemctl reload nginx
 certbot --nginx -d tasks.donetella.com
 ```
 
-Certbot ends with "Successfully deployed certificate" and renews itself automatically
-forever (verify any time with `certbot renew --dry-run`).
+Certbot ends with "Successfully deployed certificate" and configures automatic
+renewal (verify at any time with `certbot renew --dry-run`).
 
 ### 1.10 First login
 
 Open `https://tasks.donetella.com`:
 
 - Email: `sales@loomsberries.com` — Password: `Admin@12345`
-- The app forces you to set a new password immediately. **Store it safely — this is
-  the master admin login.**
+- The application requires an immediate password change. Store the new password
+  securely — it is the primary administrator credential.
 
-Then in the app: **Departments** → add departments → **Users → Add User** for each
-employee (give everyone the same temporary password, e.g. `Welcome@2026` — the app
-forces each person to change it on their first login).
+Initial setup in the application: **Departments** → create departments →
+**Users → Add User** for each employee. A shared temporary password (e.g.
+`Welcome@2026`) is acceptable — every user is required to set their own password at
+first login.
 
 ---
 
-## Part 2 — Updating the app (when code changes on GitHub)
+## Part 2 — Updating the application
 
-**Code changes do nothing until you rebuild and restart.** That's the key thing to know.
+Code changes take effect only after a rebuild and service restart.
 
 If installed with `git clone` (recommended):
 
@@ -253,14 +260,14 @@ npm run build
 systemctl restart task-manager
 ```
 
-If installed from a zip: download the new zip, copy files over the old ones —
-but **never overwrite `.env`, `prisma/dev.db`, or `uploads/`** — then:
+If installed from a zip: download the new zip and copy the files over the existing
+ones — **excluding `.env`, `prisma/dev.db`, and `uploads/`** — then:
 
 ```bash
 cd /home/kapil/task_manager && npm install && npm run build && systemctl restart task-manager
 ```
 
-What to run after which change:
+Command reference by type of change:
 
 | Changed | Command |
 |---|---|
@@ -268,85 +275,86 @@ What to run after which change:
 | `.env` only | `systemctl restart task-manager` |
 | `package.json` | `npm install && npm run build && systemctl restart task-manager` |
 | `prisma/schema.prisma` | `npx prisma db push && npm run build && systemctl restart task-manager` |
-| nginx config | `nginx -t && systemctl reload nginx` |
+| nginx configuration | `nginx -t && systemctl reload nginx` |
 
 ---
 
 ## Part 3 — Backups
 
-Set up once (single copy-paste — runs nightly at 2 AM, keeps 14 days):
+One-time setup (nightly at 02:00, 14-day retention):
 
 ```bash
 (crontab -l 2>/dev/null; echo '0 2 * * * d=$(date +\%F); mkdir -p /home/kapil/backups/$d; cp /home/kapil/task_manager/prisma/dev.db /home/kapil/backups/$d/; cp -r /home/kapil/task_manager/uploads /home/kapil/backups/$d/ 2>/dev/null; find /home/kapil/backups -maxdepth 1 -mtime +14 -exec rm -rf {} \;') | crontab -
 ```
 
-Verify it registered: `crontab -l`
+Verify registration: `crontab -l`
 
-> The `/home/kapil/backups` folder appears only **after the first 2 AM run** — seeing
-> "No such file or directory" on day one is normal.
+> The `/home/kapil/backups` directory is created by the first 02:00 run. "No such
+> file or directory" before that point is expected.
 
-Occasionally copy the newest backup folder to your own PC with WinSCP
-(connect to the server IP as root, drag the folder to your desktop). This protects
-you even if the entire server is lost.
+Periodically copy the most recent backup directory to a local machine with WinSCP
+(connect to the server IP as root). Off-server copies protect against total server
+loss.
 
 ---
 
-## Part 4 — Moving to a NEW server (full migration)
+## Part 4 — Migrating to a new server
 
-1. On the **old** server, grab the 3 data items:
+1. On the old server, collect the three data items:
    ```bash
-   ls /home/kapil/backups                    # pick the newest dated folder
+   ls /home/kapil/backups                    # identify the newest dated directory
    ```
-   Copy to your PC with WinSCP: that backup folder's `dev.db` + `uploads`, **plus**
+   Copy via WinSCP: that backup's `dev.db` and `uploads`, plus
    `/home/kapil/task_manager/.env`.
-2. On the **new** server, do all of Part 1 **except**: skip `npm run setup`'s effect by
-   doing this order instead —
+2. On the new server, perform Part 1 with one modification — restore data instead of
+   seeding:
    ```bash
    npm install
-   # copy your saved .env into /home/kapil/task_manager/.env  (WinSCP)
-   # copy your saved dev.db into /home/kapil/task_manager/prisma/dev.db  (WinSCP)
-   # copy your saved uploads folder into /home/kapil/task_manager/uploads  (WinSCP)
+   # via WinSCP: place the saved .env at /home/kapil/task_manager/.env
+   # via WinSCP: place the saved dev.db at /home/kapil/task_manager/prisma/dev.db
+   # via WinSCP: place the saved uploads directory at /home/kapil/task_manager/uploads
    npx prisma generate
    npm run build
    ```
-   (Do NOT run `npm run seed`/`npm run setup` — your copied `dev.db` already contains
-   all users and tasks. Setup would not harm existing data, but it's unnecessary.)
-3. Continue Part 1 from step 1.7 (systemd), 1.8 (change the DNS A record to the NEW
-   server's IP), 1.9 (nginx + certbot).
-4. Everyone's logins, tasks, files — everything continues exactly where it was.
+   Do not run `npm run setup` — the restored `dev.db` already contains all users and
+   data (running it would not damage the data, but it is unnecessary).
+3. Continue Part 1 from step 1.7 (systemd), then 1.8 (update the DNS A record to the
+   new server's IP), then 1.9 (nginx and certbot).
+4. All accounts, tasks, and files continue unchanged.
 
 ---
 
 ## Part 5 — Troubleshooting
 
-The 3 commands that solve/explain 90% of problems:
+Primary diagnostic commands:
 
 ```bash
-systemctl status task-manager        # is it running? want green "active"
-systemctl restart task-manager       # fixes most issues
-journalctl -u task-manager -n 50     # last 50 log lines (share these when asking for help)
+systemctl status task-manager        # service state — expected: "active (running)"
+systemctl restart task-manager       # resolves most transient issues
+journalctl -u task-manager -n 50     # last 50 log lines — include these when reporting a problem
 ```
 
-| Symptom | Cause / Fix |
+| Symptom | Cause / Resolution |
 |---|---|
-| "502 Bad Gateway" in browser | App is down → `systemctl restart task-manager` |
-| Site not loading at all | nginx down → `systemctl restart nginx` |
-| `certbot` fails with **NXDOMAIN** | DNS record missing or not propagated yet → check `dig +short tasks.donetella.com`, wait, retry |
-| File upload fails / 413 error | File over 20 MB, or nginx missing `client_max_body_size 25m;` |
-| Emails not arriving | `journalctl -u task-manager \| grep mail` — "SMTP not configured" = `.env` values empty; auth error = wrong/revoked app password (check for spaces!) |
-| `node: command not found` | Node not installed → Part 1.2 |
-| `ls` doesn't show `.env` | Dot-files are hidden → `ls -a` |
-| Terminal "stuck" after `npm start` | It's not stuck — the server is running. `Ctrl+C` stops it. Use systemd instead (Part 1.7) |
-| Employee forgot password | No SSH needed → admin panel → Users → Edit → Reset password |
-| Employee left the company | Admin panel → Users → Deactivate (blocks login, keeps history) |
-| Admin (you) forgot the master password | See Part 6 |
-| Server rebooted | Nothing to do — app auto-starts; verify with `systemctl status task-manager` |
+| "502 Bad Gateway" in browser | Application service down → `systemctl restart task-manager` |
+| Site not reachable at all | nginx down → `systemctl restart nginx` |
+| `certbot` fails with NXDOMAIN | DNS record missing or not yet propagated → check `dig +short tasks.donetella.com`, wait, retry |
+| File upload fails / HTTP 413 | File exceeds 20 MB, or nginx configuration lacks `client_max_body_size 25m;` |
+| Emails not arriving | `journalctl -u task-manager \| grep mail` — "SMTP not configured" means `.env` values are empty; an authentication error means a wrong or revoked app password (verify it contains no spaces) |
+| `node: command not found` | Node.js not installed → Part 1.2 |
+| `ls` does not show `.env` | Dot-files are hidden by default → `ls -a` |
+| No output after `npm start` | Normal — the server is running in the foreground. `Ctrl+C` stops it; use the systemd service instead (Part 1.7) |
+| Employee forgot their password | Admin panel → Users → Edit → Reset password (no server access required) |
+| Employee left the company | Admin panel → Users → Deactivate (blocks login immediately, preserves history) |
+| Administrator password lost | See Part 6 |
+| Server rebooted | No action required — the service auto-starts; verify with `systemctl status task-manager` |
 
 ---
 
-## Part 6 — Emergency: reset the admin password from SSH
+## Part 6 — Administrator password reset (server-side)
 
-If the admin password is lost, run this on the server (replace `NewPassword123`):
+If the administrator password is lost, run the following on the server (replace
+`NewPassword123` with a temporary value):
 
 ```bash
 cd /home/kapil/task_manager
@@ -361,22 +369,24 @@ db.user.update({
 "
 ```
 
-Then log in with `NewPassword123` — the app will force you to set a fresh password.
+Log in with the temporary password; the application will require setting a new one
+immediately.
 
 ---
 
-## Part 7 — Monthly 2-minute health check
+## Part 7 — Monthly health check
 
 ```bash
-ls /home/kapil/backups          # dated folders exist?
-df -h /                         # disk not filling up?
-certbot renew --dry-run         # HTTPS auto-renewal healthy? ("Congratulations")
-systemctl status task-manager   # green?
+ls /home/kapil/backups          # dated backup directories present
+df -h /                         # disk usage within limits
+certbot renew --dry-run         # certificate auto-renewal functional
+systemctl status task-manager   # service active
 ```
 
-## Never do these
+## Prohibited actions
 
-- ❌ Delete/edit `prisma/dev.db`, `uploads/`, or `.env` — that's the live data.
-- ❌ `npm audit fix --force` — can break the app despite npm suggesting it.
-- ❌ `apt install nodejs` without NodeSource (Part 1.2) — too old.
-- ❌ Put real passwords in GitHub — `.env` is intentionally excluded from the repository.
+- Do not delete or modify `prisma/dev.db`, `uploads/`, or `.env` — this is the live data.
+- Do not run `npm audit fix --force` — it can install breaking package versions.
+- Do not install Node.js from Ubuntu's default repositories — use NodeSource (Part 1.2).
+- Do not commit real credentials to the repository — `.env` is intentionally excluded
+  via `.gitignore`.

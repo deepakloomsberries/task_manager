@@ -57,7 +57,7 @@ export default function LoginPage({
         </form>
 
         <p className="mt-6 text-center text-xs text-slate-400">
-          No account? Ask your admin to create one for you.
+          Accounts are created by the administrator. Contact them for access.
         </p>
       </div>
     </main>

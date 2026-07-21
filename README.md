@@ -3,10 +3,10 @@
 In-house task management app for all Looms & Berries employees (India, UAE, Saudi Arabia).
 Built to replace TaskoPad — no per-user subscription, fully self-hosted.
 
-> 📘 **Operations runbook:** see **[DEPLOYMENT.md](./DEPLOYMENT.md)** for the complete
-> step-by-step guide — fresh-server installation (including `AUTH_SECRET` generation),
-> updates, backups, server migration, troubleshooting, and emergency admin password
-> reset. Based on the production deployment on tasks.donetella.com.
+> **Operations runbook:** see **[DEPLOYMENT.md](./DEPLOYMENT.md)** for the complete
+> step-by-step guide — server installation (including `AUTH_SECRET` generation),
+> updates, backups, server migration, troubleshooting, and administrator password
+> recovery. Based on the production deployment on tasks.donetella.com.
 
 ## Features
 

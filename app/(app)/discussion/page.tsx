@@ -31,7 +31,7 @@ export default async function DiscussionPage() {
       <div className="card flex-1 space-y-4 overflow-y-auto p-5">
         {messages.length === 0 && (
           <p className="py-10 text-center text-sm text-slate-400">
-            No messages yet — say hello to the team!
+            No messages yet. Start the conversation.
           </p>
         )}
         {messages.map((m) => {

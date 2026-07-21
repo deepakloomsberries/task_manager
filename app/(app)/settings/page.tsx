@@ -27,7 +27,7 @@ export default async function SettingsPage({
 
       {searchParams.first && user.mustChangePassword && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Welcome! For security, please change the password your admin gave you before continuing.
+          For security, please change the password provided by your administrator before continuing.
         </div>
       )}
 
