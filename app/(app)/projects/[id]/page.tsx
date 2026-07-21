@@ -8,6 +8,7 @@ import {
   removeProjectMember,
   deleteProject,
 } from "@/lib/actions/projects";
+import { saveProjectAsTemplate } from "@/lib/actions/templates";
 import {
   PROJECT_STATUSES,
   TASK_STATUSES,
@@ -80,6 +81,12 @@ export default async function ProjectDetailPage({
             </div>
             {canManage && (
               <div className="flex shrink-0 gap-2">
+                <form action={saveProjectAsTemplate}>
+                  <input type="hidden" name="projectId" value={project.id} />
+                  <button type="submit" className="btn-secondary" title="Copy this project's tasks into a reusable template">
+                    Save as template
+                  </button>
+                </form>
                 <Link href={`/projects/${project.id}?edit=1`} className="btn-secondary">
                   Edit
                 </Link>

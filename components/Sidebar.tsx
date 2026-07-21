@@ -39,7 +39,13 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
-export default function Sidebar({ isAdmin }: { isAdmin: boolean }) {
+export default function Sidebar({
+  isAdmin,
+  isManager,
+}: {
+  isAdmin: boolean;
+  isManager: boolean;
+}) {
   const pathname = usePathname();
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
 
@@ -54,6 +60,12 @@ export default function Sidebar({ isAdmin }: { isAdmin: boolean }) {
         {MAIN_NAV.map((item) => (
           <NavLink key={item.href} item={item} active={isActive(item.href)} />
         ))}
+        {isManager && (
+          <NavLink
+            item={{ href: "/templates", label: "Templates", icon: "❏" }}
+            active={isActive("/templates")}
+          />
+        )}
         {isAdmin && (
           <>
             <div className="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">

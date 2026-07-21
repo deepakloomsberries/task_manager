@@ -14,6 +14,7 @@ export async function createProject(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim() || null;
   const companyId = Number(formData.get("companyId"));
+  const templateId = formData.get("templateId") ? Number(formData.get("templateId")) : null;
   if (!name || !companyId) redirect("/projects?error=invalid");
 
   const project = await db.project.create({
@@ -25,7 +26,32 @@ export async function createProject(formData: FormData) {
       members: { create: { userId: user.id } },
     },
   });
+
+  if (templateId) {
+    const template = await db.projectTemplate.findUnique({
+      where: { id: templateId },
+      include: { items: { orderBy: { order: "asc" } } },
+    });
+    if (template) {
+      for (const item of template.items) {
+        await db.task.create({
+          data: {
+            title: item.title,
+            priority: item.priority,
+            projectId: project.id,
+            createdById: user.id,
+            dueDate:
+              item.dueOffsetDays != null
+                ? new Date(Date.now() + item.dueOffsetDays * 24 * 60 * 60 * 1000)
+                : null,
+          },
+        });
+      }
+    }
+  }
+
   revalidatePath("/projects");
+  revalidatePath("/tasks");
   redirect(`/projects/${project.id}`);
 }
 

@@ -14,7 +14,7 @@ export default async function ProjectsPage({
   const user = await requireUser();
   const canManage = isManagerOrAdmin(user.role);
 
-  const [projects, companies] = await Promise.all([
+  const [projects, companies, templates] = await Promise.all([
     db.project.findMany({
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
       include: {
@@ -24,6 +24,10 @@ export default async function ProjectsPage({
       },
     }),
     db.company.findMany({ orderBy: { name: "asc" } }),
+    db.projectTemplate.findMany({
+      include: { _count: { select: { items: true } } },
+      orderBy: { name: "asc" },
+    }),
   ]);
 
   const showNew = searchParams.new === "1" && canManage;
@@ -60,6 +64,24 @@ export default async function ProjectsPage({
             <div className="md:col-span-2">
               <label className="label">Description</label>
               <textarea name="description" rows={2} className="input" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="label">Start from template</label>
+              <select name="templateId" className="input">
+                <option value="">— Blank project —</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({t._count.items} tasks)
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-slate-400">
+                Templates are managed on the{" "}
+                <Link href="/templates" className="text-sky-600 hover:underline">
+                  Templates
+                </Link>{" "}
+                page.
+              </p>
             </div>
             <div className="md:col-span-2">
               <button type="submit" className="btn-primary">

@@ -132,6 +132,24 @@ model TaskActivity {
   createdAt DateTime @default(now())
 }
 
+model ProjectTemplate {
+  id          Int                   @id @default(autoincrement())
+  name        String                @unique
+  description String?
+  createdAt   DateTime              @default(now())
+  items       ProjectTemplateItem[]
+}
+
+model ProjectTemplateItem {
+  id            Int             @id @default(autoincrement())
+  template      ProjectTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  templateId    Int
+  title         String
+  priority      String          @default("MEDIUM")
+  dueOffsetDays Int? // due date = project creation date + this many days
+  order         Int             @default(0)
+}
+
 model Notification {
   id        Int      @id @default(autoincrement())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)

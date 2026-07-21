@@ -244,6 +244,17 @@ Initial setup in the application: **Departments** → create departments →
 `Welcome@2026`) is acceptable — every user is required to set their own password at
 first login.
 
+### 1.11 Installing on phones (PWA)
+
+The application installs to a phone's home screen directly from the browser — no app
+store involved. Instructions to share with employees (HTTPS must be active first):
+
+- **Android (Chrome):** open the site → browser menu (⋮) → **Add to Home screen** /
+  **Install app**.
+- **iPhone (Safari):** open the site → Share button → **Add to Home Screen**.
+
+It then opens full-screen with its own icon, like a native app.
+
 ---
 
 ## Part 2 — Updating the application

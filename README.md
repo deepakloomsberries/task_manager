@@ -25,6 +25,11 @@ companies (India, UAE, Saudi Arabia). Fully self-hosted.
 - **Notifications** — in-app notification center (assignments, comments, completions)
   in addition to email.
 - **Projects** — per company, with member lists and progress bars.
+- **Project templates** — managers define a reusable task list once (with priorities and
+  due-day offsets); new projects can start from a template, and any project can be saved
+  as one.
+- **Mobile app (PWA)** — installable on Android and iPhone home screens from the browser;
+  runs full-screen like a native app.
 - **Attachments & Documents** — attach files (max 20 MB) to any task; the Documents page
   lists every file in the company. Files are stored on your own server disk (`UPLOAD_DIR`)
   and downloads require login.

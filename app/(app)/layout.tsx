@@ -11,7 +11,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen">
-      <Sidebar isAdmin={user.role === "ADMIN"} />
+      <Sidebar
+        isAdmin={user.role === "ADMIN"}
+        isManager={user.role === "ADMIN" || user.role === "MANAGER"}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-16 shrink-0 items-center gap-4 border-b border-slate-200 bg-white px-6">
           <form action="/search" method="GET" className="max-w-md flex-1">
