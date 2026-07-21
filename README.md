@@ -1,7 +1,7 @@
 # Looms & Berries — Task Manager
 
-In-house task management app for all Looms & Berries employees (India, UAE, Saudi Arabia).
-Built to replace TaskoPad — no per-user subscription, fully self-hosted.
+Internal task management application for Looms & Berries employees across all three
+companies (India, UAE, Saudi Arabia). Fully self-hosted.
 
 > **Operations runbook:** see **[DEPLOYMENT.md](./DEPLOYMENT.md)** for the complete
 > step-by-step guide — server installation (including `AUTH_SECRET` generation),
