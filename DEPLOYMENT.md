@@ -1,9 +1,10 @@
-# Deployment & Maintenance Guide (step by step, for non-programmers)
+# Deployment & Maintenance Guide
 
-This guide contains **everything** needed to install, run, maintain, and move this app —
-written so it can be followed with zero coding knowledge. It is based on the real
-deployment done on `tasks.donetella.com` (Ubuntu 24.04 VPS) in July 2026, including
-every small problem that came up and its fix.
+The complete operations runbook for this application: installation, updates, backups,
+server migration, and troubleshooting. Every step is written as exact copy-paste
+commands with expected output, so it can be followed without prior server experience.
+It is based on the production deployment on `tasks.donetella.com` (Ubuntu 24.04 VPS),
+and documents the issues encountered there along with their resolutions.
 
 > **The golden rule:** your live data is only 3 things —
 > the database file `prisma/dev.db`, the `uploads/` folder, and the `.env` file.
