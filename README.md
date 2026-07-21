@@ -14,16 +14,26 @@ companies (India, UAE, Saudi Arabia). Fully self-hosted.
   Every new user gets a temporary password and is forced to change it on first login.
 - **Roles** — Admin (full access), Manager (projects + team reports), Employee.
 - **Dashboard** — my open / overdue / due-this-week / completed tasks, recent activity, active projects.
+- **My Tasks** — personal work view grouped by urgency (Overdue / Due today / This week /
+  Later) with one-click completion.
 - **Tasks** — priorities, due dates, statuses (To Do → In Progress → In Review → Done),
-  assignees, projects, filters, and a discussion thread (comments) on every task.
+  assignees, projects, subtasks with progress, colored tags, filters, a discussion
+  thread on every task, and a per-task activity history.
+- **Board view** — Kanban board with drag-and-drop between status columns.
+- **Calendar** — month view of tasks by due date (own tasks or everyone).
+- **Search** — global search across tasks, projects, documents, notes, and people.
+- **Notifications** — in-app notification center (assignments, comments, completions)
+  in addition to email.
 - **Projects** — per company, with member lists and progress bars.
 - **Attachments & Documents** — attach files (max 20 MB) to any task; the Documents page
   lists every file in the company. Files are stored on your own server disk (`UPLOAD_DIR`)
   and downloads require login.
 - **Discussion** — company-wide chat visible to all employees across the three companies.
-- **Email notifications** — via your Gmail SMTP app password: employees get an email when a
+- **Email notifications** — via Gmail SMTP app password: employees get an email when a
   task is assigned to them and when someone comments on their task. If SMTP is not
   configured the app simply skips sending — nothing breaks.
+- **Daily reminder digest** — an optional scheduled job (`npm run reminders`) emails each
+  employee a morning summary of their overdue and due-today tasks.
 - **Time sheet** — employees log hours against tasks/projects; weekly and 30-day totals.
 - **Notes** — private personal notes.
 - **Reports** — task and hour summaries per employee and per project

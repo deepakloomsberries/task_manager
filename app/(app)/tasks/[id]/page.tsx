@@ -2,9 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
-import { updateTask, setTaskStatus, deleteTask, addComment } from "@/lib/actions/tasks";
+import { updateTask, setTaskStatus, deleteTask, addComment, addSubtask } from "@/lib/actions/tasks";
 import { uploadAttachment, deleteAttachment } from "@/lib/actions/files";
+import { addTagToTask, removeTagFromTask } from "@/lib/actions/tags";
 import { fmtSize } from "@/lib/storage";
+import { TAG_COLORS, tagBadge } from "@/lib/ui";
 import {
   TASK_STATUSES,
   TASK_PRIORITIES,
@@ -37,6 +39,10 @@ export default async function TaskDetailPage({
         createdBy: true,
         comments: { include: { author: true }, orderBy: { createdAt: "asc" } },
         attachments: { include: { uploadedBy: true }, orderBy: { createdAt: "desc" } },
+        parent: true,
+        subtasks: { include: { assignee: true }, orderBy: { createdAt: "asc" } },
+        tags: { include: { tag: true } },
+        activities: { include: { actor: true }, orderBy: { createdAt: "desc" }, take: 30 },
       },
     }),
     db.user.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
@@ -53,8 +59,11 @@ export default async function TaskDetailPage({
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
-      <Link href="/tasks" className="text-sm text-slate-500 hover:underline">
-        ← Back to tasks
+      <Link
+        href={task.parent ? `/tasks/${task.parent.id}` : "/tasks"}
+        className="text-sm text-slate-500 hover:underline"
+      >
+        ← {task.parent ? `Back to "${task.parent.title}"` : "Back to tasks"}
       </Link>
 
       <div className="card p-6">
@@ -66,6 +75,44 @@ export default async function TaskDetailPage({
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <span className={`badge ${status.badge}`}>{status.label}</span>
                   <span className={`badge ${priority.badge}`}>{priority.label}</span>
+                  {task.tags.map(({ tag }) => (
+                    <span key={tag.id} className={`badge ${tagBadge(tag.color)}`}>
+                      {tag.name}
+                      {canEdit && (
+                        <form action={removeTagFromTask} className="ml-1 inline">
+                          <input type="hidden" name="taskId" value={task.id} />
+                          <input type="hidden" name="tagId" value={tag.id} />
+                          <button type="submit" title="Remove tag" className="opacity-50 hover:opacity-100">
+                            ✕
+                          </button>
+                        </form>
+                      )}
+                    </span>
+                  ))}
+                  {canEdit && (
+                    <details className="relative">
+                      <summary className="badge cursor-pointer list-none bg-slate-100 text-slate-500 hover:bg-slate-200">
+                        + tag
+                      </summary>
+                      <form
+                        action={addTagToTask}
+                        className="absolute left-0 top-7 z-10 flex w-64 gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-lg"
+                      >
+                        <input type="hidden" name="taskId" value={task.id} />
+                        <input name="name" required maxLength={30} placeholder="Tag name" className="input !py-1.5" />
+                        <select name="color" className="input w-24 !py-1.5">
+                          {TAG_COLORS.map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
+                        </select>
+                        <button type="submit" className="btn-primary !px-2.5 !py-1.5 text-xs">
+                          Add
+                        </button>
+                      </form>
+                    </details>
+                  )}
                 </div>
               </div>
               <div className="flex shrink-0 gap-2">
@@ -199,6 +246,89 @@ export default async function TaskDetailPage({
         )}
       </div>
 
+      {!task.parentId && (
+        <div className="card p-6">
+          <h2 className="mb-4 font-semibold">
+            Subtasks{" "}
+            <span className="text-sm font-normal text-slate-400">
+              ({task.subtasks.filter((s) => s.status === "DONE").length}/{task.subtasks.length})
+            </span>
+          </h2>
+          {task.subtasks.length > 0 && (
+            <div className="mb-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="h-full rounded-full bg-green-500"
+                style={{
+                  width: `${Math.round(
+                    (task.subtasks.filter((s) => s.status === "DONE").length /
+                      task.subtasks.length) *
+                      100
+                  )}%`,
+                }}
+              />
+            </div>
+          )}
+          <div className="divide-y divide-slate-100">
+            {task.subtasks.map((s) => (
+              <div key={s.id} className="flex items-center gap-3 py-2.5">
+                <form action={setTaskStatus}>
+                  <input type="hidden" name="id" value={s.id} />
+                  <input type="hidden" name="status" value={s.status === "DONE" ? "TODO" : "DONE"} />
+                  <input type="hidden" name="back" value={`/tasks/${task.id}`} />
+                  <button
+                    type="submit"
+                    title={s.status === "DONE" ? "Mark as not done" : "Mark as done"}
+                    className={`flex h-5 w-5 items-center justify-center rounded-full border-2 text-xs transition-colors ${
+                      s.status === "DONE"
+                        ? "border-green-500 bg-green-500 text-white"
+                        : "border-slate-300 text-transparent hover:border-green-500"
+                    }`}
+                  >
+                    ✓
+                  </button>
+                </form>
+                <Link
+                  href={`/tasks/${s.id}`}
+                  className={`flex-1 text-sm hover:text-sky-700 ${
+                    s.status === "DONE" ? "text-slate-400 line-through" : "font-medium"
+                  }`}
+                >
+                  {s.title}
+                </Link>
+                {s.assignee && (
+                  <span
+                    title={s.assignee.name}
+                    className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-[10px] font-semibold text-slate-600"
+                  >
+                    {initials(s.assignee.name)}
+                  </span>
+                )}
+              </div>
+            ))}
+            {task.subtasks.length === 0 && (
+              <p className="py-1 text-sm text-slate-400">Break this task into smaller steps.</p>
+            )}
+          </div>
+          {canEdit && (
+            <form action={addSubtask} className="mt-3 flex gap-2">
+              <input type="hidden" name="parentId" value={task.id} />
+              <input name="title" required placeholder="Add a subtask…" className="input flex-1" />
+              <select name="assigneeId" className="input w-44">
+                <option value="">Unassigned</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+              <button type="submit" className="btn-secondary">
+                Add
+              </button>
+            </form>
+          )}
+        </div>
+      )}
+
       <div className="card p-6">
         <h2 className="mb-4 font-semibold">
           Attachments{" "}
@@ -290,6 +420,26 @@ export default async function TaskDetailPage({
           </button>
         </form>
       </div>
+
+      {task.activities.length > 0 && (
+        <details className="card p-6">
+          <summary className="cursor-pointer font-semibold">
+            Activity{" "}
+            <span className="text-sm font-normal text-slate-400">({task.activities.length})</span>
+          </summary>
+          <div className="mt-4 space-y-2 border-l-2 border-slate-100 pl-4">
+            {task.activities.map((a) => (
+              <div key={a.id} className="text-sm">
+                <span className="font-medium">{a.actor.name}</span>{" "}
+                <span className="text-slate-600">
+                  {a.type === "created" ? "created this task" : a.detail}
+                </span>
+                <span className="ml-2 text-xs text-slate-400">{fmtDateTime(a.createdAt)}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   );
 }

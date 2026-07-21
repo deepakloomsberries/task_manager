@@ -7,8 +7,10 @@ type NavItem = { href: string; label: string; icon: string };
 
 const MAIN_NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "▦" },
+  { href: "/my-tasks", label: "My Tasks", icon: "◎" },
   { href: "/tasks", label: "Tasks", icon: "☑" },
   { href: "/projects", label: "Projects", icon: "▤" },
+  { href: "/calendar", label: "Calendar", icon: "▧" },
   { href: "/discussion", label: "Discussion", icon: "◈" },
   { href: "/documents", label: "Documents", icon: "▣" },
   { href: "/timesheet", label: "Time sheet", icon: "◷" },

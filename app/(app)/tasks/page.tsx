@@ -1,15 +1,32 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { createTask } from "@/lib/actions/tasks";
-import { TASK_STATUSES, TASK_PRIORITIES, lookup, fmtDate, isOverdue } from "@/lib/ui";
+import { createTask, moveTask } from "@/lib/actions/tasks";
+import Board, { type BoardTask } from "@/components/Board";
+import {
+  TASK_STATUSES,
+  TASK_PRIORITIES,
+  lookup,
+  fmtDate,
+  isOverdue,
+  initials,
+  tagBadge,
+} from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
 
 export default async function TasksPage({
   searchParams,
 }: {
-  searchParams: { status?: string; assignee?: string; project?: string; q?: string; new?: string };
+  searchParams: {
+    status?: string;
+    assignee?: string;
+    project?: string;
+    tag?: string;
+    q?: string;
+    new?: string;
+    view?: string;
+  };
 }) {
   const user = await requireUser();
 
@@ -19,29 +36,79 @@ export default async function TasksPage({
   else if (searchParams.assignee) where.assigneeId = Number(searchParams.assignee);
   if (searchParams.project) where.projectId = Number(searchParams.project);
   if (searchParams.q) where.title = { contains: searchParams.q };
+  if (searchParams.tag) where.tags = { some: { tag: { name: searchParams.tag } } };
 
-  const [tasks, users, projects] = await Promise.all([
+  const [tasks, users, projects, allTags] = await Promise.all([
     db.task.findMany({
       where,
       orderBy: [{ status: "asc" }, { dueDate: "asc" }, { createdAt: "desc" }],
-      include: { project: true, assignee: true },
+      include: {
+        project: true,
+        assignee: true,
+        parent: true,
+        tags: { include: { tag: true } },
+        subtasks: { select: { id: true, status: true } },
+      },
     }),
     db.user.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
     db.project.findMany({
       where: { status: { in: ["ACTIVE", "ON_HOLD"] } },
       orderBy: { name: "asc" },
     }),
+    db.tag.findMany({ orderBy: { name: "asc" } }),
   ]);
 
   const showNew = searchParams.new === "1";
+  const boardView = searchParams.view === "board";
+
+  const query = new URLSearchParams();
+  for (const [k, v] of Object.entries(searchParams)) {
+    if (v && k !== "view" && k !== "new") query.set(k, v);
+  }
+  const baseQuery = query.toString();
+  const listHref = `/tasks${baseQuery ? `?${baseQuery}` : ""}`;
+  const boardHref = `/tasks?${baseQuery ? `${baseQuery}&` : ""}view=board`;
+
+  const boardTasks: BoardTask[] = tasks.map((t) => {
+    const priority = lookup(TASK_PRIORITIES, t.priority);
+    return {
+      id: t.id,
+      title: t.title,
+      status: t.status,
+      priorityLabel: priority.label,
+      priorityBadge: priority.badge,
+      assigneeInitials: t.assignee ? initials(t.assignee.name) : null,
+      assigneeName: t.assignee?.name ?? null,
+      projectName: t.project?.name ?? null,
+      dueLabel: t.dueDate ? fmtDate(t.dueDate) : null,
+      overdue: isOverdue(t),
+      tags: t.tags.map(({ tag }) => ({ name: tag.name, badge: tagBadge(tag.color) })),
+    };
+  });
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Tasks</h1>
-        <Link href={showNew ? "/tasks" : "/tasks?new=1"} className="btn-primary">
-          {showNew ? "Close" : "+ New Task"}
-        </Link>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg border border-slate-300 p-0.5 text-sm">
+            <Link
+              href={listHref}
+              className={`rounded-md px-3 py-1 ${!boardView ? "bg-sky-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+            >
+              List
+            </Link>
+            <Link
+              href={boardHref}
+              className={`rounded-md px-3 py-1 ${boardView ? "bg-sky-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+            >
+              Board
+            </Link>
+          </div>
+          <Link href={showNew ? listHref : "/tasks?new=1"} className="btn-primary">
+            {showNew ? "Close" : "+ New Task"}
+          </Link>
+        </div>
       </div>
 
       {showNew && (
@@ -102,7 +169,8 @@ export default async function TasksPage({
       )}
 
       <form className="card flex flex-wrap items-end gap-3 p-4" method="GET">
-        <div className="w-48">
+        {boardView && <input type="hidden" name="view" value="board" />}
+        <div className="w-44">
           <label className="label">Search</label>
           <input name="q" defaultValue={searchParams.q ?? ""} className="input" placeholder="Task title…" />
         </div>
@@ -140,65 +208,97 @@ export default async function TasksPage({
             ))}
           </select>
         </div>
+        {allTags.length > 0 && (
+          <div>
+            <label className="label">Tag</label>
+            <select name="tag" defaultValue={searchParams.tag ?? ""} className="input">
+              <option value="">All</option>
+              {allTags.map((t) => (
+                <option key={t.id} value={t.name}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <button type="submit" className="btn-secondary">
           Filter
         </button>
-        <Link href="/tasks" className="text-sm text-slate-500 hover:underline">
+        <Link href={boardView ? "/tasks?view=board" : "/tasks"} className="text-sm text-slate-500 hover:underline">
           Clear
         </Link>
       </form>
 
-      <div className="card overflow-x-auto">
-        <table className="w-full min-w-[720px]">
-          <thead className="border-b border-slate-200 bg-slate-50">
-            <tr>
-              <th className="th">Task</th>
-              <th className="th">Project</th>
-              <th className="th">Assignee</th>
-              <th className="th">Priority</th>
-              <th className="th">Status</th>
-              <th className="th">Due</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {tasks.length === 0 && (
+      {boardView ? (
+        <Board columns={TASK_STATUSES} tasks={boardTasks} moveAction={moveTask} />
+      ) : (
+        <div className="card overflow-x-auto">
+          <table className="w-full min-w-[760px]">
+            <thead className="border-b border-slate-200 bg-slate-50">
               <tr>
-                <td colSpan={6} className="td py-10 text-center text-slate-400">
-                  No tasks match your filters.
-                </td>
+                <th className="th">Task</th>
+                <th className="th">Project</th>
+                <th className="th">Assignee</th>
+                <th className="th">Priority</th>
+                <th className="th">Status</th>
+                <th className="th">Due</th>
               </tr>
-            )}
-            {tasks.map((t) => {
-              const status = lookup(TASK_STATUSES, t.status);
-              const priority = lookup(TASK_PRIORITIES, t.priority);
-              return (
-                <tr key={t.id} className="hover:bg-slate-50">
-                  <td className="td">
-                    <Link href={`/tasks/${t.id}`} className="font-medium text-sky-700 hover:underline">
-                      {t.title}
-                    </Link>
-                  </td>
-                  <td className="td text-slate-600">{t.project?.name ?? "—"}</td>
-                  <td className="td text-slate-600">{t.assignee?.name ?? "—"}</td>
-                  <td className="td">
-                    <span className={`badge ${priority.badge}`}>{priority.label}</span>
-                  </td>
-                  <td className="td">
-                    <span className={`badge ${status.badge}`}>{status.label}</span>
-                  </td>
-                  <td
-                    className={`td ${
-                      isOverdue(t) ? "font-semibold text-red-600" : "text-slate-600"
-                    }`}
-                  >
-                    {fmtDate(t.dueDate)}
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {tasks.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="td py-10 text-center text-slate-400">
+                    No tasks match your filters.
                   </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              )}
+              {tasks.map((t) => {
+                const status = lookup(TASK_STATUSES, t.status);
+                const priority = lookup(TASK_PRIORITIES, t.priority);
+                const doneSubs = t.subtasks.filter((s) => s.status === "DONE").length;
+                return (
+                  <tr key={t.id} className="hover:bg-slate-50">
+                    <td className="td">
+                      <Link href={`/tasks/${t.id}`} className="font-medium text-sky-700 hover:underline">
+                        {t.title}
+                      </Link>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {t.parent && (
+                          <span className="text-xs text-slate-400">↳ {t.parent.title}</span>
+                        )}
+                        {t.subtasks.length > 0 && (
+                          <span className="text-xs text-slate-400">
+                            {doneSubs}/{t.subtasks.length} subtasks
+                          </span>
+                        )}
+                        {t.tags.map(({ tag }) => (
+                          <span
+                            key={tag.id}
+                            className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${tagBadge(tag.color)}`}
+                          >
+                            {tag.name}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="td text-slate-600">{t.project?.name ?? "—"}</td>
+                    <td className="td text-slate-600">{t.assignee?.name ?? "—"}</td>
+                    <td className="td">
+                      <span className={`badge ${priority.badge}`}>{priority.label}</span>
+                    </td>
+                    <td className="td">
+                      <span className={`badge ${status.badge}`}>{status.label}</span>
+                    </td>
+                    <td className={`td ${isOverdue(t) ? "font-semibold text-red-600" : "text-slate-600"}`}>
+                      {fmtDate(t.dueDate)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

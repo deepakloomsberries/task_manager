@@ -287,6 +287,13 @@ One-time setup (nightly at 02:00, 14-day retention):
 (crontab -l 2>/dev/null; echo '0 2 * * * d=$(date +\%F); mkdir -p /home/kapil/backups/$d; cp /home/kapil/task_manager/prisma/dev.db /home/kapil/backups/$d/; cp -r /home/kapil/task_manager/uploads /home/kapil/backups/$d/ 2>/dev/null; find /home/kapil/backups -maxdepth 1 -mtime +14 -exec rm -rf {} \;') | crontab -
 ```
 
+Optional — daily reminder emails at 08:00 (each employee receives a digest of their
+overdue and due-today tasks; requires SMTP to be configured in `.env`):
+
+```bash
+(crontab -l 2>/dev/null; echo '0 8 * * * cd /home/kapil/task_manager && /usr/bin/npx tsx scripts/reminders.ts >> /var/log/task-reminders.log 2>&1') | crontab -
+```
+
 Verify registration: `crontab -l`
 
 > The `/home/kapil/backups` directory is created by the first 02:00 run. "No such

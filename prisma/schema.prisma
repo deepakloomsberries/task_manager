@@ -50,6 +50,8 @@ model User {
   projectsCreated    Project[]
   attachments        Attachment[]
   discussionMessages DiscussionMessage[]
+  notifications      Notification[]
+  taskActivities     TaskActivity[]
 }
 
 model Project {
@@ -95,6 +97,49 @@ model Task {
   comments    TaskComment[]
   timeEntries TimeEntry[]
   attachments Attachment[]
+
+  parent     Task?          @relation("subtasks", fields: [parentId], references: [id], onDelete: Cascade)
+  parentId   Int?
+  subtasks   Task[]         @relation("subtasks")
+  tags       TaskTag[]
+  activities TaskActivity[]
+}
+
+model Tag {
+  id    Int       @id @default(autoincrement())
+  name  String    @unique
+  color String    @default("slate")
+  tasks TaskTag[]
+}
+
+model TaskTag {
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId Int
+  tag    Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  tagId  Int
+
+  @@id([taskId, tagId])
+}
+
+model TaskActivity {
+  id        Int      @id @default(autoincrement())
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId    Int
+  actor     User     @relation(fields: [actorId], references: [id])
+  actorId   Int
+  type      String // created | status | assignee | due | priority | details | attachment
+  detail    String?
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  message   String
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
 }
 
 model TaskComment {
