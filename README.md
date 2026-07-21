@@ -76,49 +76,23 @@ Override the seed admin with `ADMIN_EMAIL` / `ADMIN_PASSWORD` env vars before ru
 2. Security → **App passwords** → create one for "Mail".
 3. Put the 16-character password in `SMTP_PASS` (no spaces) and your Gmail address in `SMTP_USER`.
 
-## Deployment on tasks.donetella.com (same pattern as the b2b app)
+## Deployment
 
-1. Install Node.js 20+ on the server.
-2. Clone the repo, copy `.env.example` to `.env` and fill in `AUTH_SECRET`
-   (e.g. `openssl rand -hex 32`), `APP_URL=https://tasks.donetella.com`, `UPLOAD_DIR`,
-   and the SMTP values.
+The application is deployed as a systemd service behind an nginx reverse proxy with
+HTTPS. In outline:
+
+1. Install Node.js 20+ (via NodeSource).
+2. Clone the repository, create `.env` from `.env.example`, and set `AUTH_SECRET`
+   (`openssl rand -hex 32`), `APP_URL`, `UPLOAD_DIR`, and the SMTP values.
 3. `npm install && npm run setup && npm run build`.
-4. Create a systemd service (like the b2b app):
+4. Run as a systemd service; proxy through nginx with `client_max_body_size 25m;`
+   (required for file uploads) and obtain a certificate with certbot.
+5. Back up the SQLite database file and the `UPLOAD_DIR` folder — together they hold
+   all application data.
 
-   ```ini
-   [Unit]
-   Description=Looms & Berries Task Manager
-   After=network.target
-
-   [Service]
-   WorkingDirectory=/path/to/task_manager
-   ExecStart=/usr/bin/npm start
-   Restart=always
-   EnvironmentFile=/path/to/task_manager/.env
-
-   [Install]
-   WantedBy=multi-user.target
-   ```
-
-   `sudo systemctl enable --now task-manager`
-
-5. Point nginx at it with HTTPS (the app listens on port 3000; use `PORT=xxxx` in the
-   service `Environment=` to change it):
-
-   ```nginx
-   server {
-     server_name tasks.donetella.com;
-     client_max_body_size 25m;   # needed for file uploads
-     location / {
-       proxy_pass http://127.0.0.1:3000;
-       proxy_set_header Host $host;
-       proxy_set_header X-Forwarded-Proto $scheme;
-     }
-   }
-   ```
-
-6. Back up regularly: the SQLite file (`prisma/prod.db`) **and** the uploads folder
-   (`UPLOAD_DIR`) — together they are your whole data.
+**[DEPLOYMENT.md](./DEPLOYMENT.md) contains the complete runbook** with the exact
+commands, service and nginx configuration files, backup automation, server migration
+procedure, and troubleshooting reference.
 
 ## Admin workflow for onboarding the team
 
