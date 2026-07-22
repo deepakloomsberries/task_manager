@@ -11,7 +11,9 @@ companies (India, UAE, Saudi Arabia). Fully self-hosted.
 ## Features
 
 - **Login with company email** — accounts are created by the admin; there is no self sign-up.
-  Every new user gets a temporary password and is forced to change it on first login.
+  New users automatically receive a welcome email with the sign-in link and their temporary
+  password (likewise on admin password resets), and are forced to set their own password on
+  first login.
 - **Roles** — Admin (full access), Manager (projects + team reports), Employee.
 - **Dashboard** — my open / overdue / due-this-week / completed tasks, recent activity, active projects.
 - **My Tasks** — personal work view grouped by urgency (Overdue / Due today / This week /
@@ -114,5 +116,7 @@ procedure, and troubleshooting reference.
 
 1. Log in as admin → **Departments** → add your departments per company.
 2. **Users → Add User** → enter name, company email, a temporary password, role, company, department.
-3. Share the temporary password with the employee — they must change it the first time they sign in.
+3. The employee automatically receives a welcome email with the sign-in link and temporary
+   password — they must change it the first time they sign in. (If SMTP is not configured,
+   share the password manually.)
 4. To offboard someone, use **Deactivate** on the Users page (login is blocked instantly, history preserved).

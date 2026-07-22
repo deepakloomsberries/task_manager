@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
+import { notifyUserWelcome, notifyPasswordReset } from "@/lib/mail";
 
 const ROLES = ["ADMIN", "MANAGER", "EMPLOYEE"];
 
@@ -40,6 +41,9 @@ export async function createUser(formData: FormData) {
       mustChangePassword: true,
     },
   });
+
+  notifyUserWelcome({ to: email, name, password });
+
   revalidatePath("/users");
   redirect("/users?created=1");
 }
@@ -73,10 +77,13 @@ export async function resetUserPassword(formData: FormData) {
   const password = String(formData.get("password") ?? "");
   if (!id || password.length < 8) redirect("/users?error=short");
 
-  await db.user.update({
+  const user = await db.user.update({
     where: { id },
     data: { passwordHash: await bcrypt.hash(password, 10), mustChangePassword: true },
   });
+
+  notifyPasswordReset({ to: user.email, name: user.name, password });
+
   revalidatePath("/users");
   redirect("/users?reset=1");
 }

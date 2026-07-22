@@ -12,9 +12,9 @@ import { ROLES, lookup, fmtDate } from "@/lib/ui";
 export const dynamic = "force-dynamic";
 
 const MESSAGES: Record<string, { text: string; error?: boolean }> = {
-  created: { text: "User created. Share the password with them — they must change it on first login." },
+  created: { text: "User created. They have been emailed their login details and must change the password on first login." },
   updated: { text: "User updated." },
-  reset: { text: "Password reset. Share the new password — they must change it on first login." },
+  reset: { text: "Password reset. The user has been emailed the new temporary password." },
   invalid: { text: "Invalid input. Password must be at least 8 characters.", error: true },
   exists: { text: "A user with that email already exists.", error: true },
   short: { text: "Password must be at least 8 characters.", error: true },

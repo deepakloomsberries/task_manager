@@ -77,6 +77,44 @@ export function notifyTaskAssigned(opts: {
   );
 }
 
+export function notifyUserWelcome(opts: {
+  to: string;
+  name: string;
+  password: string;
+}) {
+  const lines = [
+    `Hi ${esc(opts.name)},`,
+    `An account has been created for you on <b>${APP_NAME}</b>, the company task management system.`,
+    `Sign in with this email address (<b>${esc(opts.to)}</b>) and the temporary password below:`,
+    `<b style="font-size:16px;letter-spacing:1px">${esc(opts.password)}</b>`,
+    `You will be asked to set your own password the first time you sign in.`,
+  ];
+  sendMail(
+    opts.to,
+    `Your ${APP_NAME} account`,
+    emailShell("Welcome — your account is ready", lines, `${APP_URL}/login`, "Sign in")
+  );
+}
+
+export function notifyPasswordReset(opts: {
+  to: string;
+  name: string;
+  password: string;
+}) {
+  const lines = [
+    `Hi ${esc(opts.name)},`,
+    `Your password on <b>${APP_NAME}</b> has been reset by the administrator.`,
+    `Sign in with the temporary password below:`,
+    `<b style="font-size:16px;letter-spacing:1px">${esc(opts.password)}</b>`,
+    `You will be asked to set your own password when you sign in.`,
+  ];
+  sendMail(
+    opts.to,
+    `Your ${APP_NAME} password was reset`,
+    emailShell("Password reset", lines, `${APP_URL}/login`, "Sign in")
+  );
+}
+
 export function notifyTaskComment(opts: {
   to: string;
   recipientName: string;
