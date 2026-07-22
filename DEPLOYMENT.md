@@ -3,7 +3,7 @@
 The operations runbook for this application: installation, updates, backups, server
 migration, and troubleshooting. Every step is written as exact commands with expected
 output, so it can be followed without prior server administration experience. It is
-based on the production deployment on `tasks.donetella.com` (Ubuntu 24.04 VPS) and
+based on the production deployment on `task.donetella.com` (Ubuntu 24.04 VPS) and
 documents the issues encountered there together with their resolutions.
 
 > **Critical data.** The application's live data consists of exactly three items:
@@ -81,7 +81,7 @@ Set the values as follows:
 ```
 DATABASE_URL="file:./dev.db"
 AUTH_SECRET="<the 64-character string from openssl>"
-APP_URL="https://tasks.donetella.com"
+APP_URL="https://task.donetella.com"
 UPLOAD_DIR="/home/kapil/task_manager/uploads"
 SMTP_HOST="smtp.gmail.com"
 SMTP_PORT="465"
@@ -176,9 +176,26 @@ systemctl status task-manager       # expected: "active (running)" — press q t
 
 The application now starts automatically after every reboot.
 
+Bind the application to localhost only, so port 3000 is not reachable from outside
+the server (all public traffic goes through Apache with HTTPS):
+
+```bash
+mkdir -p /etc/systemd/system/task-manager.service.d
+cat > /etc/systemd/system/task-manager.service.d/override.conf <<'EOF'
+[Service]
+ExecStart=
+ExecStart=/usr/bin/npm start -- -H 127.0.0.1
+EOF
+systemctl daemon-reload && systemctl restart task-manager
+ss -tlnp | grep ':3000'      # expected: 127.0.0.1:3000
+```
+
+> This requires application code from 2026-07-22 or later — earlier builds
+> generated `localhost` redirect URLs when bound to 127.0.0.1 (see Part 5).
+
 > If another application already occupies port 3000 (check with
 > `ss -tlnp | grep ":3000 "`), add `Environment=PORT=3001` under `[Service]` and use
-> port 3001 in the nginx configuration below.
+> port 3001 in the Apache configuration below.
 
 ### 1.8 DNS record
 
@@ -186,54 +203,56 @@ In the DNS management panel for **donetella.com**, add:
 
 | Type | Name | Value |
 |---|---|---|
-| A | `tasks` | server IP address |
+| A | `task` | server IP address |
 
 On the server, repeat the following until it prints the IP (propagation typically
 takes 5–60 minutes):
 
 ```bash
-dig +short tasks.donetella.com
+dig +short task.donetella.com
 ```
 
 > If certbot (next step) fails with **NXDOMAIN**, the DNS record does not exist yet
 > or has not propagated — wait and retry. This occurred during the original
 > deployment and resolved itself once the record propagated.
 
-### 1.9 nginx and HTTPS
+### 1.9 Apache reverse proxy and HTTPS
+
+The production server uses Apache (it also serves the other company applications).
+Ensure the proxy modules are enabled, then create the site:
 
 ```bash
-nano /etc/nginx/sites-available/tasks.donetella.com
+a2enmod proxy proxy_http headers
+cat > /etc/apache2/sites-available/task.conf <<'EOF'
+<VirtualHost *:80>
+    ServerName task.donetella.com
+    ProxyPreserveHost On
+    ProxyPass / http://127.0.0.1:3000/ retry=5 connectiontimeout=5 timeout=120
+    ProxyPassReverse / http://127.0.0.1:3000/
+    ErrorLog ${APACHE_LOG_DIR}/task_error.log
+    CustomLog ${APACHE_LOG_DIR}/task_access.log combined
+</VirtualHost>
+EOF
+a2ensite task && apache2ctl configtest && systemctl reload apache2
+certbot --apache -d task.donetella.com
 ```
 
-Content:
+Certbot ends with "Successfully deployed certificate" (creating `task-le-ssl.conf`
+for port 443) and configures automatic renewal (verify at any time with
+`certbot renew --dry-run`).
 
-```nginx
-server {
-    server_name tasks.donetella.com;
-    client_max_body_size 25m;
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
+Notes:
 
-**Important:** `client_max_body_size 25m;` is required — without it, file attachment
-uploads fail with HTTP 413.
-
-```bash
-ln -s /etc/nginx/sites-available/tasks.donetella.com /etc/nginx/sites-enabled/
-nginx -t && systemctl reload nginx
-certbot --nginx -d tasks.donetella.com
-```
-
-Certbot ends with "Successfully deployed certificate" and configures automatic
-renewal (verify at any time with `certbot renew --dry-run`).
+- `ProxyPreserveHost On` is required — the application builds redirect URLs from the
+  Host header.
+- Apache imposes no request-body limit by default, so 20 MB file uploads work without
+  additional configuration (nginx would need `client_max_body_size`).
+- If an unused nginx is installed and failing to start because Apache owns ports
+  80/443, disable it: `systemctl disable --now nginx`.
 
 ### 1.10 First login
 
-Open `https://tasks.donetella.com`:
+Open `https://task.donetella.com`:
 
 - Email: `sales@loomsberries.com` — Password: `Admin@12345`
 - The application requires an immediate password change. Store the new password
@@ -356,8 +375,10 @@ journalctl -u task-manager -n 50     # last 50 log lines — include these when 
 |---|---|
 | "502 Bad Gateway" in browser | Application service down → `systemctl restart task-manager` |
 | Site not reachable at all | nginx down → `systemctl restart nginx` |
-| `certbot` fails with NXDOMAIN | DNS record missing or not yet propagated → check `dig +short tasks.donetella.com`, wait, retry |
-| File upload fails / HTTP 413 | File exceeds 20 MB, or nginx configuration lacks `client_max_body_size 25m;` |
+| `certbot` fails with NXDOMAIN | DNS record missing or not yet propagated → check `dig +short task.donetella.com`, wait, retry |
+| File upload fails / HTTP 413 | File exceeds 20 MB (Apache needs no size directive; nginx would need `client_max_body_size 25m;`) |
+| Browser redirected to `localhost:3000` | Application build is older than 2026-07-22 while bound to 127.0.0.1 — update the code, `npm run build`, restart |
+| nginx failed / "Address already in use" | Apache owns ports 80/443 on this server — nginx is unused; `systemctl disable --now nginx` |
 | Emails not arriving | `journalctl -u task-manager \| grep mail` — "SMTP not configured" means `.env` values are empty; an authentication error means a wrong or revoked app password (verify it contains no spaces) |
 | `node: command not found` | Node.js not installed → Part 1.2 |
 | `ls` does not show `.env` | Dot-files are hidden by default → `ls -a` |

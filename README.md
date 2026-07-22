@@ -6,7 +6,7 @@ companies (India, UAE, Saudi Arabia). Fully self-hosted.
 > **Operations runbook:** see **[DEPLOYMENT.md](./DEPLOYMENT.md)** for the complete
 > step-by-step guide — server installation (including `AUTH_SECRET` generation),
 > updates, backups, server migration, troubleshooting, and administrator password
-> recovery. Based on the production deployment on tasks.donetella.com.
+> recovery. Based on the production deployment on task.donetella.com.
 
 ## Features
 
@@ -79,7 +79,7 @@ Override the seed admin with `ADMIN_EMAIL` / `ADMIN_PASSWORD` env vars before ru
 | -------------- | ---------------------------------------------------- |
 | `DATABASE_URL` | SQLite file location, e.g. `file:./dev.db`           |
 | `AUTH_SECRET`  | Secret for signing session cookies — **set a long random value in production** |
-| `APP_URL`      | Public URL used in email links, e.g. `https://tasks.donetella.com` |
+| `APP_URL`      | Public URL used in email links, e.g. `https://task.donetella.com` |
 | `UPLOAD_DIR`   | Folder on the server where attachments are stored (default `./uploads`) |
 | `SMTP_HOST` / `SMTP_PORT` | SMTP server — for Gmail: `smtp.gmail.com` / `465` |
 | `SMTP_USER` / `SMTP_PASS` | Gmail address and its **App Password**. Leave empty to disable email |
@@ -93,20 +93,20 @@ Override the seed admin with `ADMIN_EMAIL` / `ADMIN_PASSWORD` env vars before ru
 
 ## Deployment
 
-The application is deployed as a systemd service behind an nginx reverse proxy with
-HTTPS. In outline:
+The application is deployed as a systemd service (bound to 127.0.0.1) behind an
+Apache reverse proxy with HTTPS. In outline:
 
 1. Install Node.js 20+ (via NodeSource).
 2. Clone the repository, create `.env` from `.env.example`, and set `AUTH_SECRET`
    (`openssl rand -hex 32`), `APP_URL`, `UPLOAD_DIR`, and the SMTP values.
 3. `npm install && npm run setup && npm run build`.
-4. Run as a systemd service; proxy through nginx with `client_max_body_size 25m;`
-   (required for file uploads) and obtain a certificate with certbot.
+4. Run as a systemd service; proxy through an Apache virtual host with
+   `ProxyPreserveHost On` and obtain a certificate with `certbot --apache`.
 5. Back up the SQLite database file and the `UPLOAD_DIR` folder — together they hold
    all application data.
 
 **[DEPLOYMENT.md](./DEPLOYMENT.md) contains the complete runbook** with the exact
-commands, service and nginx configuration files, backup automation, server migration
+commands, service and Apache configuration files, backup automation, server migration
 procedure, and troubleshooting reference.
 
 ## Admin workflow for onboarding the team
