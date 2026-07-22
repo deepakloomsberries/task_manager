@@ -17,6 +17,7 @@ import {
   fmtDate,
   isOverdue,
   initials,
+  avatarColor,
 } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
@@ -198,7 +199,9 @@ export default async function ProjectDetailPage({
           <div className="divide-y divide-slate-100">
             {project.members.map((m) => (
               <div key={m.userId} className="flex items-center gap-3 px-5 py-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-600">
+                <div
+                  className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-white ${avatarColor(m.user.name)}`}
+                >
                   {initials(m.user.name)}
                 </div>
                 <div className="min-w-0 flex-1">

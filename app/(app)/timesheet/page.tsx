@@ -55,6 +55,37 @@ export default async function TimesheetPage() {
       </div>
 
       <div className="card p-5">
+        <h2 className="mb-3 text-sm font-semibold text-slate-600">Last 7 days</h2>
+        <div className="flex h-28 items-end gap-2">
+          {Array.from({ length: 7 }, (_, i) => {
+            const day = new Date();
+            day.setDate(day.getDate() - (6 - i));
+            day.setHours(0, 0, 0, 0);
+            const next = new Date(day.getTime() + 86400000);
+            const hours = entries
+              .filter((e) => new Date(e.date) >= day && new Date(e.date) < next)
+              .reduce((s, e) => s + e.hours, 0);
+            const pct = Math.min(100, (hours / 10) * 100);
+            const isToday = i === 6;
+            return (
+              <div key={i} className="flex flex-1 flex-col items-center gap-1">
+                <span className="text-[10px] text-slate-500">{hours > 0 ? `${hours}h` : ""}</span>
+                <div className="flex h-16 w-full items-end rounded bg-slate-100">
+                  <div
+                    className={`w-full rounded ${isToday ? "bg-sky-500" : "bg-sky-300"}`}
+                    style={{ height: `${pct}%` }}
+                  />
+                </div>
+                <span className={`text-[10px] ${isToday ? "font-semibold text-sky-600" : "text-slate-400"}`}>
+                  {day.toLocaleDateString("en-GB", { weekday: "short" })}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="card p-5">
         <form action={createTimeEntry} className="grid items-end gap-3 md:grid-cols-6">
           <div>
             <label className="label">Date *</label>

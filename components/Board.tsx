@@ -11,6 +11,7 @@ export type BoardTask = {
   priorityBadge: string;
   assigneeInitials: string | null;
   assigneeName: string | null;
+  assigneeColor: string | null;
   projectName: string | null;
   dueLabel: string | null;
   overdue: boolean;
@@ -115,7 +116,7 @@ export default function Board({
                       {t.assigneeInitials && (
                         <span
                           title={t.assigneeName ?? undefined}
-                          className="flex h-5 w-5 items-center justify-center rounded-full bg-sky-600 text-[9px] font-semibold text-white"
+                          className={`flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-semibold text-white ${t.assigneeColor ?? "bg-sky-600"}`}
                         >
                           {t.assigneeInitials}
                         </span>

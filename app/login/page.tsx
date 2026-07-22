@@ -6,9 +6,11 @@ export default function LoginPage({
   searchParams: { error?: string };
 }) {
   return (
-    <main className="flex min-h-screen items-center justify-center p-4">
+    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-sky-50 via-slate-50 to-slate-100 p-4">
       <div className="card w-full max-w-md p-8">
         <div className="mb-8 text-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icon-192.png" alt="" className="mx-auto mb-4 h-14 w-14 rounded-2xl shadow-sm" />
           <div className="mb-2 text-3xl font-bold">
             Looms <span className="text-sky-600">&amp;</span> Berries
           </div>

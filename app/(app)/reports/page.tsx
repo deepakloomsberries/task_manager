@@ -64,12 +64,24 @@ export default async function ReportsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Reports</h1>
-        <p className="text-sm text-slate-500">
-          Task and time overview{teamWide ? " across the whole team" : " for your work"} (time:
-          last 30 days).
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Reports</h1>
+          <p className="text-sm text-slate-500">
+            Task and time overview{teamWide ? " across the whole team" : " for your work"} (time:
+            last 30 days).
+          </p>
+        </div>
+        {teamWide && (
+          <div className="flex gap-2">
+            <a href="/api/export/tasks" className="btn-secondary !py-1.5 text-xs">
+              ⇩ Export tasks (CSV)
+            </a>
+            <a href="/api/export/timesheet?days=30" className="btn-secondary !py-1.5 text-xs">
+              ⇩ Export timesheet (CSV)
+            </a>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">

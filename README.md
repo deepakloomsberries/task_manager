@@ -40,9 +40,10 @@ companies (India, UAE, Saudi Arabia). Fully self-hosted.
 - **Daily reminder digest** — an optional scheduled job (`npm run reminders`) emails each
   employee a morning summary of their overdue and due-today tasks.
 - **Time sheet** — employees log hours against tasks/projects; weekly and 30-day totals.
-- **Notes** — private personal notes.
+- **Notes** — private notes in a Keep-style card grid with colors and pinning.
 - **Reports** — task and hour summaries per employee and per project
-  (employees see only their own; managers/admins see everyone).
+  (employees see only their own; managers/admins see everyone), with CSV export
+  of tasks and timesheets for spreadsheet analysis.
 - **Admin panel** — create/edit/deactivate users, reset passwords, manage departments.
   Deactivated users cannot log in but their history is kept.
 

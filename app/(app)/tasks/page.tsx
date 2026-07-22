@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { createTask, moveTask } from "@/lib/actions/tasks";
+import { createTask, moveTask, setTaskStatus } from "@/lib/actions/tasks";
 import Board, { type BoardTask } from "@/components/Board";
 import {
   TASK_STATUSES,
@@ -10,6 +10,7 @@ import {
   fmtDate,
   isOverdue,
   initials,
+  avatarColor,
   tagBadge,
 } from "@/lib/ui";
 
@@ -79,6 +80,7 @@ export default async function TasksPage({
       priorityBadge: priority.badge,
       assigneeInitials: t.assignee ? initials(t.assignee.name) : null,
       assigneeName: t.assignee?.name ?? null,
+      assigneeColor: t.assignee ? avatarColor(t.assignee.name) : null,
       projectName: t.project?.name ?? null,
       dueLabel: t.dueDate ? fmtDate(t.dueDate) : null,
       overdue: isOverdue(t),
@@ -236,6 +238,7 @@ export default async function TasksPage({
           <table className="w-full min-w-[760px]">
             <thead className="border-b border-slate-200 bg-slate-50">
               <tr>
+                <th className="th w-10"></th>
                 <th className="th">Task</th>
                 <th className="th">Project</th>
                 <th className="th">Assignee</th>
@@ -247,7 +250,7 @@ export default async function TasksPage({
             <tbody className="divide-y divide-slate-100">
               {tasks.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="td py-10 text-center text-slate-400">
+                  <td colSpan={7} className="td py-10 text-center text-slate-400">
                     No tasks match your filters.
                   </td>
                 </tr>
@@ -258,6 +261,24 @@ export default async function TasksPage({
                 const doneSubs = t.subtasks.filter((s) => s.status === "DONE").length;
                 return (
                   <tr key={t.id} className="hover:bg-slate-50">
+                    <td className="td">
+                      <form action={setTaskStatus}>
+                        <input type="hidden" name="id" value={t.id} />
+                        <input type="hidden" name="status" value={t.status === "DONE" ? "TODO" : "DONE"} />
+                        <input type="hidden" name="back" value="/tasks" />
+                        <button
+                          type="submit"
+                          title={t.status === "DONE" ? "Reopen task" : "Mark as done"}
+                          className={`flex h-5 w-5 items-center justify-center rounded-full border-2 text-xs transition-colors ${
+                            t.status === "DONE"
+                              ? "border-green-500 bg-green-500 text-white"
+                              : "border-slate-300 text-transparent hover:border-green-500 hover:bg-green-500 hover:text-white"
+                          }`}
+                        >
+                          ✓
+                        </button>
+                      </form>
+                    </td>
                     <td className="td">
                       <Link href={`/tasks/${t.id}`} className="font-medium text-sky-700 hover:underline">
                         {t.title}

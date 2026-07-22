@@ -3,7 +3,7 @@ import Sidebar from "@/components/Sidebar";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { logout } from "@/lib/actions/auth";
-import { initials } from "@/lib/ui";
+import { initials, avatarColor } from "@/lib/ui";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
@@ -50,7 +50,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             )}
           </Link>
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-600 text-sm font-semibold text-white">
+            <div
+              className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold text-white ${avatarColor(user.name)}`}
+            >
               {initials(user.name)}
             </div>
             <div className="leading-tight">
