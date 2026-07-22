@@ -305,7 +305,7 @@ Command reference by type of change:
 | `.env` only | `systemctl restart task-manager` |
 | `package.json` | `npm install && npm run build && systemctl restart task-manager` |
 | `prisma/schema.prisma` | `npx prisma db push && npm run build && systemctl restart task-manager` |
-| nginx configuration | `nginx -t && systemctl reload nginx` |
+| Apache configuration | `apache2ctl configtest && systemctl reload apache2` |
 
 ---
 
@@ -356,7 +356,7 @@ loss.
    Do not run `npm run setup` — the restored `dev.db` already contains all users and
    data (running it would not damage the data, but it is unnecessary).
 3. Continue Part 1 from step 1.7 (systemd), then 1.8 (update the DNS A record to the
-   new server's IP), then 1.9 (nginx and certbot).
+   new server's IP), then 1.9 (Apache and certbot).
 4. All accounts, tasks, and files continue unchanged.
 
 ---
@@ -374,7 +374,7 @@ journalctl -u task-manager -n 50     # last 50 log lines — include these when 
 | Symptom | Cause / Resolution |
 |---|---|
 | "502 Bad Gateway" in browser | Application service down → `systemctl restart task-manager` |
-| Site not reachable at all | nginx down → `systemctl restart nginx` |
+| Site not reachable at all | Apache down → `systemctl restart apache2` |
 | `certbot` fails with NXDOMAIN | DNS record missing or not yet propagated → check `dig +short task.donetella.com`, wait, retry |
 | File upload fails / HTTP 413 | File exceeds 20 MB (Apache needs no size directive; nginx would need `client_max_body_size 25m;`) |
 | Browser redirected to `localhost:3000` | Application build is older than 2026-07-22 while bound to 127.0.0.1 — update the code, `npm run build`, restart |
