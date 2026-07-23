@@ -10,9 +10,13 @@ type TaskRow = Awaited<ReturnType<typeof loadTasks>>[number];
 
 function loadTasks(userId: number) {
   return db.task.findMany({
-    where: { assigneeId: userId, status: { not: "DONE" } },
+    where: { assigneeId: userId, status: { not: "DONE" }, deletedAt: null },
     orderBy: [{ dueDate: "asc" }, { priority: "desc" }],
-    include: { project: true, tags: { include: { tag: true } }, subtasks: true },
+    include: {
+      project: true,
+      tags: { include: { tag: true } },
+      subtasks: { where: { deletedAt: null } },
+    },
   });
 }
 

@@ -31,12 +31,18 @@ export default async function TasksPage({
 }) {
   const user = await requireUser();
 
-  const where: Record<string, unknown> = {};
+  const where: Record<string, unknown> = { deletedAt: null };
   if (searchParams.status) where.status = searchParams.status;
   if (searchParams.assignee === "me") where.assigneeId = user.id;
   else if (searchParams.assignee) where.assigneeId = Number(searchParams.assignee);
   if (searchParams.project) where.projectId = Number(searchParams.project);
-  if (searchParams.q) where.title = { contains: searchParams.q };
+  if (searchParams.q) {
+    const q = searchParams.q.trim();
+    // Support searching by task ID, e.g. "TM-42", "#42" or plain "42".
+    const idMatch = q.match(/^(?:tm-?|#)?(\d+)$/i);
+    if (idMatch) where.id = Number(idMatch[1]);
+    else where.title = { contains: q };
+  }
   if (searchParams.tag) where.tags = { some: { tag: { name: searchParams.tag } } };
 
   const [tasks, users, projects, allTags] = await Promise.all([
@@ -48,7 +54,7 @@ export default async function TasksPage({
         assignee: true,
         parent: true,
         tags: { include: { tag: true } },
-        subtasks: { select: { id: true, status: true } },
+        subtasks: { where: { deletedAt: null }, select: { id: true, status: true } },
       },
     }),
     db.user.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
@@ -111,6 +117,30 @@ export default async function TasksPage({
             {showNew ? "Close" : "+ New Task"}
           </Link>
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-slate-400">Quick view:</span>
+        <Link
+          href={boardView ? "/tasks?view=board" : "/tasks"}
+          className={`rounded-full px-3 py-1 text-xs font-medium ${
+            !searchParams.assignee
+              ? "bg-sky-600 text-white"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+          }`}
+        >
+          All tasks
+        </Link>
+        <Link
+          href={`/tasks?assignee=me${boardView ? "&view=board" : ""}`}
+          className={`rounded-full px-3 py-1 text-xs font-medium ${
+            searchParams.assignee === "me"
+              ? "bg-sky-600 text-white"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+          }`}
+        >
+          Assigned to me
+        </Link>
       </div>
 
       {showNew && (
@@ -284,6 +314,7 @@ export default async function TasksPage({
                         {t.title}
                       </Link>
                       <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-mono text-[10px] text-slate-400">TM-{t.id}</span>
                         {t.parent && (
                           <span className="text-xs text-slate-400">↳ {t.parent.title}</span>
                         )}

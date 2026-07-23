@@ -1,5 +1,5 @@
 import { requireUser } from "@/lib/auth";
-import { changeOwnPassword, updateOwnProfile } from "@/lib/actions/auth";
+import { changeOwnPassword, updateOwnProfile, updateNotificationPrefs } from "@/lib/actions/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +63,32 @@ export default async function SettingsPage({
               Save profile
             </button>
           </div>
+        </form>
+      </div>
+
+      <div className="card p-6">
+        <h2 className="mb-1 font-semibold">Notifications</h2>
+        <p className="mb-4 text-sm text-slate-500">
+          Choose whether we email you. In-app notifications always stay on.
+        </p>
+        <form action={updateNotificationPrefs} className="space-y-4">
+          <label className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              name="emailNotifications"
+              defaultChecked={user.emailNotifications}
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+            />
+            <span className="text-sm">
+              <span className="font-medium">Email notifications</span>
+              <span className="block text-xs text-slate-500">
+                Task assignments, comments, reminders and the daily digest.
+              </span>
+            </span>
+          </label>
+          <button type="submit" className="btn-primary">
+            Save preferences
+          </button>
         </form>
       </div>
 

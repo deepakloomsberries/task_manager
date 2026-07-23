@@ -36,10 +36,51 @@ export async function updateNote(formData: FormData) {
   const body = String(formData.get("body") ?? "");
   if (!id || !title) redirect("/notes");
 
-  await db.note.updateMany({
-    where: { id, userId: user.id },
+  // The owner and anyone the note is shared with can edit it.
+  const note = await db.note.findFirst({
+    where: { id, OR: [{ userId: user.id }, { shares: { some: { userId: user.id } } }] },
+  });
+  if (!note) redirect("/notes");
+
+  await db.note.update({
+    where: { id },
     data: { title, body, color: parseColor(formData) },
   });
+  revalidatePath("/notes");
+  redirect("/notes");
+}
+
+/** Share a note with another user so they can collaborate on it. */
+export async function shareNote(formData: FormData) {
+  const user = await requireUser();
+  const id = Number(formData.get("id"));
+  const withUserId = Number(formData.get("userId"));
+  if (!id || !withUserId) redirect("/notes");
+
+  // Only the owner can manage who a note is shared with.
+  const note = await db.note.findFirst({ where: { id, userId: user.id } });
+  if (!note || withUserId === user.id) redirect("/notes");
+
+  await db.noteShare.upsert({
+    where: { noteId_userId: { noteId: id, userId: withUserId } },
+    create: { noteId: id, userId: withUserId },
+    update: {},
+  });
+  revalidatePath("/notes");
+  redirect("/notes");
+}
+
+/** Stop sharing a note with a user. */
+export async function unshareNote(formData: FormData) {
+  const user = await requireUser();
+  const id = Number(formData.get("id"));
+  const withUserId = Number(formData.get("userId"));
+  if (!id || !withUserId) redirect("/notes");
+
+  const note = await db.note.findFirst({ where: { id, userId: user.id } });
+  if (!note) redirect("/notes");
+
+  await db.noteShare.deleteMany({ where: { noteId: id, userId: withUserId } });
   revalidatePath("/notes");
   redirect("/notes");
 }

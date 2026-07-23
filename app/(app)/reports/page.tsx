@@ -17,7 +17,7 @@ export default async function ReportsPage() {
       include: { company: true, department: true },
       orderBy: { name: "asc" },
     }),
-    db.task.findMany({ include: { project: true } }),
+    db.task.findMany({ where: { deletedAt: null }, include: { project: true } }),
     db.timeEntry.findMany({ where: { date: { gte: since } } }),
   ]);
 

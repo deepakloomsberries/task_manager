@@ -2,8 +2,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
-import { updateTask, setTaskStatus, deleteTask, addComment, addSubtask } from "@/lib/actions/tasks";
-import { uploadAttachment, deleteAttachment } from "@/lib/actions/files";
+import {
+  updateTask,
+  setTaskStatus,
+  deleteTask,
+  addComment,
+  addSubtask,
+  sendTaskReminder,
+} from "@/lib/actions/tasks";
+import { deleteAttachment } from "@/lib/actions/files";
+import PasteAttachment from "@/components/PasteAttachment";
+import ShareTask from "@/components/ShareTask";
 import { addTagToTask, removeTagFromTask } from "@/lib/actions/tags";
 import { fmtSize } from "@/lib/storage";
 import { TAG_COLORS, tagBadge } from "@/lib/ui";
@@ -25,7 +34,7 @@ export default async function TaskDetailPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { edit?: string };
+  searchParams: { edit?: string; ok?: string; error?: string };
 }) {
   const user = await requireUser();
   const id = Number(params.id);
@@ -41,7 +50,11 @@ export default async function TaskDetailPage({
         comments: { include: { author: true }, orderBy: { createdAt: "asc" } },
         attachments: { include: { uploadedBy: true }, orderBy: { createdAt: "desc" } },
         parent: true,
-        subtasks: { include: { assignee: true }, orderBy: { createdAt: "asc" } },
+        subtasks: {
+          where: { deletedAt: null },
+          include: { assignee: true },
+          orderBy: { createdAt: "asc" },
+        },
         tags: { include: { tag: true } },
         activities: { include: { actor: true }, orderBy: { createdAt: "desc" }, take: 30 },
       },
@@ -49,14 +62,29 @@ export default async function TaskDetailPage({
     db.user.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
     db.project.findMany({ orderBy: { name: "asc" } }),
   ]);
-  if (!task) notFound();
+  if (!task || task.deletedAt) notFound();
 
   const status = lookup(TASK_STATUSES, task.status);
   const priority = lookup(TASK_PRIORITIES, task.priority);
-  const canEdit =
-    isManagerOrAdmin(user.role) || task.createdById === user.id || task.assigneeId === user.id;
-  const canDelete = isManagerOrAdmin(user.role) || task.createdById === user.id;
+  // Editing details, deleting and sending reminders belong to the person who
+  // assigned the task (its creator), plus managers and admins. The assignee can
+  // still move the task through its statuses.
+  const canEdit = isManagerOrAdmin(user.role) || task.createdById === user.id;
+  const canProgress = canEdit || task.assigneeId === user.id;
+  const canDelete = canEdit;
   const editing = searchParams.edit === "1" && canEdit;
+  const taskCode = `TM-${task.id}`;
+
+  const banner =
+    searchParams.ok === "reminder"
+      ? { text: `Reminder sent to ${task.assignee?.name ?? "the assignee"}.`, error: false }
+      : searchParams.error === "subtask-assignee"
+        ? { text: "A subtask must be assigned to someone before it can be saved.", error: true }
+        : searchParams.error === "no-assignee"
+          ? { text: "Assign this task to someone before sending a reminder.", error: true }
+          : searchParams.error === "forbidden"
+            ? { text: "Only the person who assigned this task can do that.", error: true }
+            : null;
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
@@ -67,11 +95,24 @@ export default async function TaskDetailPage({
         ← {task.parent ? `Back to "${task.parent.title}"` : "Back to tasks"}
       </Link>
 
+      {banner && (
+        <div
+          className={`rounded-lg border px-4 py-3 text-sm ${
+            banner.error
+              ? "border-red-200 bg-red-50 text-red-700"
+              : "border-green-200 bg-green-50 text-green-700"
+          }`}
+        >
+          {banner.text}
+        </div>
+      )}
+
       <div className="card p-6">
         {!editing ? (
           <>
             <div className="flex items-start justify-between gap-4">
               <div>
+                <div className="mb-1 font-mono text-xs font-medium text-slate-400">{taskCode}</div>
                 <h1 className="text-xl font-bold">{task.title}</h1>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <span className={`badge ${status.badge}`}>{status.label}</span>
@@ -116,7 +157,20 @@ export default async function TaskDetailPage({
                   )}
                 </div>
               </div>
-              <div className="flex shrink-0 gap-2">
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                <ShareTask code={taskCode} title={task.title} taskId={task.id} />
+                {canEdit && task.assignee && (
+                  <form action={sendTaskReminder}>
+                    <input type="hidden" name="id" value={task.id} />
+                    <button
+                      type="submit"
+                      className="btn-secondary"
+                      title={`Email a reminder to ${task.assignee.name}`}
+                    >
+                      Send reminder
+                    </button>
+                  </form>
+                )}
                 {canEdit && (
                   <Link href={`/tasks/${task.id}?edit=1`} className="btn-secondary">
                     Edit
@@ -166,7 +220,7 @@ export default async function TaskDetailPage({
               </div>
             </dl>
 
-            {canEdit && (
+            {canProgress && (
               <div className="mt-6 border-t border-slate-100 pt-4">
                 <div className="mb-2 text-xs font-medium text-slate-500">Move to</div>
                 <div className="flex flex-wrap gap-2">
@@ -311,11 +365,13 @@ export default async function TaskDetailPage({
             )}
           </div>
           {canEdit && (
-            <form action={addSubtask} className="mt-3 flex gap-2">
+            <form key={task.subtasks.length} action={addSubtask} className="mt-3 flex gap-2">
               <input type="hidden" name="parentId" value={task.id} />
               <input name="title" required placeholder="Add a subtask…" className="input flex-1" />
-              <select name="assigneeId" className="input w-44">
-                <option value="">Unassigned</option>
+              <select name="assigneeId" required defaultValue="" className="input w-44">
+                <option value="" disabled>
+                  Assign to…
+                </option>
                 {users.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}
@@ -374,14 +430,7 @@ export default async function TaskDetailPage({
             <p className="text-sm text-slate-400">No files attached to this task.</p>
           )}
         </div>
-        <form action={uploadAttachment} className="mt-4 flex flex-wrap items-center gap-3">
-          <input type="hidden" name="taskId" value={task.id} />
-          <input type="file" name="file" required className="input max-w-md" />
-          <button type="submit" className="btn-secondary">
-            Attach file
-          </button>
-          <span className="text-xs text-slate-400">Max 20 MB.</span>
-        </form>
+        <PasteAttachment taskId={task.id} />
       </div>
 
       <div className="card p-6">

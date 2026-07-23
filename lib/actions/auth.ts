@@ -52,3 +52,13 @@ export async function updateOwnProfile(formData: FormData) {
   }
   redirect("/settings?ok=1");
 }
+
+export async function updateNotificationPrefs(formData: FormData) {
+  const user = await requireUser();
+  const emailNotifications = formData.get("emailNotifications") === "on";
+  await db.user.update({
+    where: { id: user.id },
+    data: { emailNotifications },
+  });
+  redirect("/settings?ok=1");
+}

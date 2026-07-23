@@ -34,6 +34,7 @@ export default async function CalendarPage({
   const tasks = await db.task.findMany({
     where: {
       dueDate: { gte: monthStart, lt: monthEnd },
+      deletedAt: null,
       ...(mine ? { assigneeId: user.id } : {}),
     },
     include: { assignee: true, project: true },

@@ -12,6 +12,7 @@ const MAIN_NAV: NavItem[] = [
   { href: "/projects", label: "Projects", icon: "▤" },
   { href: "/calendar", label: "Calendar", icon: "▧" },
   { href: "/discussion", label: "Discussion", icon: "◈" },
+  { href: "/messages", label: "Messages", icon: "✉" },
   { href: "/documents", label: "Documents", icon: "▣" },
   { href: "/timesheet", label: "Time sheet", icon: "◷" },
   { href: "/notes", label: "Notes", icon: "✎" },
@@ -79,6 +80,10 @@ export default function Sidebar({
         <div className="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
           Account
         </div>
+        <NavLink
+          item={{ href: "/trash", label: "Recycle bin", icon: "♺" }}
+          active={isActive("/trash")}
+        />
         <NavLink
           item={{ href: "/settings", label: "Settings", icon: "⚙" }}
           active={isActive("/settings")}

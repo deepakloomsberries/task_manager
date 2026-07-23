@@ -76,6 +76,7 @@ export default function Board({
                   onDragStart={(e) => e.dataTransfer.setData("text/task-id", String(t.id))}
                   className="cursor-grab rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition-shadow hover:shadow active:cursor-grabbing"
                 >
+                  <div className="font-mono text-[10px] text-slate-400">TM-{t.id}</div>
                   <Link
                     href={`/tasks/${t.id}`}
                     className="block text-sm font-medium text-slate-800 hover:text-sky-700"
