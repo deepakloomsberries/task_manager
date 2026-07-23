@@ -1,4 +1,5 @@
 import { login } from "@/lib/actions/auth";
+import PasswordField from "@/components/PasswordField";
 
 export default function LoginPage({
   searchParams,
@@ -44,14 +45,7 @@ export default function LoginPage({
             <label className="label" htmlFor="password">
               Password
             </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              autoComplete="current-password"
-              className="input"
-            />
+            <PasswordField id="password" name="password" autoComplete="current-password" />
           </div>
           <button type="submit" className="btn-primary w-full">
             Sign in

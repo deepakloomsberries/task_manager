@@ -176,9 +176,18 @@ export async function setTaskStatus(formData: FormData) {
   redirect(back);
 }
 
-/** Called from the board view when a card is dropped on a column. */
+/**
+ * Called from the board view when a card is dropped on a column. On the board,
+ * only the person the task is assigned to (or a manager/admin) may move it.
+ */
 export async function moveTask(taskId: number, status: string) {
   const user = await requireUser();
+  if (!STATUSES.includes(status)) return;
+  const task = await db.task.findUnique({ where: { id: taskId } });
+  if (!task || task.deletedAt) return;
+  if (task.assigneeId !== user.id && !isManagerOrAdmin(user.role)) return;
+  if (task.status === status) return;
+
   await changeStatus(user, taskId, status);
   await revalidateTaskViews(taskId);
 }
@@ -245,7 +254,9 @@ export async function sendTaskReminder(formData: FormData) {
     include: { assignee: true },
   });
   if (!task || task.deletedAt) redirect("/tasks");
-  if (!canEditTask(user, task)) redirect(`/tasks/${id}?error=forbidden`);
+  // Only the task's owner — the person who created/assigned it — can nudge the
+  // assignee. For a subtask that is its own creator.
+  if (task.createdById !== user.id) redirect(`/tasks/${id}?error=forbidden`);
   if (!task.assignee) redirect(`/tasks/${id}?error=no-assignee`);
 
   await notifyReminder({ recipient: task.assignee, task, actor: user });

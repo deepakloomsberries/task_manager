@@ -9,7 +9,15 @@ import { uploadAttachment } from "@/lib/actions/files";
  * Pasted images are submitted through the same server action as a chosen file,
  * so the redirect/refresh behaviour is handled natively by the form.
  */
-export default function PasteAttachment({ taskId }: { taskId: number }) {
+export default function PasteAttachment({
+  taskId,
+  listenPaste = true,
+  compact = false,
+}: {
+  taskId: number;
+  listenPaste?: boolean;
+  compact?: boolean;
+}) {
   const formRef = useRef<HTMLFormElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [pendingName, setPendingName] = useState<string | null>(null);
@@ -32,6 +40,7 @@ export default function PasteAttachment({ taskId }: { taskId: number }) {
   }
 
   useEffect(() => {
+    if (!listenPaste) return;
     function onPaste(e: ClipboardEvent) {
       const items = e.clipboardData?.items;
       if (!items) return;
@@ -53,13 +62,17 @@ export default function PasteAttachment({ taskId }: { taskId: number }) {
     document.addEventListener("paste", onPaste);
     return () => document.removeEventListener("paste", onPaste);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskId]);
+  }, [taskId, listenPaste]);
 
   return (
     <form
       ref={formRef}
       action={uploadAttachment}
-      className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-4 py-3"
+      className={
+        compact
+          ? "flex flex-wrap items-center gap-2"
+          : "mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-4 py-3 dark:border-slate-600"
+      }
     >
       <input type="hidden" name="taskId" value={taskId} />
       <input
@@ -73,17 +86,18 @@ export default function PasteAttachment({ taskId }: { taskId: number }) {
       <button
         type="button"
         onClick={() => fileRef.current?.click()}
-        className="btn-secondary"
+        className="btn-secondary !py-1.5 text-xs"
       >
-        Choose file
+        📎 Attach file
       </button>
       <span className="text-xs text-slate-500">
-        …or paste a screenshot here with <kbd className="rounded border border-slate-300 bg-white px-1">Ctrl/Cmd + V</kbd>
+        …or paste a screenshot with{" "}
+        <kbd className="rounded border border-slate-300 bg-white px-1 dark:border-slate-600 dark:bg-slate-800">
+          Ctrl/Cmd + V
+        </kbd>
       </span>
-      {pendingName && (
-        <span className="text-xs text-sky-600">Uploading {pendingName}…</span>
-      )}
-      <span className="ml-auto text-xs text-slate-400">Max 20 MB.</span>
+      {pendingName && <span className="text-xs text-sky-600">Uploading {pendingName}…</span>}
+      {!compact && <span className="ml-auto text-xs text-slate-400">Max 20 MB.</span>}
     </form>
   );
 }

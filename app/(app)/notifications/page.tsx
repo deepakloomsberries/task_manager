@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { markAllNotificationsRead, clearNotifications } from "@/lib/actions/notifications";
+import { markAllNotificationsRead, toggleNotificationRead } from "@/lib/actions/notifications";
 import { fmtDateTime } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
@@ -32,13 +32,6 @@ export default async function NotificationsPage() {
               </button>
             </form>
           )}
-          {notifications.length > 0 && (
-            <form action={clearNotifications}>
-              <button type="submit" className="btn-danger">
-                Clear all
-              </button>
-            </form>
-          )}
         </div>
       </div>
 
@@ -46,30 +39,38 @@ export default async function NotificationsPage() {
         {notifications.length === 0 && (
           <p className="py-16 text-center text-sm text-slate-400">No notifications yet.</p>
         )}
-        {notifications.map((n) => {
-          const inner = (
-            <div className="flex items-start gap-3 px-5 py-3.5">
-              <span
-                className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
-                  n.read ? "bg-transparent" : "bg-sky-500"
-                }`}
-              />
-              <div className="min-w-0 flex-1">
+        {notifications.map((n) => (
+          <div key={n.id} className="flex items-start gap-3 px-5 py-3.5 hover:bg-slate-50">
+            <span
+              className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                n.read ? "bg-transparent" : "bg-sky-500"
+              }`}
+            />
+            <div className="min-w-0 flex-1">
+              {n.link ? (
+                <Link href={n.link} className="hover:underline">
+                  <p className={`text-sm ${n.read ? "text-slate-500" : "font-medium text-slate-800"}`}>
+                    {n.message}
+                  </p>
+                </Link>
+              ) : (
                 <p className={`text-sm ${n.read ? "text-slate-500" : "font-medium text-slate-800"}`}>
                   {n.message}
                 </p>
-                <p className="text-xs text-slate-400">{fmtDateTime(n.createdAt)}</p>
-              </div>
+              )}
+              <p className="text-xs text-slate-400">{fmtDateTime(n.createdAt)}</p>
             </div>
-          );
-          return n.link ? (
-            <Link key={n.id} href={n.link} className="block hover:bg-slate-50">
-              {inner}
-            </Link>
-          ) : (
-            <div key={n.id}>{inner}</div>
-          );
-        })}
+            <form action={toggleNotificationRead}>
+              <input type="hidden" name="id" value={n.id} />
+              <button
+                type="submit"
+                className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-950/40"
+              >
+                {n.read ? "Mark unread" : "Mark read"}
+              </button>
+            </form>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { db } from "@/lib/db";
-import { requireUser } from "@/lib/auth";
+import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import { createTask, moveTask, setTaskStatus } from "@/lib/actions/tasks";
 import Board, { type BoardTask } from "@/components/Board";
+import RememberTaskView from "@/components/RememberTaskView";
 import {
   TASK_STATUSES,
   TASK_PRIORITIES,
@@ -66,15 +68,21 @@ export default async function TasksPage({
   ]);
 
   const showNew = searchParams.new === "1";
-  const boardView = searchParams.view === "board";
+  // Remember the last view (list/board) between visits via a cookie, so
+  // switching tabs and coming back doesn't reset the board to the list.
+  const cookieView = cookies().get("taskView")?.value;
+  const boardView = searchParams.view ? searchParams.view === "board" : cookieView === "board";
+  const viewParam = boardView ? "board" : "list";
+  const canManage = isManagerOrAdmin(user.role);
 
   const query = new URLSearchParams();
   for (const [k, v] of Object.entries(searchParams)) {
     if (v && k !== "view" && k !== "new") query.set(k, v);
   }
   const baseQuery = query.toString();
-  const listHref = `/tasks${baseQuery ? `?${baseQuery}` : ""}`;
-  const boardHref = `/tasks?${baseQuery ? `${baseQuery}&` : ""}view=board`;
+  const withView = (view: string) => `/tasks?${baseQuery ? `${baseQuery}&` : ""}view=${view}`;
+  const listHref = withView("list");
+  const boardHref = withView("board");
 
   const boardTasks: BoardTask[] = tasks.map((t) => {
     const priority = lookup(TASK_PRIORITIES, t.priority);
@@ -90,25 +98,27 @@ export default async function TasksPage({
       projectName: t.project?.name ?? null,
       dueLabel: t.dueDate ? fmtDate(t.dueDate) : null,
       overdue: isOverdue(t),
+      canMove: t.assigneeId === user.id || canManage,
       tags: t.tags.map(({ tag }) => ({ name: tag.name, badge: tagBadge(tag.color) })),
     };
   });
 
   return (
     <div className="space-y-4">
+      <RememberTaskView view={viewParam} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Tasks</h1>
         <div className="flex items-center gap-2">
-          <div className="flex rounded-lg border border-slate-300 p-0.5 text-sm">
+          <div className="flex rounded-lg border border-slate-300 p-0.5 text-sm dark:border-slate-600">
             <Link
               href={listHref}
-              className={`rounded-md px-3 py-1 ${!boardView ? "bg-sky-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+              className={`rounded-md px-3 py-1 ${!boardView ? "bg-sky-600 text-white" : "text-slate-600 hover:bg-slate-100 dark:text-slate-300"}`}
             >
               List
             </Link>
             <Link
               href={boardHref}
-              className={`rounded-md px-3 py-1 ${boardView ? "bg-sky-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+              className={`rounded-md px-3 py-1 ${boardView ? "bg-sky-600 text-white" : "text-slate-600 hover:bg-slate-100 dark:text-slate-300"}`}
             >
               Board
             </Link>
@@ -122,7 +132,7 @@ export default async function TasksPage({
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium text-slate-400">Quick view:</span>
         <Link
-          href={boardView ? "/tasks?view=board" : "/tasks"}
+          href={`/tasks?view=${viewParam}`}
           className={`rounded-full px-3 py-1 text-xs font-medium ${
             !searchParams.assignee
               ? "bg-sky-600 text-white"
@@ -132,7 +142,7 @@ export default async function TasksPage({
           All tasks
         </Link>
         <Link
-          href={`/tasks?assignee=me${boardView ? "&view=board" : ""}`}
+          href={`/tasks?assignee=me&view=${viewParam}`}
           className={`rounded-full px-3 py-1 text-xs font-medium ${
             searchParams.assignee === "me"
               ? "bg-sky-600 text-white"
@@ -201,10 +211,10 @@ export default async function TasksPage({
       )}
 
       <form className="card flex flex-wrap items-end gap-3 p-4" method="GET">
-        {boardView && <input type="hidden" name="view" value="board" />}
+        <input type="hidden" name="view" value={viewParam} />
         <div className="w-44">
           <label className="label">Search</label>
-          <input name="q" defaultValue={searchParams.q ?? ""} className="input" placeholder="Task title…" />
+          <input name="q" defaultValue={searchParams.q ?? ""} className="input" placeholder="Title or TM-ID…" />
         </div>
         <div>
           <label className="label">Status</label>
@@ -253,11 +263,15 @@ export default async function TasksPage({
             </select>
           </div>
         )}
-        <button type="submit" className="btn-secondary">
-          Filter
+        <button type="submit" className="btn-primary">
+          Apply filters
         </button>
-        <Link href={boardView ? "/tasks?view=board" : "/tasks"} className="text-sm text-slate-500 hover:underline">
-          Clear
+        <Link
+          href={`/tasks?view=${viewParam}`}
+          className="btn-secondary gap-1.5"
+          title="Reset all filters"
+        >
+          <span aria-hidden>✕</span> Clear
         </Link>
       </form>
 

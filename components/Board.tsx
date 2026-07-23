@@ -15,6 +15,7 @@ export type BoardTask = {
   projectName: string | null;
   dueLabel: string | null;
   overdue: boolean;
+  canMove: boolean;
   tags: { name: string; badge: string }[];
 };
 
@@ -72,9 +73,14 @@ export default function Board({
               {colTasks.map((t) => (
                 <div
                   key={t.id}
-                  draggable
-                  onDragStart={(e) => e.dataTransfer.setData("text/task-id", String(t.id))}
-                  className="cursor-grab rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition-shadow hover:shadow active:cursor-grabbing"
+                  draggable={t.canMove}
+                  onDragStart={(e) =>
+                    t.canMove && e.dataTransfer.setData("text/task-id", String(t.id))
+                  }
+                  title={t.canMove ? "Drag to move" : "Only the assignee can move this task"}
+                  className={`rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition-shadow hover:shadow ${
+                    t.canMove ? "cursor-grab active:cursor-grabbing" : "cursor-default"
+                  }`}
                 >
                   <div className="font-mono text-[10px] text-slate-400">TM-{t.id}</div>
                   <Link

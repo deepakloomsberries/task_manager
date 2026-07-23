@@ -2,8 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { sendDirectMessage } from "@/lib/actions/messages";
-import { initials, avatarColor } from "@/lib/ui";
+import AutoRefresh from "@/components/AutoRefresh";
+import MessageComposer from "@/components/MessageComposer";
+import UserAvatar from "@/components/UserAvatar";
 
 export const dynamic = "force-dynamic";
 
@@ -56,15 +57,12 @@ export default async function ConversationPage({ params }: { params: { userId: s
 
   return (
     <div className="mx-auto flex h-full max-w-3xl flex-col space-y-4">
+      <AutoRefresh />
       <div className="flex items-center gap-3">
         <Link href="/messages" className="text-sm text-slate-500 hover:underline">
           ←
         </Link>
-        <span
-          className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold text-white ${avatarColor(other.name)}`}
-        >
-          {initials(other.name)}
-        </span>
+        <UserAvatar user={other} size={36} />
         <div>
           <h1 className="font-semibold leading-tight">{other.name}</h1>
           <p className="text-xs text-slate-500">{other.jobTitle ?? other.email}</p>
@@ -110,20 +108,7 @@ export default async function ConversationPage({ params }: { params: { userId: s
         ))}
       </div>
 
-      <form action={sendDirectMessage} key={messages.length} className="card flex gap-3 p-4">
-        <input type="hidden" name="recipientId" value={otherId} />
-        <textarea
-          name="body"
-          rows={2}
-          required
-          maxLength={4000}
-          placeholder={`Message ${other.name.split(" ")[0]}…`}
-          className="input flex-1"
-        />
-        <button type="submit" className="btn-primary self-end">
-          Send
-        </button>
-      </form>
+      <MessageComposer recipientId={otherId} recipientName={other.name} />
 
       <script
         dangerouslySetInnerHTML={{

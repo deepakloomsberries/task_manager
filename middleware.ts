@@ -39,7 +39,10 @@ export async function middleware(req: NextRequest) {
   if (isPublic && authenticated) return redirectTo("/dashboard");
   if (pathname === "/") return redirectTo(authenticated ? "/dashboard" : "/login");
 
-  return NextResponse.next();
+  // Expose the path to server components (used to force the password change).
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-pathname", pathname);
+  return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
 export const config = {

@@ -24,18 +24,31 @@ const ADMIN_NAV: NavItem[] = [
   { href: "/departments", label: "Departments", icon: "⌂" },
 ];
 
-function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+function NavLink({
+  item,
+  active,
+  badge,
+}: {
+  item: NavItem;
+  active: boolean;
+  badge?: number;
+}) {
   return (
     <Link
       href={item.href}
       className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
         active
-          ? "bg-sky-50 text-sky-700"
-          : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+          ? "bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300"
+          : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700"
       }`}
     >
       <span className="w-5 text-center text-base leading-none">{item.icon}</span>
-      {item.label}
+      <span className="flex-1">{item.label}</span>
+      {badge ? (
+        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-sky-600 px-1.5 text-[10px] font-bold text-white">
+          {badge > 99 ? "99+" : badge}
+        </span>
+      ) : null}
     </Link>
   );
 }
@@ -43,23 +56,30 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
 export default function Sidebar({
   isAdmin,
   isManager,
+  unreadMessages = 0,
 }: {
   isAdmin: boolean;
   isManager: boolean;
+  unreadMessages?: number;
 }) {
   const pathname = usePathname();
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white">
-      <div className="flex h-16 items-center gap-2 border-b border-slate-200 px-5">
+    <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
+      <div className="flex h-16 items-center gap-2 border-b border-slate-200 px-5 dark:border-slate-700">
         <span className="text-lg font-bold">
           Looms <span className="text-sky-600">&amp;</span> Berries
         </span>
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">
         {MAIN_NAV.map((item) => (
-          <NavLink key={item.href} item={item} active={isActive(item.href)} />
+          <NavLink
+            key={item.href}
+            item={item}
+            active={isActive(item.href)}
+            badge={item.href === "/messages" ? unreadMessages : undefined}
+          />
         ))}
         {isManager && (
           <NavLink
@@ -75,15 +95,15 @@ export default function Sidebar({
             {ADMIN_NAV.map((item) => (
               <NavLink key={item.href} item={item} active={isActive(item.href)} />
             ))}
+            <NavLink
+              item={{ href: "/trash", label: "Recycle bin", icon: "♺" }}
+              active={isActive("/trash")}
+            />
           </>
         )}
         <div className="px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
           Account
         </div>
-        <NavLink
-          item={{ href: "/trash", label: "Recycle bin", icon: "♺" }}
-          active={isActive("/trash")}
-        />
         <NavLink
           item={{ href: "/settings", label: "Settings", icon: "⚙" }}
           active={isActive("/settings")}
