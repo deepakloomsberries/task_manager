@@ -77,6 +77,29 @@ export function notifyTaskAssigned(opts: {
   );
 }
 
+export function notifyTaskReminder(opts: {
+  to: string;
+  recipientName: string;
+  taskId: number;
+  taskTitle: string;
+  sentBy: string;
+  dueDate: Date | null;
+  priority: string;
+}) {
+  const lines = [
+    `Hi ${esc(opts.recipientName)},`,
+    `<b>${esc(opts.sentBy)}</b> sent you a reminder about the task: <b>${esc(opts.taskTitle)}</b>`,
+    `Priority: ${opts.priority}${
+      opts.dueDate ? ` · Due: ${new Date(opts.dueDate).toLocaleDateString("en-GB")}` : ""
+    }`,
+  ];
+  sendMail(
+    opts.to,
+    `Reminder: ${opts.taskTitle}`,
+    emailShell("Task reminder", lines, `${APP_URL}/tasks/${opts.taskId}`, "Open task")
+  );
+}
+
 export function notifyUserWelcome(opts: {
   to: string;
   name: string;

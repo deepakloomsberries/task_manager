@@ -18,7 +18,7 @@ export default async function TimesheetPage() {
       include: { task: true, project: true },
     }),
     db.task.findMany({
-      where: { assigneeId: user.id, status: { not: "DONE" } },
+      where: { assigneeId: user.id, status: { not: "DONE" }, deletedAt: null },
       orderBy: { title: "asc" },
     }),
     db.project.findMany({

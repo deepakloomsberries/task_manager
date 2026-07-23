@@ -41,6 +41,7 @@ export default async function ProjectDetailPage({
         createdBy: true,
         members: { include: { user: true } },
         tasks: {
+          where: { deletedAt: null },
           include: { assignee: true },
           orderBy: [{ status: "asc" }, { dueDate: "asc" }],
         },

@@ -10,14 +10,20 @@ export default async function DashboardPage() {
 
   const [myOpen, myOverdue, myDueThisWeek, myDoneThisMonth, recentTasks, activeProjects] =
     await Promise.all([
-      db.task.count({ where: { assigneeId: user.id, status: { not: "DONE" } } }),
+      db.task.count({ where: { assigneeId: user.id, status: { not: "DONE" }, deletedAt: null } }),
       db.task.count({
-        where: { assigneeId: user.id, status: { not: "DONE" }, dueDate: { lt: new Date() } },
+        where: {
+          assigneeId: user.id,
+          status: { not: "DONE" },
+          deletedAt: null,
+          dueDate: { lt: new Date() },
+        },
       }),
       db.task.count({
         where: {
           assigneeId: user.id,
           status: { not: "DONE" },
+          deletedAt: null,
           dueDate: {
             gte: new Date(),
             lt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
@@ -28,11 +34,12 @@ export default async function DashboardPage() {
         where: {
           assigneeId: user.id,
           status: "DONE",
+          deletedAt: null,
           completedAt: { gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) },
         },
       }),
       db.task.findMany({
-        where: { OR: [{ assigneeId: user.id }, { createdById: user.id }] },
+        where: { deletedAt: null, OR: [{ assigneeId: user.id }, { createdById: user.id }] },
         orderBy: { updatedAt: "desc" },
         take: 8,
         include: { project: true, assignee: true },

@@ -36,7 +36,7 @@ async function main() {
   const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
 
   const users = await db.user.findMany({
-    where: { active: true },
+    where: { active: true, emailNotifications: true },
     include: {
       tasksAssigned: {
         where: { status: { not: "DONE" }, dueDate: { lt: todayEnd } },

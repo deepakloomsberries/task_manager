@@ -26,7 +26,14 @@ export default async function SearchPage({
 
   const [tasks, projects, documents, notes, people] = await Promise.all([
     db.task.findMany({
-      where: { OR: [{ title: { contains: q } }, { description: { contains: q } }] },
+      where: {
+        deletedAt: null,
+        OR: [
+          { title: { contains: q } },
+          { description: { contains: q } },
+          ...(/^\d+$/.test(q) ? [{ id: Number(q) }] : []),
+        ],
+      },
       include: { assignee: true, project: true },
       take: 20,
       orderBy: { updatedAt: "desc" },

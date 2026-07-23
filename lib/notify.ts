@@ -1,14 +1,28 @@
 import { db } from "./db";
-import { notifyTaskAssigned, notifyTaskComment } from "./mail";
+import { notifyTaskAssigned, notifyTaskComment, notifyTaskReminder } from "./mail";
 
 /** Creates an in-app notification. */
 export async function pushNotification(userId: number, message: string, link?: string) {
   await db.notification.create({ data: { userId, message, link } });
 }
 
+/**
+ * Whether a user should receive email. Users can turn email off in Settings
+ * while still getting in-app notifications. `emailNotifications` is often
+ * already loaded on the user row; when it isn't, we look it up.
+ */
+async function wantsEmail(user: { id: number; emailNotifications?: boolean }) {
+  if (typeof user.emailNotifications === "boolean") return user.emailNotifications;
+  const row = await db.user.findUnique({
+    where: { id: user.id },
+    select: { emailNotifications: true },
+  });
+  return row?.emailNotifications ?? true;
+}
+
 /** In-app notification + email when a task is assigned to someone. */
 export async function notifyAssignment(opts: {
-  assignee: { id: number; email: string; name: string; active: boolean };
+  assignee: { id: number; email: string; name: string; active: boolean; emailNotifications?: boolean };
   task: { id: number; title: string; dueDate: Date | null; priority: string };
   actor: { id: number; name: string };
 }) {
@@ -18,20 +32,22 @@ export async function notifyAssignment(opts: {
     `${opts.actor.name} assigned you: ${opts.task.title}`,
     `/tasks/${opts.task.id}`
   );
-  notifyTaskAssigned({
-    to: opts.assignee.email,
-    assigneeName: opts.assignee.name,
-    taskId: opts.task.id,
-    taskTitle: opts.task.title,
-    assignedBy: opts.actor.name,
-    dueDate: opts.task.dueDate,
-    priority: opts.task.priority,
-  });
+  if (await wantsEmail(opts.assignee)) {
+    notifyTaskAssigned({
+      to: opts.assignee.email,
+      assigneeName: opts.assignee.name,
+      taskId: opts.task.id,
+      taskTitle: opts.task.title,
+      assignedBy: opts.actor.name,
+      dueDate: opts.task.dueDate,
+      priority: opts.task.priority,
+    });
+  }
 }
 
 /** In-app notification + email to task participants when a comment is added. */
 export async function notifyComment(opts: {
-  recipients: { id: number; email: string; name: string }[];
+  recipients: { id: number; email: string; name: string; emailNotifications?: boolean }[];
   task: { id: number; title: string };
   actor: { id: number; name: string };
   comment: string;
@@ -42,13 +58,40 @@ export async function notifyComment(opts: {
       `${opts.actor.name} commented on: ${opts.task.title}`,
       `/tasks/${opts.task.id}`
     );
-    notifyTaskComment({
-      to: r.email,
-      recipientName: r.name,
+    if (await wantsEmail(r)) {
+      notifyTaskComment({
+        to: r.email,
+        recipientName: r.name,
+        taskId: opts.task.id,
+        taskTitle: opts.task.title,
+        commenter: opts.actor.name,
+        comment: opts.comment,
+      });
+    }
+  }
+}
+
+/** In-app notification + email reminding the assignee about a task. */
+export async function notifyReminder(opts: {
+  recipient: { id: number; email: string; name: string; active: boolean; emailNotifications?: boolean };
+  task: { id: number; title: string; dueDate: Date | null; priority: string };
+  actor: { id: number; name: string };
+}) {
+  if (!opts.recipient.active) return;
+  await pushNotification(
+    opts.recipient.id,
+    `${opts.actor.name} sent a reminder: ${opts.task.title}`,
+    `/tasks/${opts.task.id}`
+  );
+  if (await wantsEmail(opts.recipient)) {
+    notifyTaskReminder({
+      to: opts.recipient.email,
+      recipientName: opts.recipient.name,
       taskId: opts.task.id,
       taskTitle: opts.task.title,
-      commenter: opts.actor.name,
-      comment: opts.comment,
+      sentBy: opts.actor.name,
+      dueDate: opts.task.dueDate,
+      priority: opts.task.priority,
     });
   }
 }

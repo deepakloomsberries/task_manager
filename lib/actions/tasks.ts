@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
-import { notifyAssignment, notifyComment, pushNotification, logActivity } from "@/lib/notify";
+import { notifyAssignment, notifyComment, notifyReminder, pushNotification, logActivity } from "@/lib/notify";
 import { fmtDate, lookup, TASK_STATUSES } from "@/lib/ui";
 
 const STATUSES = ["TODO", "IN_PROGRESS", "REVIEW", "DONE"];
@@ -21,13 +21,26 @@ function parseTaskForm(formData: FormData) {
   };
 }
 
+/**
+ * Editing task details and deleting a task belong to the person who assigned
+ * it — i.e. the task's creator — plus managers and admins.
+ */
 function canEditTask(
+  user: { id: number; role: string },
+  task: { createdById: number }
+) {
+  return isManagerOrAdmin(user.role) || task.createdById === user.id;
+}
+
+/**
+ * Progressing a task (moving its status / ticking it done) is also open to the
+ * assignee, since they are the one actually working on it.
+ */
+function canChangeStatus(
   user: { id: number; role: string },
   task: { createdById: number; assigneeId: number | null }
 ) {
-  return (
-    isManagerOrAdmin(user.role) || task.createdById === user.id || task.assigneeId === user.id
-  );
+  return canEditTask(user, task) || task.assigneeId === user.id;
 }
 
 async function revalidateTaskViews(taskId?: number) {
@@ -35,6 +48,7 @@ async function revalidateTaskViews(taskId?: number) {
   revalidatePath("/my-tasks");
   revalidatePath("/dashboard");
   revalidatePath("/calendar");
+  revalidatePath("/trash");
   if (taskId) revalidatePath(`/tasks/${taskId}`);
 }
 
@@ -63,6 +77,8 @@ export async function addSubtask(formData: FormData) {
 
   const parent = await db.task.findUnique({ where: { id: parentId } });
   if (!parent || !title) redirect(`/tasks/${parentId}`);
+  // A subtask must always be assigned to someone.
+  if (!assigneeId) redirect(`/tasks/${parentId}?error=subtask-assignee`);
 
   const task = await db.task.create({
     data: {
@@ -128,7 +144,7 @@ async function changeStatus(
 ) {
   if (!STATUSES.includes(status)) return;
   const task = await db.task.findUnique({ where: { id: taskId } });
-  if (!task || !canEditTask(user, task)) return;
+  if (!task || task.deletedAt || !canChangeStatus(user, task)) return;
   if (task.status === status) return;
 
   await db.task.update({
@@ -173,13 +189,69 @@ export async function deleteTask(formData: FormData) {
   const task = await db.task.findUnique({ where: { id } });
   if (!task) redirect("/tasks");
 
-  if (!isManagerOrAdmin(user.role) && task.createdById !== user.id) {
+  if (!canEditTask(user, task)) {
     redirect(`/tasks/${id}?error=forbidden`);
   }
 
-  await db.task.delete({ where: { id } });
+  // Soft delete: move the task (and its subtasks) to the recycle bin so it can
+  // be recovered later instead of being lost permanently.
+  const now = new Date();
+  await db.task.updateMany({
+    where: { OR: [{ id }, { parentId: id }] },
+    data: { deletedAt: now },
+  });
   await revalidateTaskViews();
   redirect(task.parentId ? `/tasks/${task.parentId}` : "/tasks");
+}
+
+/** Restore a soft-deleted task (and its subtasks) from the recycle bin. */
+export async function restoreTask(formData: FormData) {
+  const user = await requireUser();
+  const id = Number(formData.get("id"));
+  const task = await db.task.findUnique({ where: { id } });
+  if (!task) redirect("/trash");
+  if (!canEditTask(user, task)) redirect("/trash?error=forbidden");
+
+  await db.task.updateMany({
+    where: { OR: [{ id }, { parentId: id }] },
+    data: { deletedAt: null },
+  });
+  await revalidateTaskViews(id);
+  redirect("/trash");
+}
+
+/** Permanently remove a soft-deleted task from the recycle bin. */
+export async function purgeTask(formData: FormData) {
+  const user = await requireUser();
+  const id = Number(formData.get("id"));
+  const task = await db.task.findUnique({ where: { id } });
+  if (!task) redirect("/trash");
+  if (!canEditTask(user, task)) redirect("/trash?error=forbidden");
+
+  await db.task.delete({ where: { id } });
+  await revalidateTaskViews();
+  redirect("/trash");
+}
+
+/**
+ * Lets the task creator (or a manager/admin) nudge the assignee with a reminder
+ * email and an in-app notification about the task.
+ */
+export async function sendTaskReminder(formData: FormData) {
+  const user = await requireUser();
+  const id = Number(formData.get("id"));
+  const task = await db.task.findUnique({
+    where: { id },
+    include: { assignee: true },
+  });
+  if (!task || task.deletedAt) redirect("/tasks");
+  if (!canEditTask(user, task)) redirect(`/tasks/${id}?error=forbidden`);
+  if (!task.assignee) redirect(`/tasks/${id}?error=no-assignee`);
+
+  await notifyReminder({ recipient: task.assignee, task, actor: user });
+  await logActivity(id, user.id, "reminder", `sent a reminder to ${task.assignee.name}`);
+  await revalidateTaskViews(id);
+  redirect(`/tasks/${id}?ok=reminder`);
 }
 
 export async function addComment(formData: FormData) {

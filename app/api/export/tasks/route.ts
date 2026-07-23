@@ -21,6 +21,7 @@ export async function GET() {
   }
 
   const tasks = await db.task.findMany({
+    where: { deletedAt: null },
     include: { project: true, assignee: true, createdBy: true, tags: { include: { tag: true } } },
     orderBy: { createdAt: "desc" },
   });
