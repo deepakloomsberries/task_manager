@@ -24,8 +24,6 @@ import {
   fmtDate,
   fmtDateTime,
   toInputDate,
-  initials,
-  avatarColor,
 } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
@@ -111,7 +109,7 @@ export default async function TaskDetailPage({
       <div className="card p-6">
         {!editing ? (
           <>
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <div className="mb-1 font-mono text-xs font-medium text-slate-400">{taskCode}</div>
                 <h1 className="text-xl font-bold">{task.title}</h1>
@@ -351,25 +349,22 @@ export default async function TaskDetailPage({
                 >
                   {s.title}
                 </Link>
-                {s.assignee && (
-                  <span
-                    title={s.assignee.name}
-                    className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold text-white ${avatarColor(s.assignee.name)}`}
-                  >
-                    {initials(s.assignee.name)}
-                  </span>
-                )}
+                {s.assignee && <UserAvatar user={s.assignee} size={24} />}
               </div>
             ))}
             {task.subtasks.length === 0 && (
               <p className="py-1 text-sm text-slate-400">Break this task into smaller steps.</p>
             )}
           </div>
-          {canEdit && (
-            <form key={task.subtasks.length} action={addSubtask} className="mt-3 flex gap-2">
+          {canProgress ? (
+            <form
+              key={task.subtasks.length}
+              action={addSubtask}
+              className="mt-3 flex flex-col gap-2 sm:flex-row"
+            >
               <input type="hidden" name="parentId" value={task.id} />
               <input name="title" required placeholder="Add a subtask…" className="input flex-1" />
-              <select name="assigneeId" required defaultValue="" className="input w-44">
+              <select name="assigneeId" required defaultValue="" className="input sm:w-44">
                 <option value="" disabled>
                   Assign to…
                 </option>
@@ -379,10 +374,14 @@ export default async function TaskDetailPage({
                   </option>
                 ))}
               </select>
-              <button type="submit" className="btn-secondary">
-                Add
+              <button type="submit" className="btn-primary">
+                Add subtask
               </button>
             </form>
+          ) : (
+            <p className="mt-3 text-xs text-slate-400">
+              Only the assignee or the task owner can add subtasks.
+            </p>
           )}
         </div>
       )}

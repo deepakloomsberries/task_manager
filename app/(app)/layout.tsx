@@ -2,6 +2,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
+import MobileSidebar from "@/components/MobileSidebar";
 import ThemeToggle from "@/components/ThemeToggle";
 import UserAvatar from "@/components/UserAvatar";
 import { db } from "@/lib/db";
@@ -23,23 +24,23 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     db.directMessage.count({ where: { recipientId: user.id, read: false } }),
   ]);
 
+  const isAdmin = user.role === "ADMIN";
+  const isManager = user.role === "ADMIN" || user.role === "MANAGER";
+
   return (
     <div className="flex h-screen">
-      <Sidebar
-        isAdmin={user.role === "ADMIN"}
-        isManager={user.role === "ADMIN" || user.role === "MANAGER"}
-        unreadMessages={unreadMessages}
-      />
+      <Sidebar isAdmin={isAdmin} isManager={isManager} unreadMessages={unreadMessages} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-16 shrink-0 items-center gap-4 border-b border-slate-200 bg-white px-6 dark:border-slate-700 dark:bg-slate-800">
+        <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 sm:gap-4 sm:px-6 dark:border-slate-700 dark:bg-slate-800">
+          <MobileSidebar isAdmin={isAdmin} isManager={isManager} unreadMessages={unreadMessages} />
           <form action="/search" method="GET" className="max-w-md flex-1">
             <input
               name="q"
-              placeholder="Search tasks, projects, documents…"
+              placeholder="Search…"
               className="input !bg-slate-50"
             />
           </form>
-          <div className="flex-1" />
+          <div className="hidden flex-1 sm:block" />
           <ThemeToggle />
           <Link
             href="/notifications"
@@ -67,7 +68,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </Link>
           <Link href="/settings" className="flex items-center gap-3" title="Profile settings">
             <UserAvatar user={user} size={36} />
-            <div className="leading-tight">
+            <div className="hidden leading-tight sm:block">
               <div className="text-sm font-medium">{user.name}</div>
               <div className="text-xs text-slate-500 dark:text-slate-400">
                 {user.company.code} · {user.role.toLowerCase()}
@@ -75,12 +76,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </div>
           </Link>
           <form action={logout}>
-            <button type="submit" className="btn-secondary !px-3 !py-1.5 text-xs">
-              Sign out
+            <button type="submit" className="btn-secondary !px-2.5 !py-1.5 text-xs sm:!px-3">
+              <span className="hidden sm:inline">Sign out</span>
+              <span aria-hidden className="sm:hidden">⎋</span>
             </button>
           </form>
         </header>
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
       </div>
     </div>
   );
