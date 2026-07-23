@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { initials, avatarColor, fmtDateTime } from "@/lib/ui";
+import { fmtDateTime } from "@/lib/ui";
 import StartChat from "@/components/StartChat";
+import AutoRefresh from "@/components/AutoRefresh";
+import UserAvatar from "@/components/UserAvatar";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +22,7 @@ export default async function MessagesPage() {
   ]);
 
   type Convo = {
-    partner: { id: number; name: string };
+    partner: { id: number; name: string; avatarPath: string | null };
     lastBody: string;
     lastAt: Date;
     fromMe: boolean;
@@ -50,6 +52,7 @@ export default async function MessagesPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
+      <AutoRefresh />
       <div>
         <h1 className="text-2xl font-bold">Messages</h1>
         <p className="text-sm text-slate-500">Private one-to-one chats with your teammates.</p>
@@ -72,11 +75,7 @@ export default async function MessagesPage() {
             href={`/messages/${c.partner.id}`}
             className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50"
           >
-            <span
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white ${avatarColor(c.partner.name)}`}
-            >
-              {initials(c.partner.name)}
-            </span>
+            <UserAvatar user={c.partner} size={40} />
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate text-sm font-medium">{c.partner.name}</span>

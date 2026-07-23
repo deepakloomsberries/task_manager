@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { createSession, destroySession, requireUser } from "@/lib/auth";
+import { isStrongPassword } from "@/lib/password";
 
 export async function login(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -28,7 +29,7 @@ export async function changeOwnPassword(formData: FormData) {
   const current = String(formData.get("current") ?? "");
   const next = String(formData.get("next") ?? "");
 
-  if (next.length < 8) redirect("/settings?error=short");
+  if (!isStrongPassword(next)) redirect("/settings?error=weak");
   if (!(await bcrypt.compare(current, user.passwordHash))) {
     redirect("/settings?error=wrong");
   }

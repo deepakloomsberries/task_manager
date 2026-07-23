@@ -8,6 +8,8 @@ import {
   toggleUserActive,
 } from "@/lib/actions/users";
 import { ROLES, lookup, fmtDate } from "@/lib/ui";
+import PasswordField from "@/components/PasswordField";
+import { PASSWORD_RULES } from "@/lib/password";
 
 export const dynamic = "force-dynamic";
 
@@ -15,9 +17,9 @@ const MESSAGES: Record<string, { text: string; error?: boolean }> = {
   created: { text: "User created. They have been emailed their login details and must change the password on first login." },
   updated: { text: "User updated." },
   reset: { text: "Password reset. The user has been emailed the new temporary password." },
-  invalid: { text: "Invalid input. Password must be at least 8 characters.", error: true },
+  invalid: { text: "Invalid input. Please check the fields and try again.", error: true },
   exists: { text: "A user with that email already exists.", error: true },
-  short: { text: "Password must be at least 8 characters.", error: true },
+  weak: { text: `Password is too weak. ${PASSWORD_RULES}`, error: true },
   self: { text: "You cannot deactivate or demote your own admin account.", error: true },
 };
 
@@ -86,8 +88,8 @@ export default async function UsersPage({
               <input name="email" type="email" required className="input" placeholder="name@loomsberries.com" />
             </div>
             <div>
-              <label className="label">Initial password * (min 8 chars)</label>
-              <input name="password" required minLength={8} className="input" placeholder="They must change it on first login" />
+              <label className="label">Initial password *</label>
+              <PasswordField name="password" withGenerate showStrength />
             </div>
             <div>
               <label className="label">Role *</label>
@@ -207,9 +209,9 @@ export default async function UsersPage({
                       </form>
                       <form action={resetUserPassword} className="mt-3 flex items-end gap-3 border-t border-slate-100 pt-3">
                         <input type="hidden" name="id" value={u.id} />
-                        <div className="w-64">
-                          <label className="label">Reset password (min 8 chars)</label>
-                          <input name="password" required minLength={8} className="input" placeholder="New temporary password" />
+                        <div className="w-72">
+                          <label className="label">Reset password</label>
+                          <PasswordField name="password" withGenerate showStrength />
                         </div>
                         <button type="submit" className="btn-secondary !py-2 text-xs">
                           Reset password

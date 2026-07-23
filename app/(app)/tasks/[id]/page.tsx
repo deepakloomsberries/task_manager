@@ -13,6 +13,7 @@ import {
 import { deleteAttachment } from "@/lib/actions/files";
 import PasteAttachment from "@/components/PasteAttachment";
 import ShareTask from "@/components/ShareTask";
+import UserAvatar from "@/components/UserAvatar";
 import { addTagToTask, removeTagFromTask } from "@/lib/actions/tags";
 import { fmtSize } from "@/lib/storage";
 import { TAG_COLORS, tagBadge } from "@/lib/ui";
@@ -159,7 +160,7 @@ export default async function TaskDetailPage({
               </div>
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                 <ShareTask code={taskCode} title={task.title} taskId={task.id} />
-                {canEdit && task.assignee && (
+                {task.createdById === user.id && task.assignee && (
                   <form action={sendTaskReminder}>
                     <input type="hidden" name="id" value={task.id} />
                     <button
@@ -440,11 +441,7 @@ export default async function TaskDetailPage({
         <div className="space-y-4">
           {task.comments.map((c) => (
             <div key={c.id} className="flex gap-3">
-              <div
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${avatarColor(c.author.name)}`}
-              >
-                {initials(c.author.name)}
-              </div>
+              <UserAvatar user={c.author} size={32} />
               <div className="min-w-0 flex-1 rounded-lg bg-slate-50 px-4 py-3">
                 <div className="mb-1 flex items-baseline justify-between gap-2">
                   <span className="text-sm font-medium">{c.author.name}</span>
@@ -471,6 +468,9 @@ export default async function TaskDetailPage({
             Comment
           </button>
         </form>
+        <div className="mt-3 border-t border-slate-100 pt-3">
+          <PasteAttachment taskId={task.id} listenPaste={false} compact />
+        </div>
       </div>
 
       {task.activities.length > 0 && (

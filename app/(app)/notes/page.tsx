@@ -189,12 +189,12 @@ export default async function NotesPage() {
 
   const [owned, shared, users] = await Promise.all([
     db.note.findMany({
-      where: { userId: user.id },
+      where: { userId: user.id, deletedAt: null },
       include: { shares: { include: { user: true } } },
       orderBy: [{ pinned: "desc" }, { updatedAt: "desc" }],
     }),
     db.note.findMany({
-      where: { shares: { some: { userId: user.id } } },
+      where: { shares: { some: { userId: user.id } }, deletedAt: null },
       include: { user: true },
       orderBy: { updatedAt: "desc" },
     }),

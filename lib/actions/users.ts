@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { notifyUserWelcome, notifyPasswordReset } from "@/lib/mail";
+import { isStrongPassword } from "@/lib/password";
 
 const ROLES = ["ADMIN", "MANAGER", "EMPLOYEE"];
 
@@ -22,9 +23,10 @@ export async function createUser(formData: FormData) {
     : null;
   const jobTitle = String(formData.get("jobTitle") ?? "").trim();
 
-  if (!email || !name || password.length < 8 || !ROLES.includes(role) || !companyId) {
+  if (!email || !name || !ROLES.includes(role) || !companyId) {
     redirect("/users?error=invalid");
   }
+  if (!isStrongPassword(password)) redirect("/users?error=weak");
   if (await db.user.findUnique({ where: { email } })) {
     redirect("/users?error=exists");
   }
@@ -75,7 +77,8 @@ export async function resetUserPassword(formData: FormData) {
   await requireAdmin();
   const id = Number(formData.get("id"));
   const password = String(formData.get("password") ?? "");
-  if (!id || password.length < 8) redirect("/users?error=short");
+  if (!id) redirect("/users?error=invalid");
+  if (!isStrongPassword(password)) redirect("/users?error=weak");
 
   const user = await db.user.update({
     where: { id },

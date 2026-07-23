@@ -24,6 +24,9 @@ export default async function SearchPage({
     );
   }
 
+  // Allow searching tasks by their ID, e.g. "TM-14", "#14" or "14".
+  const idMatch = q.match(/^(?:tm-?|#)?(\d+)$/i);
+
   const [tasks, projects, documents, notes, people] = await Promise.all([
     db.task.findMany({
       where: {
@@ -31,7 +34,7 @@ export default async function SearchPage({
         OR: [
           { title: { contains: q } },
           { description: { contains: q } },
-          ...(/^\d+$/.test(q) ? [{ id: Number(q) }] : []),
+          ...(idMatch ? [{ id: Number(idMatch[1]) }] : []),
         ],
       },
       include: { assignee: true, project: true },
@@ -50,7 +53,11 @@ export default async function SearchPage({
       orderBy: { createdAt: "desc" },
     }),
     db.note.findMany({
-      where: { userId: user.id, OR: [{ title: { contains: q } }, { body: { contains: q } }] },
+      where: {
+        userId: user.id,
+        deletedAt: null,
+        OR: [{ title: { contains: q } }, { body: { contains: q } }],
+      },
       take: 10,
     }),
     db.user.findMany({
@@ -80,7 +87,10 @@ export default async function SearchPage({
               return (
                 <Link key={t.id} href={`/tasks/${t.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50">
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{t.title}</div>
+                    <div className="truncate text-sm font-medium">
+                      <span className="mr-1.5 font-mono text-[10px] text-slate-400">TM-{t.id}</span>
+                      {t.title}
+                    </div>
                     <div className="text-xs text-slate-500">
                       {t.project?.name ?? "No project"} · {t.assignee?.name ?? "Unassigned"} · due {fmtDate(t.dueDate)}
                     </div>

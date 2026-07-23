@@ -1,22 +1,37 @@
 import Link from "next/link";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
+import ThemeToggle from "@/components/ThemeToggle";
+import UserAvatar from "@/components/UserAvatar";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { logout } from "@/lib/actions/auth";
-import { initials, avatarColor } from "@/lib/ui";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
-  const unread = await db.notification.count({ where: { userId: user.id, read: false } });
+
+  // Force a password change before any part of the app can be explored.
+  // Guard on a known path only, so a missing header can never cause a loop.
+  const pathname = headers().get("x-pathname") ?? "";
+  if (user.mustChangePassword && pathname && !pathname.startsWith("/settings")) {
+    redirect("/settings?first=1");
+  }
+
+  const [unread, unreadMessages] = await Promise.all([
+    db.notification.count({ where: { userId: user.id, read: false } }),
+    db.directMessage.count({ where: { recipientId: user.id, read: false } }),
+  ]);
 
   return (
     <div className="flex h-screen">
       <Sidebar
         isAdmin={user.role === "ADMIN"}
         isManager={user.role === "ADMIN" || user.role === "MANAGER"}
+        unreadMessages={unreadMessages}
       />
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-16 shrink-0 items-center gap-4 border-b border-slate-200 bg-white px-6">
+        <header className="flex h-16 shrink-0 items-center gap-4 border-b border-slate-200 bg-white px-6 dark:border-slate-700 dark:bg-slate-800">
           <form action="/search" method="GET" className="max-w-md flex-1">
             <input
               name="q"
@@ -25,9 +40,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             />
           </form>
           <div className="flex-1" />
+          <ThemeToggle />
           <Link
             href="/notifications"
-            className="relative rounded-lg p-2 text-xl leading-none text-slate-500 hover:bg-slate-100"
+            className="relative rounded-lg p-2 text-xl leading-none text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
             title="Notifications"
           >
             <svg
@@ -49,19 +65,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </span>
             )}
           </Link>
-          <div className="flex items-center gap-3">
-            <div
-              className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold text-white ${avatarColor(user.name)}`}
-            >
-              {initials(user.name)}
-            </div>
+          <Link href="/settings" className="flex items-center gap-3" title="Profile settings">
+            <UserAvatar user={user} size={36} />
             <div className="leading-tight">
               <div className="text-sm font-medium">{user.name}</div>
-              <div className="text-xs text-slate-500">
+              <div className="text-xs text-slate-500 dark:text-slate-400">
                 {user.company.code} · {user.role.toLowerCase()}
               </div>
             </div>
-          </div>
+          </Link>
           <form action={logout}>
             <button type="submit" className="btn-secondary !px-3 !py-1.5 text-xs">
               Sign out

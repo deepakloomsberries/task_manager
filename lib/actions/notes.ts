@@ -38,7 +38,11 @@ export async function updateNote(formData: FormData) {
 
   // The owner and anyone the note is shared with can edit it.
   const note = await db.note.findFirst({
-    where: { id, OR: [{ userId: user.id }, { shares: { some: { userId: user.id } } }] },
+    where: {
+      id,
+      deletedAt: null,
+      OR: [{ userId: user.id }, { shares: { some: { userId: user.id } } }],
+    },
   });
   if (!note) redirect("/notes");
 
@@ -58,7 +62,7 @@ export async function shareNote(formData: FormData) {
   if (!id || !withUserId) redirect("/notes");
 
   // Only the owner can manage who a note is shared with.
-  const note = await db.note.findFirst({ where: { id, userId: user.id } });
+  const note = await db.note.findFirst({ where: { id, userId: user.id, deletedAt: null } });
   if (!note || withUserId === user.id) redirect("/notes");
 
   await db.noteShare.upsert({
@@ -88,7 +92,7 @@ export async function unshareNote(formData: FormData) {
 export async function toggleNotePin(formData: FormData) {
   const user = await requireUser();
   const id = Number(formData.get("id"));
-  const note = await db.note.findFirst({ where: { id, userId: user.id } });
+  const note = await db.note.findFirst({ where: { id, userId: user.id, deletedAt: null } });
   if (note) {
     await db.note.update({ where: { id }, data: { pinned: !note.pinned } });
   }
@@ -99,7 +103,33 @@ export async function toggleNotePin(formData: FormData) {
 export async function deleteNote(formData: FormData) {
   const user = await requireUser();
   const id = Number(formData.get("id"));
-  await db.note.deleteMany({ where: { id, userId: user.id } });
+  // Soft delete so the note can be recovered from the recycle bin.
+  await db.note.updateMany({
+    where: { id, userId: user.id },
+    data: { deletedAt: new Date() },
+  });
   revalidatePath("/notes");
+  revalidatePath("/trash");
   redirect("/notes");
+}
+
+/** Restore a soft-deleted note from the recycle bin (owner or admin). */
+export async function restoreNote(formData: FormData) {
+  const user = await requireUser();
+  const id = Number(formData.get("id"));
+  const where = user.role === "ADMIN" ? { id } : { id, userId: user.id };
+  await db.note.updateMany({ where, data: { deletedAt: null } });
+  revalidatePath("/notes");
+  revalidatePath("/trash");
+  redirect("/trash");
+}
+
+/** Permanently delete a note from the recycle bin (owner or admin). */
+export async function purgeNote(formData: FormData) {
+  const user = await requireUser();
+  const id = Number(formData.get("id"));
+  const where = user.role === "ADMIN" ? { id } : { id, userId: user.id };
+  await db.note.deleteMany({ where });
+  revalidatePath("/trash");
+  redirect("/trash");
 }

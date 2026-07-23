@@ -3,12 +3,12 @@
 @tailwind utilities;
 
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  @apply bg-slate-50 text-slate-900 antialiased dark:bg-slate-900 dark:text-slate-100;
 }
 
 @layer components {
   .input {
-    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100;
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:focus:ring-sky-900/40;
   }
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors;
@@ -17,24 +17,98 @@ body {
     @apply btn bg-sky-600 text-white hover:bg-sky-700;
   }
   .btn-secondary {
-    @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+    @apply btn border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700;
   }
   .btn-danger {
-    @apply btn border border-red-200 bg-red-50 text-red-700 hover:bg-red-100;
+    @apply btn border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/70;
   }
   .card {
-    @apply rounded-xl border border-slate-200 bg-white shadow-sm;
+    @apply rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800;
   }
   .badge {
     @apply inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium;
   }
   .label {
-    @apply mb-1 block text-xs font-medium text-slate-600;
+    @apply mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300;
   }
   .th {
-    @apply px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500;
+    @apply px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400;
   }
   .td {
     @apply px-4 py-3 text-sm;
   }
 }
+
+/*
+ * Dark-mode fallbacks for the utility classes used most across the pages, so
+ * screens read well in dark mode without touching every file. Kept narrow and
+ * mapped to sensible dark equivalents.
+ */
+.dark .bg-white {
+  @apply bg-slate-800;
+}
+.dark .bg-slate-50 {
+  @apply bg-slate-900/40;
+}
+.dark .bg-slate-100,
+.dark .bg-slate-200 {
+  @apply bg-slate-700;
+}
+.dark .border-slate-300 {
+  @apply border-slate-600;
+}
+.dark .border-slate-200 {
+  @apply border-slate-700;
+}
+.dark .border-slate-100 {
+  @apply border-slate-700/60;
+}
+.dark .divide-slate-100 > * + * {
+  border-color: rgb(51 65 85 / 0.6);
+}
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-slate-700 {
+  @apply text-slate-100;
+}
+.dark .text-slate-600,
+.dark .text-slate-500 {
+  @apply text-slate-300;
+}
+.dark .hover\:bg-slate-50:hover,
+.dark .hover\:bg-slate-100:hover {
+  @apply bg-slate-700/50;
+}
+
+/*
+ * Coloured surfaces (badges, alert banners, Keep-style note cards). Darken the
+ * light -50/-100 tints and lift the -600/700/800 text so both stay legible on
+ * a dark background, keeping each element's colour identity.
+ */
+.dark .bg-red-50 { @apply bg-red-950/40; }
+.dark .bg-red-100 { @apply bg-red-950/60; }
+.dark .text-red-600, .dark .text-red-700, .dark .text-red-800 { @apply text-red-300; }
+.dark .bg-orange-50 { @apply bg-orange-950/40; }
+.dark .bg-orange-100 { @apply bg-orange-950/60; }
+.dark .text-orange-600, .dark .text-orange-700, .dark .text-orange-800 { @apply text-orange-300; }
+.dark .bg-amber-50 { @apply bg-amber-950/40; }
+.dark .bg-amber-100 { @apply bg-amber-950/60; }
+.dark .text-amber-600, .dark .text-amber-700, .dark .text-amber-800 { @apply text-amber-300; }
+.dark .bg-green-50 { @apply bg-green-950/40; }
+.dark .bg-green-100 { @apply bg-green-950/60; }
+.dark .text-green-600, .dark .text-green-700, .dark .text-green-800 { @apply text-green-300; }
+.dark .bg-teal-50 { @apply bg-teal-950/40; }
+.dark .bg-teal-100 { @apply bg-teal-950/60; }
+.dark .text-teal-600, .dark .text-teal-700, .dark .text-teal-800 { @apply text-teal-300; }
+.dark .bg-sky-50 { @apply bg-sky-950/50; }
+.dark .bg-sky-100 { @apply bg-sky-950/70; }
+.dark .text-sky-600, .dark .text-sky-700, .dark .text-sky-800 { @apply text-sky-300; }
+.dark .bg-blue-50 { @apply bg-blue-950/40; }
+.dark .bg-blue-100 { @apply bg-blue-950/60; }
+.dark .text-blue-600, .dark .text-blue-700, .dark .text-blue-800 { @apply text-blue-300; }
+.dark .bg-purple-50 { @apply bg-purple-950/40; }
+.dark .bg-purple-100 { @apply bg-purple-950/60; }
+.dark .text-purple-600, .dark .text-purple-700, .dark .text-purple-800 { @apply text-purple-300; }
+.dark .bg-pink-50 { @apply bg-pink-950/40; }
+.dark .bg-pink-100 { @apply bg-pink-950/60; }
+.dark .text-pink-600, .dark .text-pink-700, .dark .text-pink-800 { @apply text-pink-300; }

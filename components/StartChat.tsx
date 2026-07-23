@@ -2,35 +2,48 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import UserAvatar from "@/components/UserAvatar";
 
-export default function StartChat({ users }: { users: { id: number; name: string }[] }) {
+type Person = { id: number; name: string; jobTitle?: string | null; avatarPath?: string | null };
+
+export default function StartChat({ users }: { users: Person[] }) {
   const router = useRouter();
-  const [to, setTo] = useState("");
+  const [query, setQuery] = useState("");
+
+  const filtered = query
+    ? users.filter((u) => u.name.toLowerCase().includes(query.toLowerCase()))
+    : users;
 
   return (
-    <div className="flex gap-2">
-      <select
-        value={to}
-        onChange={(e) => setTo(e.target.value)}
-        className="input"
-      >
-        <option value="" disabled>
-          Choose a person…
-        </option>
-        {users.map((u) => (
-          <option key={u.id} value={u.id}>
-            {u.name}
-          </option>
+    <div>
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search people…"
+        className="input mb-2"
+      />
+      <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200 dark:divide-slate-700 dark:border-slate-700">
+        {filtered.length === 0 && (
+          <p className="px-4 py-6 text-center text-sm text-slate-400">No people found.</p>
+        )}
+        {filtered.map((u) => (
+          <button
+            key={u.id}
+            type="button"
+            onClick={() => router.push(`/messages/${u.id}`)}
+            className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700/50"
+          >
+            <UserAvatar user={u} size={36} />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-medium">{u.name}</div>
+              {u.jobTitle && (
+                <div className="truncate text-xs text-slate-500">{u.jobTitle}</div>
+              )}
+            </div>
+            <span className="text-xs text-sky-600">Chat →</span>
+          </button>
         ))}
-      </select>
-      <button
-        type="button"
-        disabled={!to}
-        onClick={() => to && router.push(`/messages/${to}`)}
-        className="btn-primary disabled:opacity-50"
-      >
-        Chat
-      </button>
+      </div>
     </div>
   );
 }
