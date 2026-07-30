@@ -4,7 +4,13 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import UserAvatar from "@/components/UserAvatar";
 
-type Person = { id: number; name: string; jobTitle?: string | null; avatarPath?: string | null };
+type Person = {
+  id: number;
+  name: string;
+  jobTitle?: string | null;
+  avatarPath?: string | null;
+  lastSeenAt?: Date | string | null;
+};
 
 export default function StartChat({ users }: { users: Person[] }) {
   const router = useRouter();
@@ -33,7 +39,7 @@ export default function StartChat({ users }: { users: Person[] }) {
             onClick={() => router.push(`/messages/${u.id}`)}
             className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700/50"
           >
-            <UserAvatar user={u} size={36} />
+            <UserAvatar user={u} size={36} presence={u.lastSeenAt ?? null} />
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-medium">{u.name}</div>
               {u.jobTitle && (

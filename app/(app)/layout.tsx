@@ -5,6 +5,8 @@ import Sidebar from "@/components/Sidebar";
 import MobileSidebar from "@/components/MobileSidebar";
 import ThemeToggle from "@/components/ThemeToggle";
 import UserAvatar from "@/components/UserAvatar";
+import Heartbeat from "@/components/Heartbeat";
+import RunningTimerPill from "@/components/RunningTimerPill";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { logout } from "@/lib/actions/auth";
@@ -19,9 +21,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect("/settings?first=1");
   }
 
-  const [unread, unreadMessages] = await Promise.all([
+  const [unread, unreadMessages, activeTimer] = await Promise.all([
     db.notification.count({ where: { userId: user.id, read: false } }),
     db.directMessage.count({ where: { recipientId: user.id, read: false } }),
+    db.taskTimer.findUnique({
+      where: { userId: user.id },
+      include: { task: { select: { id: true, title: true } } },
+    }),
   ]);
 
   const isAdmin = user.role === "ADMIN";
@@ -29,6 +35,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen">
+      <Heartbeat />
       <Sidebar isAdmin={isAdmin} isManager={isManager} unreadMessages={unreadMessages} />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 sm:gap-4 sm:px-6 dark:border-slate-700 dark:bg-slate-800">
@@ -41,6 +48,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             />
           </form>
           <div className="hidden flex-1 sm:block" />
+          {activeTimer && (
+            <RunningTimerPill
+              taskId={activeTimer.task.id}
+              title={activeTimer.task.title}
+              startedAt={activeTimer.startedAt.toISOString()}
+            />
+          )}
           <ThemeToggle />
           <Link
             href="/notifications"
