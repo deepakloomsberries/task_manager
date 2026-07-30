@@ -7,6 +7,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import UserAvatar from "@/components/UserAvatar";
 import Heartbeat from "@/components/Heartbeat";
 import RunningTimerPill from "@/components/RunningTimerPill";
+import PushSetup from "@/components/PushSetup";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { logout } from "@/lib/actions/auth";
@@ -21,14 +22,31 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect("/settings?first=1");
   }
 
-  const [unread, unreadMessages, activeTimer] = await Promise.all([
+  // Tasks assigned to me that need attention now — overdue or due by end of today.
+  const endOfToday = new Date();
+  endOfToday.setHours(23, 59, 59, 999);
+
+  const [unread, unreadMessages, activeTimer, myTasksDue] = await Promise.all([
     db.notification.count({ where: { userId: user.id, read: false } }),
     db.directMessage.count({ where: { recipientId: user.id, read: false } }),
     db.taskTimer.findUnique({
       where: { userId: user.id },
       include: { task: { select: { id: true, title: true } } },
     }),
+    db.task.count({
+      where: {
+        assigneeId: user.id,
+        deletedAt: null,
+        status: { not: "DONE" },
+        dueDate: { not: null, lte: endOfToday },
+      },
+    }),
   ]);
+
+  const navBadges: Record<string, number> = {
+    "/messages": unreadMessages,
+    "/my-tasks": myTasksDue,
+  };
 
   const isAdmin = user.role === "ADMIN";
   const isManager = user.role === "ADMIN" || user.role === "MANAGER";
@@ -36,10 +54,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex h-screen">
       <Heartbeat />
-      <Sidebar isAdmin={isAdmin} isManager={isManager} unreadMessages={unreadMessages} />
+      <PushSetup />
+      <Sidebar isAdmin={isAdmin} isManager={isManager} badges={navBadges} />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 sm:gap-4 sm:px-6 dark:border-slate-700 dark:bg-slate-800">
-          <MobileSidebar isAdmin={isAdmin} isManager={isManager} unreadMessages={unreadMessages} />
+          <MobileSidebar isAdmin={isAdmin} isManager={isManager} badges={navBadges} />
           <form action="/search" method="GET" className="max-w-md flex-1">
             <input
               name="q"

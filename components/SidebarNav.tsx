@@ -59,12 +59,13 @@ function NavLink({
 export default function SidebarNav({
   isAdmin,
   isManager,
-  unreadMessages = 0,
+  badges = {},
   onNavigate,
 }: {
   isAdmin: boolean;
   isManager: boolean;
-  unreadMessages?: number;
+  /** Per-route unread/attention counts keyed by href, e.g. { "/messages": 3 }. */
+  badges?: Record<string, number>;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
@@ -77,7 +78,7 @@ export default function SidebarNav({
           key={item.href}
           item={item}
           active={isActive(item.href)}
-          badge={item.href === "/messages" ? unreadMessages : undefined}
+          badge={badges[item.href]}
           onNavigate={onNavigate}
         />
       ))}

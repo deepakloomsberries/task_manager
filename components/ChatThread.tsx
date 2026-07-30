@@ -56,10 +56,12 @@ export default function ChatThread({
   const [lastReadMyId, setLastReadMyId] = useState(initialLastReadMyId);
   const [partnerLastSeen, setPartnerLastSeen] = useState<string | null>(initialPartnerLastSeenAt);
   const [text, setText] = useState("");
+  const [partnerTyping, setPartnerTyping] = useState(false);
   const [, forceTick] = useState(0);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
+  const lastTypingPing = useRef(0);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
@@ -124,6 +126,7 @@ export default function ChatThread({
         mergeIncoming(data.messages as Msg[]);
         setLastReadMyId((cur) => Math.max(cur, data.lastReadMyId ?? 0));
         setPartnerLastSeen(data.partnerLastSeenAt ?? null);
+        setPartnerTyping(!!data.partnerTyping);
       } catch {
         /* offline / transient — try again next tick */
       }
@@ -139,10 +142,20 @@ export default function ChatThread({
     };
   }, [other.id, mergeIncoming]);
 
-  // Keep the view pinned to the newest message when the user is already there.
+  // Keep the view pinned to the newest message (or the typing bubble) when the
+  // user is already at the bottom.
   useEffect(() => {
     if (atBottomRef.current) scrollToBottom();
-  }, [messages, scrollToBottom]);
+  }, [messages, partnerTyping, scrollToBottom]);
+
+  // Let the other side know we're typing — throttled so it's at most one ping
+  // every couple of seconds no matter how fast someone types.
+  const pingTyping = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTypingPing.current < 2500) return;
+    lastTypingPing.current = now;
+    fetch(`/api/messages/${other.id}/typing`, { method: "POST", keepalive: true }).catch(() => {});
+  }, [other.id]);
 
   // Let the "Active now / last seen" label decay over time.
   useEffect(() => {
@@ -217,10 +230,21 @@ export default function ChatThread({
         <UserAvatar user={other} size={40} presence={partnerLastSeen} />
         <div className="min-w-0">
           <h1 className="truncate font-semibold leading-tight">{other.name}</h1>
-          <p className={`flex items-center gap-1.5 text-xs ${online ? "text-green-600 dark:text-green-400" : "text-slate-500"}`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${online ? "bg-green-500" : "bg-slate-300 dark:bg-slate-600"}`} />
-            {lastSeenLabel(partnerLastSeen)}
-          </p>
+          {partnerTyping ? (
+            <p className="flex items-center gap-1.5 text-xs font-medium text-sky-600 dark:text-sky-400">
+              <span className="flex gap-0.5">
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-sky-500" style={{ animationDelay: "0ms" }} />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-sky-500" style={{ animationDelay: "150ms" }} />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-sky-500" style={{ animationDelay: "300ms" }} />
+              </span>
+              typing…
+            </p>
+          ) : (
+            <p className={`flex items-center gap-1.5 text-xs ${online ? "text-green-600 dark:text-green-400" : "text-slate-500"}`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${online ? "bg-green-500" : "bg-slate-300 dark:bg-slate-600"}`} />
+              {lastSeenLabel(partnerLastSeen)}
+            </p>
+          )}
         </div>
       </div>
 
@@ -280,13 +304,27 @@ export default function ChatThread({
             })}
           </div>
         ))}
+
+        {partnerTyping && (
+          <div className="flex items-end gap-2">
+            <UserAvatar user={other} size={26} />
+            <div className="flex items-center gap-1 rounded-2xl rounded-bl-md bg-slate-100 px-4 py-3 dark:bg-slate-700">
+              <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: "0ms" }} />
+              <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: "150ms" }} />
+              <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: "300ms" }} />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Composer */}
       <div className="card flex items-end gap-2 p-2.5">
         <textarea
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            if (e.target.value.trim()) pingTyping();
+          }}
           onKeyDown={onKeyDown}
           rows={1}
           maxLength={4000}

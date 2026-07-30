@@ -59,6 +59,7 @@ model User {
   messagesSent       DirectMessage[]     @relation("dmSender")
   messagesReceived   DirectMessage[]     @relation("dmRecipient")
   activeTimer        TaskTimer?
+  pushSubscriptions  PushSubscription[]
 }
 
 model Project {
@@ -250,6 +251,23 @@ model TimeEntry {
   note      String?
   source    String   @default("manual") // manual | timer
   createdAt DateTime @default(now())
+}
+
+/**
+ * A browser's Web Push subscription, so we can deliver desktop/mobile push
+ * notifications even when the app isn't open. One person can be subscribed from
+ * several devices; the endpoint uniquely identifies each browser.
+ */
+model PushSubscription {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 /**

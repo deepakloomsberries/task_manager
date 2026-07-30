@@ -4,18 +4,18 @@ import SidebarNav, { Brand } from "@/components/SidebarNav";
 export default function Sidebar({
   isAdmin,
   isManager,
-  unreadMessages = 0,
+  badges = {},
 }: {
   isAdmin: boolean;
   isManager: boolean;
-  unreadMessages?: number;
+  badges?: Record<string, number>;
 }) {
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200 bg-white md:flex dark:border-slate-700 dark:bg-slate-800">
       <div className="flex h-16 items-center gap-2 border-b border-slate-200 px-5 dark:border-slate-700">
         <Brand />
       </div>
-      <SidebarNav isAdmin={isAdmin} isManager={isManager} unreadMessages={unreadMessages} />
+      <SidebarNav isAdmin={isAdmin} isManager={isManager} badges={badges} />
     </aside>
   );
 }
