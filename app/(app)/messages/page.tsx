@@ -22,7 +22,7 @@ export default async function MessagesPage() {
   ]);
 
   type Convo = {
-    partner: { id: number; name: string; avatarPath: string | null };
+    partner: { id: number; name: string; avatarPath: string | null; lastSeenAt: Date | null };
     lastBody: string;
     lastAt: Date;
     fromMe: boolean;
@@ -75,7 +75,7 @@ export default async function MessagesPage() {
             href={`/messages/${c.partner.id}`}
             className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50"
           >
-            <UserAvatar user={c.partner} size={40} />
+            <UserAvatar user={c.partner} size={40} presence={c.partner.lastSeenAt} />
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate text-sm font-medium">{c.partner.name}</span>

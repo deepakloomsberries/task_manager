@@ -122,3 +122,37 @@ export function initials(name: string) {
     .join("")
     .toUpperCase();
 }
+
+/** How recently a heartbeat must have arrived for someone to count as online. */
+export const ONLINE_WINDOW_MS = 3 * 60 * 1000;
+
+export function isOnline(lastSeenAt: Date | string | null | undefined) {
+  if (!lastSeenAt) return false;
+  return Date.now() - new Date(lastSeenAt).getTime() < ONLINE_WINDOW_MS;
+}
+
+/** Human "last seen" label, e.g. "Active now", "Active 5m ago", "Last seen 12 Aug". */
+export function lastSeenLabel(lastSeenAt: Date | string | null | undefined) {
+  if (!lastSeenAt) return "Offline";
+  const d = new Date(lastSeenAt);
+  const diff = Date.now() - d.getTime();
+  if (diff < ONLINE_WINDOW_MS) return "Active now";
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `Active ${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `Active ${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "Active yesterday";
+  if (days < 7) return `Active ${days}d ago`;
+  return `Last seen ${d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}`;
+}
+
+/** Formats a number of seconds as H:MM:SS (or M:SS under an hour) for timers. */
+export function fmtDuration(totalSeconds: number) {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
+}

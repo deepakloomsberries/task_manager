@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { createTimeEntry, deleteTimeEntry } from "@/lib/actions/time";
+import ActiveTimerBanner from "@/components/ActiveTimerBanner";
 import { fmtDate, toInputDate } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +12,7 @@ export default async function TimesheetPage() {
   const since = new Date();
   since.setDate(since.getDate() - 30);
 
-  const [entries, tasks, projects] = await Promise.all([
+  const [entries, tasks, projects, activeTimer] = await Promise.all([
     db.timeEntry.findMany({
       where: { userId: user.id, date: { gte: since } },
       orderBy: { date: "desc" },
@@ -24,6 +25,10 @@ export default async function TimesheetPage() {
     db.project.findMany({
       where: { status: { in: ["ACTIVE", "ON_HOLD"] } },
       orderBy: { name: "asc" },
+    }),
+    db.taskTimer.findUnique({
+      where: { userId: user.id },
+      include: { task: { select: { id: true, title: true } } },
     }),
   ]);
 
@@ -53,6 +58,14 @@ export default async function TimesheetPage() {
           </div>
         </div>
       </div>
+
+      {activeTimer && (
+        <ActiveTimerBanner
+          taskId={activeTimer.task.id}
+          title={activeTimer.task.title}
+          startedAt={activeTimer.startedAt.toISOString()}
+        />
+      )}
 
       <div className="card p-5">
         <h2 className="mb-3 text-sm font-semibold text-slate-600">Last 7 days</h2>
@@ -165,7 +178,19 @@ export default async function TimesheetPage() {
             {entries.map((e) => (
               <tr key={e.id} className="hover:bg-slate-50">
                 <td className="td">{fmtDate(e.date)}</td>
-                <td className="td font-medium">{e.hours}h</td>
+                <td className="td font-medium">
+                  <span className="inline-flex items-center gap-1.5">
+                    {e.hours}h
+                    {e.source === "timer" && (
+                      <span
+                        title="Tracked with the task timer"
+                        className="badge bg-sky-100 text-sky-700 !px-1.5 !py-0 text-[10px]"
+                      >
+                        ⏱
+                      </span>
+                    )}
+                  </span>
+                </td>
                 <td className="td text-slate-600">{e.task?.title ?? "—"}</td>
                 <td className="td text-slate-600">{e.project?.name ?? "—"}</td>
                 <td className="td text-slate-600">{e.note ?? "—"}</td>

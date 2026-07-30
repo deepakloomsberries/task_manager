@@ -2,12 +2,12 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import {
   createNote,
-  updateNote,
   toggleNotePin,
   deleteNote,
   shareNote,
   unshareNote,
 } from "@/lib/actions/notes";
+import NoteEditor from "@/components/NoteEditor";
 import { NOTE_COLORS, noteCard, fmtDate, initials, avatarColor } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
@@ -110,26 +110,22 @@ function NoteCard({
           )}
         </div>
       </summary>
-      <form action={updateNote} className="space-y-3 px-4 pb-2">
-        <input type="hidden" name="id" value={note.id} />
-        <input name="title" required defaultValue={note.title} className="input !bg-white/70" />
-        <textarea name="body" rows={6} defaultValue={note.body} className="input !bg-white/70" />
-        <ColorPicker selected={note.color} />
-        <div className="flex items-center justify-between pt-1">
-          <button type="submit" className="btn-primary !py-1.5 text-xs">
-            Save
-          </button>
-          {isOwner && (
-            <button
-              type="submit"
-              formAction={deleteNote}
-              className="text-xs text-red-600 hover:underline"
-            >
+      <NoteEditor
+        id={note.id}
+        initialTitle={note.title}
+        initialBody={note.body}
+        initialColor={note.color}
+      />
+      {isOwner && (
+        <div className="flex justify-end px-4 pb-3">
+          <form action={deleteNote}>
+            <input type="hidden" name="id" value={note.id} />
+            <button type="submit" className="text-xs text-red-600 hover:underline">
               Delete
             </button>
-          )}
+          </form>
         </div>
-      </form>
+      )}
 
       {isOwner && (
         <div className="border-t border-white/60 px-4 py-3">

@@ -14,6 +14,7 @@ import { deleteAttachment } from "@/lib/actions/files";
 import PasteAttachment from "@/components/PasteAttachment";
 import ShareTask from "@/components/ShareTask";
 import UserAvatar from "@/components/UserAvatar";
+import TaskTimer from "@/components/TaskTimer";
 import { addTagToTask, removeTagFromTask } from "@/lib/actions/tags";
 import { fmtSize } from "@/lib/storage";
 import { TAG_COLORS, tagBadge } from "@/lib/ui";
@@ -39,7 +40,7 @@ export default async function TaskDetailPage({
   const id = Number(params.id);
   if (!id) notFound();
 
-  const [task, users, projects] = await Promise.all([
+  const [task, users, projects, activeTimer, loggedAgg] = await Promise.all([
     db.task.findUnique({
       where: { id },
       include: {
@@ -60,8 +61,21 @@ export default async function TaskDetailPage({
     }),
     db.user.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
     db.project.findMany({ orderBy: { name: "asc" } }),
+    db.taskTimer.findUnique({
+      where: { userId: user.id },
+      include: { task: { select: { id: true, title: true } } },
+    }),
+    db.timeEntry.aggregate({ _sum: { hours: true }, where: { taskId: id } }),
   ]);
   if (!task || task.deletedAt) notFound();
+
+  const runningStartedAt =
+    activeTimer && activeTimer.taskId === task.id ? activeTimer.startedAt.toISOString() : null;
+  const otherTimer =
+    activeTimer && activeTimer.taskId !== task.id
+      ? { taskId: activeTimer.task.id, title: activeTimer.task.title }
+      : null;
+  const loggedHours = loggedAgg._sum.hours ?? 0;
 
   const status = lookup(TASK_STATUSES, task.status);
   const priority = lookup(TASK_PRIORITIES, task.priority);
@@ -299,6 +313,15 @@ export default async function TaskDetailPage({
           </form>
         )}
       </div>
+
+      {canProgress && (
+        <TaskTimer
+          taskId={task.id}
+          loggedHours={loggedHours}
+          runningStartedAt={runningStartedAt}
+          otherTimer={otherTimer}
+        />
+      )}
 
       {!task.parentId && (
         <div className="card p-6">

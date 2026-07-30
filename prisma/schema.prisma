@@ -37,6 +37,7 @@ model User {
   emailNotifications Boolean     @default(true)
   avatarPath         String?
   jobTitle           String?
+  lastSeenAt         DateTime?
   company            Company     @relation(fields: [companyId], references: [id])
   companyId          Int
   department         Department? @relation(fields: [departmentId], references: [id])
@@ -57,6 +58,7 @@ model User {
   noteShares         NoteShare[]
   messagesSent       DirectMessage[]     @relation("dmSender")
   messagesReceived   DirectMessage[]     @relation("dmRecipient")
+  activeTimer        TaskTimer?
 }
 
 model Project {
@@ -103,6 +105,7 @@ model Task {
   comments    TaskComment[]
   timeEntries TimeEntry[]
   attachments Attachment[]
+  timers      TaskTimer[]
 
   parent     Task?          @relation("subtasks", fields: [parentId], references: [id], onDelete: Cascade)
   parentId   Int?
@@ -245,5 +248,21 @@ model TimeEntry {
   date      DateTime
   hours     Float
   note      String?
+  source    String   @default("manual") // manual | timer
   createdAt DateTime @default(now())
+}
+
+/**
+ * A live, running stopwatch for a task. There is at most one per user (enforced
+ * by the unique userId) — starting a timer stops any other one first, matching
+ * the way tools like Toggl or Asana track "what am I working on right now".
+ */
+model TaskTimer {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int      @unique
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId    Int
+  note      String?
+  startedAt DateTime @default(now())
 }

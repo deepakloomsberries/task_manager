@@ -7,7 +7,7 @@ import {
   resetUserPassword,
   toggleUserActive,
 } from "@/lib/actions/users";
-import { ROLES, lookup, fmtDate } from "@/lib/ui";
+import { ROLES, lookup, fmtDate, isOnline, lastSeenLabel } from "@/lib/ui";
 import PasswordField from "@/components/PasswordField";
 import { PASSWORD_RULES } from "@/lib/password";
 
@@ -235,6 +235,16 @@ export default async function UsersPage({
                         <span className={`badge ${u.active ? "bg-green-100 text-green-700" : "bg-slate-200 text-slate-600"}`}>
                           {u.active ? "Active" : "Deactivated"}
                         </span>
+                        {u.active && (
+                          <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-500">
+                            <span
+                              className={`h-2 w-2 rounded-full ${
+                                isOnline(u.lastSeenAt) ? "bg-green-500" : "bg-slate-300 dark:bg-slate-600"
+                              }`}
+                            />
+                            {lastSeenLabel(u.lastSeenAt)}
+                          </div>
+                        )}
                       </td>
                       <td className="td text-right">
                         <div className="flex justify-end gap-3 text-xs">
