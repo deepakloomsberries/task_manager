@@ -84,11 +84,18 @@ export default function SidebarNav({
         />
       ))}
       {isManager && (
-        <NavLink
-          item={{ href: "/templates", label: "Templates", icon: "❏" }}
-          active={isActive("/templates")}
-          onNavigate={onNavigate}
-        />
+        <>
+          <NavLink
+            item={{ href: "/workload", label: "Workload", icon: "▚" }}
+            active={isActive("/workload")}
+            onNavigate={onNavigate}
+          />
+          <NavLink
+            item={{ href: "/templates", label: "Templates", icon: "❏" }}
+            active={isActive("/templates")}
+            onNavigate={onNavigate}
+          />
+        </>
       )}
       {isAdmin && (
         <>
