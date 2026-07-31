@@ -262,8 +262,21 @@ export default async function TasksPage({
               </select>
             </div>
             <div>
+              <label className="label">Start date</label>
+              <input name="startDate" type="date" className="input" />
+            </div>
+            <div>
               <label className="label">Due date</label>
               <input name="dueDate" type="date" className="input" />
+            </div>
+            <div>
+              <label className="label">Repeat</label>
+              <select name="recurrence" defaultValue="" className="input">
+                <option value="">Does not repeat</option>
+                <option value="DAILY">Daily</option>
+                <option value="WEEKLY">Weekly</option>
+                <option value="MONTHLY">Monthly</option>
+              </select>
             </div>
             <div className="md:col-span-2">
               <button type="submit" className="btn-primary">

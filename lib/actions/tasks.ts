@@ -9,16 +9,29 @@ import { fmtDate, lookup, TASK_STATUSES } from "@/lib/ui";
 
 const STATUSES = ["TODO", "IN_PROGRESS", "REVIEW", "DONE"];
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"];
+const RECURRENCES = ["DAILY", "WEEKLY", "MONTHLY"];
 
 function parseTaskForm(formData: FormData) {
+  const recurrenceRaw = String(formData.get("recurrence") ?? "");
   return {
     title: String(formData.get("title") ?? "").trim(),
     description: String(formData.get("description") ?? "").trim() || null,
     priority: String(formData.get("priority") ?? "MEDIUM"),
     projectId: formData.get("projectId") ? Number(formData.get("projectId")) : null,
     assigneeId: formData.get("assigneeId") ? Number(formData.get("assigneeId")) : null,
+    startDate: formData.get("startDate") ? new Date(String(formData.get("startDate"))) : null,
     dueDate: formData.get("dueDate") ? new Date(String(formData.get("dueDate"))) : null,
+    recurrence: RECURRENCES.includes(recurrenceRaw) ? recurrenceRaw : null,
   };
+}
+
+/** Advances a date by one recurrence interval. */
+function advanceDate(date: Date, recurrence: string) {
+  const d = new Date(date);
+  if (recurrence === "DAILY") d.setDate(d.getDate() + 1);
+  else if (recurrence === "WEEKLY") d.setDate(d.getDate() + 7);
+  else if (recurrence === "MONTHLY") d.setMonth(d.getMonth() + 1);
+  return d;
 }
 
 /**
@@ -206,6 +219,31 @@ async function changeStatus(
         `"${d.task.title}" is unblocked and ready to start`,
         `/tasks/${d.task.id}`
       );
+    }
+
+    // Recurring tasks spawn their next occurrence when completed.
+    if (task.recurrence && task.dueDate && !task.parentId) {
+      const next = await db.task.create({
+        data: {
+          title: task.title,
+          description: task.description,
+          priority: task.priority,
+          projectId: task.projectId,
+          assigneeId: task.assigneeId,
+          createdById: task.createdById,
+          startDate: task.startDate ? advanceDate(task.startDate, task.recurrence) : null,
+          dueDate: advanceDate(task.dueDate, task.recurrence),
+          recurrence: task.recurrence,
+        },
+      });
+      await logActivity(next.id, user.id, "created");
+      if (next.assigneeId && next.assigneeId !== user.id) {
+        await pushNotification(
+          next.assigneeId,
+          `Recurring task ready: ${next.title}`,
+          `/tasks/${next.id}`
+        );
+      }
     }
   }
   return "ok";

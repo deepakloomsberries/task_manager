@@ -10,6 +10,7 @@ type TLTask = {
   title: string;
   status: string;
   createdAt: Date | string;
+  startDate?: Date | string | null;
   dueDate: Date | string | null;
 };
 
@@ -46,7 +47,7 @@ export default function ProjectTimeline({
   const startCandidates = [new Date(projectStart).getTime()];
   const endCandidates: number[] = [Date.now()];
   for (const t of dated) {
-    startCandidates.push(new Date(t.createdAt).getTime());
+    startCandidates.push(new Date(t.startDate ?? t.createdAt).getTime());
     endCandidates.push(new Date(t.dueDate as Date).getTime());
   }
   const min = (dated.length ? Math.min(...startCandidates) : Date.now()) - DAY;
@@ -121,10 +122,10 @@ export default function ProjectTimeline({
 
         <div className="space-y-1.5">
           {dated.map((t) => {
-            const created = new Date(t.createdAt).getTime();
+            const start = new Date(t.startDate ?? t.createdAt).getTime();
             const due = new Date(t.dueDate as Date).getTime();
-            const barStart = Math.min(created, due);
-            const barEnd = Math.max(created, due);
+            const barStart = Math.min(start, due);
+            const barEnd = Math.max(start, due);
             const left = pos(barStart);
             const width = Math.max(2, pos(barEnd) - left);
             const st = lookup(TASK_STATUSES, t.status);
@@ -151,7 +152,7 @@ export default function ProjectTimeline({
                     />
                   )}
                   <div
-                    onPointerDown={(e) => onBarPointerDown(e, t.id, created, due)}
+                    onPointerDown={(e) => onBarPointerDown(e, t.id, start, due)}
                     className={`absolute top-1 h-4 rounded ${BAR[t.status] ?? "bg-slate-400"} ${
                       blocked ? "ring-1 ring-red-500 ring-offset-1" : ""
                     } ${canReschedule ? "cursor-grab active:cursor-grabbing" : ""} ${

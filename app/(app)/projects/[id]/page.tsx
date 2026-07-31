@@ -285,6 +285,7 @@ export default async function ProjectDetailPage({
             title: t.title,
             status: t.status,
             createdAt: t.createdAt,
+            startDate: t.startDate,
             dueDate: t.dueDate,
           }))}
           blockersByTask={blockersByTask}

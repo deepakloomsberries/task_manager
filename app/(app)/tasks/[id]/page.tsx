@@ -181,6 +181,11 @@ export default async function TaskDetailPage({
                       ⛔ Blocked
                     </span>
                   )}
+                  {task.recurrence && (
+                    <span className="badge bg-indigo-100 text-indigo-700" title="Recreates when completed">
+                      🔁 {task.recurrence.charAt(0) + task.recurrence.slice(1).toLowerCase()}
+                    </span>
+                  )}
                   {task.tags.map(({ tag }) => (
                     <span key={tag.id} className={`badge ${tagBadge(tag.color)}`}>
                       {tag.name}
@@ -271,6 +276,10 @@ export default async function TaskDetailPage({
               <div>
                 <dt className="text-xs text-slate-500">Assignee</dt>
                 <dd className="mt-0.5 font-medium">{task.assignee?.name ?? "Unassigned"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-500">Start date</dt>
+                <dd className="mt-0.5 font-medium">{fmtDate(task.startDate)}</dd>
               </div>
               <div>
                 <dt className="text-xs text-slate-500">Due date</dt>
@@ -385,8 +394,21 @@ export default async function TaskDetailPage({
               </select>
             </div>
             <div>
+              <label className="label">Start date</label>
+              <input name="startDate" type="date" defaultValue={toInputDate(task.startDate)} className="input" />
+            </div>
+            <div>
               <label className="label">Due date</label>
               <input name="dueDate" type="date" defaultValue={toInputDate(task.dueDate)} className="input" />
+            </div>
+            <div>
+              <label className="label">Repeat</label>
+              <select name="recurrence" defaultValue={task.recurrence ?? ""} className="input">
+                <option value="">Does not repeat</option>
+                <option value="DAILY">Daily</option>
+                <option value="WEEKLY">Weekly</option>
+                <option value="MONTHLY">Monthly</option>
+              </select>
             </div>
             <div className="flex gap-2 md:col-span-2">
               <button type="submit" className="btn-primary">
