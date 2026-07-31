@@ -126,7 +126,14 @@ export default async function UsersPage({
               <label className="label">Job title</label>
               <input name="jobTitle" className="input" placeholder="e.g. Sales Executive" />
             </div>
-            <div className="flex items-end md:col-span-2">
+            <label className="flex items-center gap-2 md:col-span-3">
+              <input type="checkbox" name="requiresApproval" className="h-4 w-4 rounded border-slate-300" />
+              <span className="text-sm text-slate-600">
+                Requires completion approval — this person can only send tasks to <b>Review</b>; the
+                task owner marks them Done.
+              </span>
+            </label>
+            <div className="flex items-end md:col-span-3">
               <button type="submit" className="btn-primary">
                 Create user
               </button>
@@ -198,6 +205,17 @@ export default async function UsersPage({
                           <label className="label">Job title</label>
                           <input name="jobTitle" defaultValue={u.jobTitle ?? ""} className="input" />
                         </div>
+                        <label className="col-span-full flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            name="requiresApproval"
+                            defaultChecked={u.requiresApproval}
+                            className="h-4 w-4 rounded border-slate-300"
+                          />
+                          <span className="text-xs text-slate-600">
+                            Requires completion approval (can only send tasks to Review)
+                          </span>
+                        </label>
                         <div className="flex gap-2">
                           <button type="submit" className="btn-primary !py-2 text-xs">
                             Save
@@ -221,7 +239,17 @@ export default async function UsersPage({
                   ) : (
                     <>
                       <td className="td font-medium">
-                        {u.name}
+                        <span className="flex items-center gap-1.5">
+                          {u.name}
+                          {u.requiresApproval && (
+                            <span
+                              title="Requires completion approval"
+                              className="badge bg-purple-100 text-purple-700 !px-1.5 !py-0 text-[10px]"
+                            >
+                              approval
+                            </span>
+                          )}
+                        </span>
                         {u.jobTitle && <div className="text-xs font-normal text-slate-500">{u.jobTitle}</div>}
                       </td>
                       <td className="td text-slate-600">{u.email}</td>

@@ -148,17 +148,23 @@ async function hasOpenBlockers(taskId: number) {
 }
 
 async function changeStatus(
-  user: { id: number; name: string; role: string },
+  user: { id: number; name: string; role: string; requiresApproval?: boolean },
   taskId: number,
   status: string
-): Promise<"ok" | "noop" | "blocked"> {
+): Promise<"ok" | "noop" | "blocked" | "needs-approval"> {
   if (!STATUSES.includes(status)) return "noop";
   const task = await db.task.findUnique({ where: { id: taskId } });
   if (!task || task.deletedAt || !canChangeStatus(user, task)) return "noop";
   if (task.status === status) return "noop";
 
-  // Can't complete a task while something it depends on is still open.
-  if (status === "DONE" && (await hasOpenBlockers(taskId))) return "blocked";
+  if (status === "DONE") {
+    // Approval-required users (e.g. designers) can't complete their own work —
+    // they send it to Review and the task owner/manager approves.
+    const isOwnerOrManager = isManagerOrAdmin(user.role) || task.createdById === user.id;
+    if (!isOwnerOrManager && user.requiresApproval) return "needs-approval";
+    // Can't complete a task while something it depends on is still open.
+    if (await hasOpenBlockers(taskId)) return "blocked";
+  }
 
   await db.task.update({
     where: { id: taskId },
@@ -168,13 +174,39 @@ async function changeStatus(
   const to = lookup(TASK_STATUSES, status).label;
   await logActivity(taskId, user.id, "status", `${from} → ${to}`);
 
-  // Tell the task creator when someone else completes their task.
-  if (status === "DONE" && task.createdById !== user.id) {
+  // Sent for review → ping the task owner so they can approve completion.
+  if (status === "REVIEW" && task.createdById !== user.id) {
     await pushNotification(
       task.createdById,
-      `${user.name} completed: ${task.title}`,
+      `${user.name} sent "${task.title}" for your review`,
       `/tasks/${taskId}`
     );
+  }
+
+  if (status === "DONE") {
+    // Tell the task creator when someone else completes their task.
+    if (task.createdById !== user.id) {
+      await pushNotification(
+        task.createdById,
+        `${user.name} completed: ${task.title}`,
+        `/tasks/${taskId}`
+      );
+    }
+    // Notify assignees of tasks this one was blocking that are now unblocked.
+    const dependents = await db.taskDependency.findMany({
+      where: { blockerId: taskId },
+      include: { task: { select: { id: true, title: true, assigneeId: true, deletedAt: true } } },
+    });
+    for (const d of dependents) {
+      if (!d.task || d.task.deletedAt || !d.task.assigneeId) continue;
+      if (d.task.assigneeId === user.id) continue;
+      if (await hasOpenBlockers(d.task.id)) continue; // still blocked by something else
+      await pushNotification(
+        d.task.assigneeId,
+        `"${d.task.title}" is unblocked and ready to start`,
+        `/tasks/${d.task.id}`
+      );
+    }
   }
   return "ok";
 }
@@ -187,8 +219,8 @@ export async function setTaskStatus(formData: FormData) {
 
   const result = await changeStatus(user, id, status);
   await revalidateTaskViews(id);
-  if (result === "blocked") {
-    redirect(`${back}${back.includes("?") ? "&" : "?"}error=blocked`);
+  if (result === "blocked" || result === "needs-approval") {
+    redirect(`${back}${back.includes("?") ? "&" : "?"}error=${result}`);
   }
   redirect(back);
 }
@@ -362,4 +394,23 @@ export async function removeTaskDependency(formData: FormData) {
   await revalidateTaskViews(taskId);
   revalidatePath(`/tasks/${blockerId}`);
   redirect(`/tasks/${taskId}`);
+}
+
+/** Moves a task's due date (used by the project timeline's drag-to-reschedule). */
+export async function rescheduleTask(taskId: number, dueISO: string | null) {
+  const user = await requireUser();
+  if (!taskId) return;
+  const task = await db.task.findUnique({ where: { id: taskId } });
+  if (!task || task.deletedAt || !canChangeStatus(user, task)) return;
+
+  const due = dueISO ? new Date(dueISO) : null;
+  await db.task.update({ where: { id: taskId }, data: { dueDate: due } });
+  await logActivity(
+    taskId,
+    user.id,
+    "due",
+    due ? `due date set to ${fmtDate(due)}` : "due date cleared"
+  );
+  await revalidateTaskViews(taskId);
+  if (task.projectId) revalidatePath(`/projects/${task.projectId}`);
 }

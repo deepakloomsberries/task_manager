@@ -15,6 +15,7 @@ export type BoardTask = {
   projectName: string | null;
   dueLabel: string | null;
   overdue: boolean;
+  blocked?: boolean;
   canMove: boolean;
   tags: { name: string; badge: string }[];
 };
@@ -82,7 +83,17 @@ export default function Board({
                     t.canMove ? "cursor-grab active:cursor-grabbing" : "cursor-default"
                   }`}
                 >
-                  <div className="font-mono text-[10px] text-slate-400">TM-{t.id}</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-[10px] text-slate-400">TM-{t.id}</span>
+                    {t.blocked && (
+                      <span
+                        title="Blocked by an unfinished task"
+                        className="rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-semibold text-red-700"
+                      >
+                        ⛔ Blocked
+                      </span>
+                    )}
+                  </div>
                   <Link
                     href={`/tasks/${t.id}`}
                     className="block text-sm font-medium text-slate-800 hover:text-sky-700"

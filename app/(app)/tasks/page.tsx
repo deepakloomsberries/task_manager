@@ -32,6 +32,7 @@ export default async function TasksPage({
     open?: string;
     overdue?: string;
     due?: string;
+    blocked?: string;
   };
 }) {
   const user = await requireUser();
@@ -50,6 +51,10 @@ export default async function TasksPage({
   if (searchParams.due === "week") {
     where.status = { not: "DONE" };
     where.dueDate = { gte: new Date(), lt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) };
+  }
+  // Only tasks with at least one unfinished blocker.
+  if (searchParams.blocked) {
+    where.blockedBy = { some: { blocker: { status: { not: "DONE" }, deletedAt: null } } };
   }
   if (searchParams.q) {
     const q = searchParams.q.trim();
@@ -70,6 +75,7 @@ export default async function TasksPage({
         parent: true,
         tags: { include: { tag: true } },
         subtasks: { where: { deletedAt: null }, select: { id: true, status: true } },
+        blockedBy: { include: { blocker: { select: { status: true } } } },
       },
     }),
     db.user.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
@@ -111,6 +117,7 @@ export default async function TasksPage({
       projectName: t.project?.name ?? null,
       dueLabel: t.dueDate ? fmtDate(t.dueDate) : null,
       overdue: isOverdue(t),
+      blocked: t.blockedBy.some((d) => d.blocker.status !== "DONE"),
       canMove: t.assigneeId === user.id || canManage,
       tags: t.tags.map(({ tag }) => ({ name: tag.name, badge: tagBadge(tag.color) })),
     };
@@ -163,6 +170,16 @@ export default async function TasksPage({
           }`}
         >
           Assigned to me
+        </Link>
+        <Link
+          href={`/tasks?blocked=1&view=${viewParam}`}
+          className={`rounded-full px-3 py-1 text-xs font-medium ${
+            searchParams.blocked
+              ? "bg-red-600 text-white"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+          }`}
+        >
+          ⛔ Blocked
         </Link>
       </div>
 
@@ -342,6 +359,14 @@ export default async function TasksPage({
                       </Link>
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="font-mono text-[10px] text-slate-400">TM-{t.id}</span>
+                        {t.blockedBy.some((d) => d.blocker.status !== "DONE") && (
+                          <span
+                            title="Blocked by an unfinished task"
+                            className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700"
+                          >
+                            ⛔ Blocked
+                          </span>
+                        )}
                         {t.parent && (
                           <span className="text-xs text-slate-400">↳ {t.parent.title}</span>
                         )}

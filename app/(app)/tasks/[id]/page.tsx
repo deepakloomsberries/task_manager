@@ -117,6 +117,9 @@ export default async function TaskDetailPage({
   const canEdit = isManagerOrAdmin(user.role) || task.createdById === user.id;
   const canProgress = canEdit || task.assigneeId === user.id;
   const canDelete = canEdit;
+  // Approval-required users (e.g. designers) can move up to Review only; the
+  // task owner/manager approves completion (Review → Done).
+  const canCompleteDone = canEdit || !user.requiresApproval;
   const editing = searchParams.edit === "1" && canEdit;
   const taskCode = `TM-${task.id}`;
 
@@ -135,7 +138,9 @@ export default async function TaskDetailPage({
                 ? { text: "A task can't block itself.", error: true }
                 : searchParams.error === "blocked"
                   ? { text: "This task can't be completed yet — finish the tasks blocking it first.", error: true }
-                  : null;
+                  : searchParams.error === "needs-approval"
+                    ? { text: "Send this task to Review — its owner will approve completion.", error: true }
+                    : null;
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
@@ -284,23 +289,45 @@ export default async function TaskDetailPage({
                 <div className="mb-2 text-xs font-medium text-slate-500">Move to</div>
                 <div className="flex flex-wrap gap-2">
                   {TASK_STATUSES.filter((s) => s.value !== task.status).map((s) => {
-                    const blockDone = s.value === "DONE" && isBlocked;
-                    return blockDone ? (
-                      <button
-                        key={s.value}
-                        type="button"
-                        disabled
-                        title={`Blocked by ${openBlockers.length} unfinished task(s)`}
-                        className="btn-secondary !py-1.5 text-xs cursor-not-allowed opacity-50"
-                      >
-                        🔒 {s.label}
-                      </button>
-                    ) : (
+                    const isDone = s.value === "DONE";
+                    if (isDone && !canCompleteDone) {
+                      return (
+                        <button
+                          key={s.value}
+                          type="button"
+                          disabled
+                          title="Only the task owner can mark this Done — send it to Review for approval."
+                          className="btn-secondary !py-1.5 text-xs cursor-not-allowed opacity-50"
+                        >
+                          🔒 Done — owner approves
+                        </button>
+                      );
+                    }
+                    if (isDone && isBlocked) {
+                      return (
+                        <button
+                          key={s.value}
+                          type="button"
+                          disabled
+                          title={`Blocked by ${openBlockers.length} unfinished task(s)`}
+                          className="btn-secondary !py-1.5 text-xs cursor-not-allowed opacity-50"
+                        >
+                          🔒 Done
+                        </button>
+                      );
+                    }
+                    // When an owner is looking at a task in Review, frame Done as an approval.
+                    const label =
+                      isDone && task.status === "REVIEW" && canEdit ? "✓ Approve (Done)" : s.label;
+                    return (
                       <form key={s.value} action={setTaskStatus}>
                         <input type="hidden" name="id" value={task.id} />
                         <input type="hidden" name="status" value={s.value} />
-                        <button type="submit" className="btn-secondary !py-1.5 text-xs">
-                          {s.label}
+                        <button
+                          type="submit"
+                          className={`!py-1.5 text-xs ${isDone && task.status === "REVIEW" && canEdit ? "btn-primary" : "btn-secondary"}`}
+                        >
+                          {label}
                         </button>
                       </form>
                     );

@@ -38,6 +38,7 @@ model User {
   avatarPath         String?
   jobTitle           String?
   lastSeenAt         DateTime?
+  requiresApproval   Boolean     @default(false) // can't self-complete; owner approves from Review
   company            Company     @relation(fields: [companyId], references: [id])
   companyId          Int
   department         Department? @relation(fields: [departmentId], references: [id])

@@ -289,6 +289,7 @@ export default async function ProjectDetailPage({
           }))}
           blockersByTask={blockersByTask}
           projectStart={project.createdAt}
+          canReschedule={canManage}
         />
       </div>
 
