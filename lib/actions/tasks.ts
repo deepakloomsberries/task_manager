@@ -414,3 +414,67 @@ export async function rescheduleTask(taskId: number, dueISO: string | null) {
   await revalidateTaskViews(taskId);
   if (task.projectId) revalidatePath(`/projects/${task.projectId}`);
 }
+
+// --- Bulk actions from the task list ---------------------------------------
+
+/**
+ * Applies one operation to many selected tasks at once. Each task is checked
+ * individually against the caller's permissions, so a bulk action only touches
+ * the tasks they're actually allowed to change.
+ */
+export async function bulkTaskAction(formData: FormData) {
+  const user = await requireUser();
+  const op = String(formData.get("op") ?? "");
+  const value = String(formData.get("value") ?? "").trim();
+  const back = String(formData.get("back") ?? "/tasks");
+  const ids = String(formData.get("ids") ?? "")
+    .split(",")
+    .map((s) => Number(s))
+    .filter((n) => Number.isFinite(n) && n > 0);
+
+  for (const id of ids) {
+    const task = await db.task.findUnique({ where: { id } });
+    if (!task || task.deletedAt) continue;
+
+    if (op === "status") {
+      if (STATUSES.includes(value) && canChangeStatus(user, task)) {
+        await changeStatus(user, id, value);
+      }
+      continue;
+    }
+
+    // The remaining operations edit task details — owner/manager only.
+    if (!canEditTask(user, task)) continue;
+
+    if (op === "assignee") {
+      const assigneeId = value ? Number(value) : null;
+      await db.task.update({ where: { id }, data: { assigneeId } });
+      if (assigneeId && assigneeId !== task.assigneeId) {
+        const assignee = await db.user.findUnique({ where: { id: assigneeId } });
+        if (assignee) {
+          await logActivity(id, user.id, "assignee", `assigned to ${assignee.name}`);
+          await notifyAssignment({
+            assignee,
+            task: { id: task.id, title: task.title, dueDate: task.dueDate, priority: task.priority },
+            actor: user,
+          });
+        }
+      }
+    } else if (op === "due") {
+      const dueDate = value ? new Date(value) : null;
+      await db.task.update({ where: { id }, data: { dueDate } });
+      await logActivity(id, user.id, "due", dueDate ? `due date set to ${fmtDate(dueDate)}` : "due date cleared");
+    } else if (op === "project") {
+      const projectId = value ? Number(value) : null;
+      await db.task.update({ where: { id }, data: { projectId } });
+    } else if (op === "delete") {
+      await db.task.updateMany({
+        where: { OR: [{ id }, { parentId: id }] },
+        data: { deletedAt: new Date() },
+      });
+    }
+  }
+
+  await revalidateTaskViews();
+  redirect(back);
+}
