@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { startTaskTimer, stopTaskTimer, cancelTaskTimer } from "@/lib/actions/time";
-import { fmtDuration } from "@/lib/ui";
+import { fmtDuration, fmtHours } from "@/lib/ui";
 
 /** Live seconds elapsed since an ISO start time, ticking every second. */
 function useElapsed(startedAt: string | null) {
@@ -50,7 +50,7 @@ export default function TaskTimer({
             <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Time tracking</div>
             <div className="flex items-baseline gap-2">
               <span className={`font-mono text-2xl font-bold tabular-nums ${running ? "text-sky-600 dark:text-sky-400" : "text-slate-800 dark:text-slate-100"}`}>
-                {running ? fmtDuration(elapsed) : `${loggedHours.toFixed(2)}h`}
+                {running ? fmtDuration(elapsed) : fmtHours(loggedHours)}
               </span>
               {running ? (
                 <span className="flex items-center gap-1 text-xs font-medium text-sky-600 dark:text-sky-400">

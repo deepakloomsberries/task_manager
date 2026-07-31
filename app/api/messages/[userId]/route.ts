@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { isTyping } from "@/lib/typing";
 
 /**
  * Polling endpoint that powers the live chat thread. Returns any messages newer
@@ -55,5 +56,6 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
     })),
     lastReadMyId: lastRead?.id ?? 0,
     partnerLastSeenAt: partner?.lastSeenAt ? partner.lastSeenAt.toISOString() : null,
+    partnerTyping: isTyping(otherId, meId),
   });
 }

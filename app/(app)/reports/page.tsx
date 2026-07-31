@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
-import { TASK_STATUSES } from "@/lib/ui";
+import { TASK_STATUSES, fmtHours } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +62,30 @@ export default async function ReportsPage() {
     };
   });
 
+  // Tasks-by-status bar chart data.
+  const maxStatus = Math.max(...statusCounts.map((s) => s.count), 1);
+  const STATUS_BAR: Record<string, string> = {
+    TODO: "bg-slate-400",
+    IN_PROGRESS: "bg-blue-500",
+    REVIEW: "bg-amber-500",
+    DONE: "bg-green-500",
+  };
+
+  // Time trend — hours logged per day over the last 14 days (team-wide for
+  // managers, otherwise just the current user's own time).
+  const trendEntries = teamWide ? timeEntries : timeEntries.filter((e) => e.userId === user.id);
+  const trend = Array.from({ length: 14 }, (_, i) => {
+    const day = new Date();
+    day.setDate(day.getDate() - (13 - i));
+    day.setHours(0, 0, 0, 0);
+    const next = new Date(day.getTime() + 86400000);
+    const hours = trendEntries
+      .filter((e) => new Date(e.date) >= day && new Date(e.date) < next)
+      .reduce((s, e) => s + e.hours, 0);
+    return { day, hours, isToday: i === 13 };
+  });
+  const trendPeak = Math.max(...trend.map((d) => d.hours), 1 / 6);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -101,6 +125,51 @@ export default async function ReportsPage() {
         </div>
       </div>
 
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="card p-5">
+          <h2 className="mb-4 font-semibold">Tasks by status</h2>
+          <div className="space-y-3">
+            {statusCounts.map((s) => (
+              <div key={s.value} className="flex items-center gap-3">
+                <span className="w-24 shrink-0 text-xs text-slate-500">{s.label}</span>
+                <div className="h-4 flex-1 overflow-hidden rounded bg-slate-100">
+                  <div
+                    className={`h-full rounded ${STATUS_BAR[s.value] ?? "bg-slate-400"}`}
+                    style={{ width: `${Math.round((s.count / maxStatus) * 100)}%` }}
+                  />
+                </div>
+                <span className="w-8 shrink-0 text-right text-sm font-medium">{s.count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card p-5">
+          <div className="mb-4 flex items-baseline justify-between">
+            <h2 className="font-semibold">Time logged</h2>
+            <span className="text-xs text-slate-400">Last 14 days{teamWide ? " · team" : ""}</span>
+          </div>
+          <div className="flex h-32 items-end gap-1.5">
+            {trend.map((d, i) => {
+              const pct = d.hours > 0 ? Math.max(6, Math.round((d.hours / trendPeak) * 100)) : 0;
+              return (
+                <div key={i} className="flex flex-1 flex-col items-center gap-1" title={fmtHours(d.hours)}>
+                  <div className="flex h-24 w-full items-end rounded bg-slate-100">
+                    <div
+                      className={`w-full rounded ${d.isToday ? "bg-sky-500" : "bg-sky-300"}`}
+                      style={{ height: `${pct}%` }}
+                    />
+                  </div>
+                  <span className={`text-[9px] ${d.isToday ? "font-semibold text-sky-600" : "text-slate-400"}`}>
+                    {d.day.getDate()}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
       <div className="card overflow-x-auto">
         <div className="border-b border-slate-200 px-5 py-4">
           <h2 className="font-semibold">{teamWide ? "By employee" : "Your summary"}</h2>
@@ -128,7 +197,7 @@ export default async function ReportsPage() {
                 <td className={`td ${r.overdue ? "font-semibold text-red-600" : ""}`}>
                   {r.overdue}
                 </td>
-                <td className="td">{r.hours.toFixed(1)}h</td>
+                <td className="td">{fmtHours(r.hours)}</td>
               </tr>
             ))}
           </tbody>
@@ -175,7 +244,7 @@ export default async function ReportsPage() {
                     <span className="text-xs text-slate-500">{r.pct}%</span>
                   </div>
                 </td>
-                <td className="td">{r.hours.toFixed(1)}h</td>
+                <td className="td">{fmtHours(r.hours)}</td>
               </tr>
             ))}
           </tbody>

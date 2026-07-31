@@ -4,22 +4,53 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { parseHours } from "@/lib/ui";
 
 export async function createTimeEntry(formData: FormData) {
   const user = await requireUser();
   const date = String(formData.get("date") ?? "");
-  const hours = Number(formData.get("hours"));
+  const hours = parseHours(String(formData.get("hours") ?? ""));
   const taskId = formData.get("taskId") ? Number(formData.get("taskId")) : null;
   const projectId = formData.get("projectId") ? Number(formData.get("projectId")) : null;
   const note = String(formData.get("note") ?? "").trim() || null;
 
-  if (!date || !hours || hours <= 0 || hours > 24) redirect("/timesheet?error=invalid");
+  if (!date || hours === null || hours <= 0 || hours > 24) redirect("/timesheet?error=invalid");
 
   await db.timeEntry.create({
     data: { userId: user.id, date: new Date(date), hours, taskId, projectId, note },
   });
   revalidatePath("/timesheet");
-  redirect("/timesheet");
+  redirect(backFrom(formData));
+}
+
+/** Where to return after a timesheet action — preserves the active range view. */
+function backFrom(formData: FormData) {
+  const back = String(formData.get("back") ?? "").trim();
+  return back.startsWith("/timesheet") ? back : "/timesheet";
+}
+
+export async function updateTimeEntry(formData: FormData) {
+  const user = await requireUser();
+  const id = Number(formData.get("id"));
+  const date = String(formData.get("date") ?? "");
+  const hours = parseHours(String(formData.get("hours") ?? ""));
+  const taskId = formData.get("taskId") ? Number(formData.get("taskId")) : null;
+  const projectId = formData.get("projectId") ? Number(formData.get("projectId")) : null;
+  const note = String(formData.get("note") ?? "").trim() || null;
+
+  const back = backFrom(formData);
+  if (!id || !date || hours === null || hours <= 0 || hours > 24) {
+    redirect(`${back}${back.includes("?") ? "&" : "?"}error=invalid`);
+  }
+
+  // Scope the update to the caller's own entries so nobody can edit another
+  // person's timesheet.
+  await db.timeEntry.updateMany({
+    where: { id, userId: user.id },
+    data: { date: new Date(date), hours, taskId, projectId, note },
+  });
+  revalidatePath("/timesheet");
+  redirect(back);
 }
 
 export async function deleteTimeEntry(formData: FormData) {
@@ -27,7 +58,7 @@ export async function deleteTimeEntry(formData: FormData) {
   const id = Number(formData.get("id"));
   await db.timeEntry.deleteMany({ where: { id, userId: user.id } });
   revalidatePath("/timesheet");
-  redirect("/timesheet");
+  redirect(backFrom(formData));
 }
 
 /** Converts a running timer into a logged time entry. Returns the hours logged. */

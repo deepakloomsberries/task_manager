@@ -1,9 +1,16 @@
 import { db } from "./db";
 import { notifyTaskAssigned, notifyTaskComment, notifyTaskReminder } from "./mail";
+import { sendPushToUser } from "./push";
 
-/** Creates an in-app notification. */
+/** Creates an in-app notification and fires a matching Web Push (if enabled). */
 export async function pushNotification(userId: number, message: string, link?: string) {
   await db.notification.create({ data: { userId, message, link } });
+  // Fire-and-forget browser push — a no-op unless VAPID keys are configured.
+  void sendPushToUser(userId, {
+    title: "Looms & Berries Tasks",
+    body: message,
+    url: link ?? "/notifications",
+  }).catch(() => {});
 }
 
 /**

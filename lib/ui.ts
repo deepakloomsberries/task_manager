@@ -147,6 +147,52 @@ export function lastSeenLabel(lastSeenAt: Date | string | null | undefined) {
   return `Last seen ${d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}`;
 }
 
+/**
+ * Formats a decimal hours value as human "Xh Ym" (e.g. 0.766… → "46m",
+ * 2.5 → "2h 30m"). Used for logged time so we never surface raw floats.
+ */
+export function fmtHours(hours: number | null | undefined) {
+  const totalMinutes = Math.round((hours ?? 0) * 60);
+  if (totalMinutes <= 0) return "0m";
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+}
+
+/**
+ * Parses a flexible time-of-work string into decimal hours, so people can log
+ * time the way they think about it. Accepts:
+ *   "2.5" / "2"        → 2.5 / 2 hours
+ *   "0:45" / "2:30"    → H:MM
+ *   "45m" / "90 min"   → minutes
+ *   "1h" / "1h30m"     → hours (+ optional minutes)
+ *   "1h 30m"           → hours + minutes
+ * Returns null when the input can't be understood.
+ */
+export function parseHours(raw: string | null | undefined): number | null {
+  const s = String(raw ?? "").trim().toLowerCase();
+  if (!s) return null;
+
+  // H:MM clock format, e.g. 0:45, 2:30
+  const clock = s.match(/^(\d+):([0-5]?\d)$/);
+  if (clock) return Number(clock[1]) + Number(clock[2]) / 60;
+
+  // "1h", "1h30m", "1h 30m", "45m", "30 min", "1.5h"
+  const hm = s.match(/^(?:(\d+(?:\.\d+)?)\s*h)?\s*(?:(\d+(?:\.\d+)?)\s*m(?:in)?)?$/);
+  if (hm && (hm[1] || hm[2])) {
+    const h = hm[1] ? Number(hm[1]) : 0;
+    const m = hm[2] ? Number(hm[2]) : 0;
+    return h + m / 60;
+  }
+
+  // Plain decimal hours, e.g. 2.5
+  if (/^\d+(\.\d+)?$/.test(s)) return Number(s);
+
+  return null;
+}
+
 /** Formats a number of seconds as H:MM:SS (or M:SS under an hour) for timers. */
 export function fmtDuration(totalSeconds: number) {
   const s = Math.max(0, Math.floor(totalSeconds));

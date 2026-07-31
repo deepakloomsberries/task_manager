@@ -29,6 +29,9 @@ export default async function TasksPage({
     q?: string;
     new?: string;
     view?: string;
+    open?: string;
+    overdue?: string;
+    due?: string;
   };
 }) {
   const user = await requireUser();
@@ -38,6 +41,16 @@ export default async function TasksPage({
   if (searchParams.assignee === "me") where.assigneeId = user.id;
   else if (searchParams.assignee) where.assigneeId = Number(searchParams.assignee);
   if (searchParams.project) where.projectId = Number(searchParams.project);
+  // Dashboard deep-links: open (not done), overdue, and due-this-week.
+  if (searchParams.open) where.status = { not: "DONE" };
+  if (searchParams.overdue) {
+    where.status = { not: "DONE" };
+    where.dueDate = { lt: new Date() };
+  }
+  if (searchParams.due === "week") {
+    where.status = { not: "DONE" };
+    where.dueDate = { gte: new Date(), lt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) };
+  }
   if (searchParams.q) {
     const q = searchParams.q.trim();
     // Support searching by task ID, e.g. "TM-42", "#42" or plain "42".
