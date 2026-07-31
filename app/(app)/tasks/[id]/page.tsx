@@ -133,7 +133,9 @@ export default async function TaskDetailPage({
               ? { text: "That task already depends on this one — adding it would create a loop.", error: true }
               : searchParams.error === "self-block"
                 ? { text: "A task can't block itself.", error: true }
-                : null;
+                : searchParams.error === "blocked"
+                  ? { text: "This task can't be completed yet — finish the tasks blocking it first.", error: true }
+                  : null;
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
@@ -281,15 +283,28 @@ export default async function TaskDetailPage({
               <div className="mt-6 border-t border-slate-100 pt-4">
                 <div className="mb-2 text-xs font-medium text-slate-500">Move to</div>
                 <div className="flex flex-wrap gap-2">
-                  {TASK_STATUSES.filter((s) => s.value !== task.status).map((s) => (
-                    <form key={s.value} action={setTaskStatus}>
-                      <input type="hidden" name="id" value={task.id} />
-                      <input type="hidden" name="status" value={s.value} />
-                      <button type="submit" className="btn-secondary !py-1.5 text-xs">
-                        {s.label}
+                  {TASK_STATUSES.filter((s) => s.value !== task.status).map((s) => {
+                    const blockDone = s.value === "DONE" && isBlocked;
+                    return blockDone ? (
+                      <button
+                        key={s.value}
+                        type="button"
+                        disabled
+                        title={`Blocked by ${openBlockers.length} unfinished task(s)`}
+                        className="btn-secondary !py-1.5 text-xs cursor-not-allowed opacity-50"
+                      >
+                        🔒 {s.label}
                       </button>
-                    </form>
-                  ))}
+                    ) : (
+                      <form key={s.value} action={setTaskStatus}>
+                        <input type="hidden" name="id" value={task.id} />
+                        <input type="hidden" name="status" value={s.value} />
+                        <button type="submit" className="btn-secondary !py-1.5 text-xs">
+                          {s.label}
+                        </button>
+                      </form>
+                    );
+                  })}
                 </div>
               </div>
             )}

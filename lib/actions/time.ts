@@ -239,6 +239,36 @@ export async function approveTimesheet(formData: FormData) {
   redirect(back);
 }
 
+/** Manager approves every pending submission in one click. */
+export async function approveAllTimesheets(formData: FormData) {
+  const user = await requireUser();
+  if (!isManagerOrAdmin(user.role)) redirect("/timesheet");
+  const back = String(formData.get("back") ?? "/timesheet/team");
+
+  const pending = await db.timesheetSubmission.findMany({
+    where: { status: "SUBMITTED" },
+    select: { userId: true, weekStart: true },
+  });
+  if (pending.length > 0) {
+    await db.timesheetSubmission.updateMany({
+      where: { status: "SUBMITTED" },
+      data: { status: "APPROVED", reviewedById: user.id, reviewedAt: new Date() },
+    });
+    await Promise.all(
+      pending.map((s) => {
+        const label = s.weekStart.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+        return pushNotification(
+          s.userId,
+          `${user.name} approved your timesheet for week of ${label}`,
+          "/timesheet"
+        );
+      })
+    );
+  }
+  revalidatePath("/timesheet/team");
+  redirect(back);
+}
+
 /** Manager rejects a submission, unlocking the week so the employee can fix it. */
 export async function rejectTimesheet(formData: FormData) {
   const user = await requireUser();

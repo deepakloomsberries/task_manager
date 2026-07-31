@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import RangePicker from "@/components/RangePicker";
 import UserAvatar from "@/components/UserAvatar";
-import { approveTimesheet, rejectTimesheet } from "@/lib/actions/time";
+import { approveTimesheet, rejectTimesheet, approveAllTimesheets } from "@/lib/actions/time";
 import { fmtDate, fmtHours, toInputDate } from "@/lib/ui";
 import { rangeBounds } from "@/lib/timerange";
 
@@ -121,11 +121,19 @@ export default async function TeamTimesheetPage({
 
       {pending.length > 0 && (
         <div className="card border-amber-200 dark:border-amber-900/60">
-          <div className="border-b border-slate-200 px-5 py-4">
+          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
             <h2 className="flex items-center gap-2 font-semibold">
               ⏳ Pending approvals
               <span className="badge bg-amber-100 text-amber-700">{pending.length}</span>
             </h2>
+            {pending.length > 1 && (
+              <form action={approveAllTimesheets}>
+                <input type="hidden" name="back" value={backHref} />
+                <button type="submit" className="btn-primary !py-1.5 text-xs">
+                  Approve all ({pending.length})
+                </button>
+              </form>
+            )}
           </div>
           <div className="divide-y divide-slate-100">
             {pending.map((s) => {

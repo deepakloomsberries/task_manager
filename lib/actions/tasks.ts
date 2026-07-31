@@ -139,15 +139,26 @@ export async function updateTask(formData: FormData) {
   redirect(`/tasks/${id}`);
 }
 
+/** True when the task still has at least one unfinished blocker. */
+async function hasOpenBlockers(taskId: number) {
+  const open = await db.taskDependency.count({
+    where: { taskId, blocker: { status: { not: "DONE" }, deletedAt: null } },
+  });
+  return open > 0;
+}
+
 async function changeStatus(
   user: { id: number; name: string; role: string },
   taskId: number,
   status: string
-) {
-  if (!STATUSES.includes(status)) return;
+): Promise<"ok" | "noop" | "blocked"> {
+  if (!STATUSES.includes(status)) return "noop";
   const task = await db.task.findUnique({ where: { id: taskId } });
-  if (!task || task.deletedAt || !canChangeStatus(user, task)) return;
-  if (task.status === status) return;
+  if (!task || task.deletedAt || !canChangeStatus(user, task)) return "noop";
+  if (task.status === status) return "noop";
+
+  // Can't complete a task while something it depends on is still open.
+  if (status === "DONE" && (await hasOpenBlockers(taskId))) return "blocked";
 
   await db.task.update({
     where: { id: taskId },
@@ -165,6 +176,7 @@ async function changeStatus(
       `/tasks/${taskId}`
     );
   }
+  return "ok";
 }
 
 export async function setTaskStatus(formData: FormData) {
@@ -173,8 +185,11 @@ export async function setTaskStatus(formData: FormData) {
   const status = String(formData.get("status") ?? "");
   const back = String(formData.get("back") ?? `/tasks/${id}`);
 
-  await changeStatus(user, id, status);
+  const result = await changeStatus(user, id, status);
   await revalidateTaskViews(id);
+  if (result === "blocked") {
+    redirect(`${back}${back.includes("?") ? "&" : "?"}error=blocked`);
+  }
   redirect(back);
 }
 
