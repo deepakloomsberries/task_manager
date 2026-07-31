@@ -14,6 +14,7 @@ import {
 } from "@/lib/actions/tasks";
 import { deleteAttachment } from "@/lib/actions/files";
 import PasteAttachment from "@/components/PasteAttachment";
+import DatePicker from "@/components/DatePicker";
 import ShareTask from "@/components/ShareTask";
 import UserAvatar from "@/components/UserAvatar";
 import TaskTimer from "@/components/TaskTimer";
@@ -395,11 +396,11 @@ export default async function TaskDetailPage({
             </div>
             <div>
               <label className="label">Start date</label>
-              <input name="startDate" type="date" defaultValue={toInputDate(task.startDate)} className="input" />
+              <DatePicker name="startDate" defaultValue={toInputDate(task.startDate)} />
             </div>
             <div>
               <label className="label">Due date</label>
-              <input name="dueDate" type="date" defaultValue={toInputDate(task.dueDate)} className="input" />
+              <DatePicker name="dueDate" defaultValue={toInputDate(task.dueDate)} />
             </div>
             <div>
               <label className="label">Repeat</label>

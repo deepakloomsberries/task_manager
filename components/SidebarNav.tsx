@@ -12,6 +12,7 @@ const MAIN_NAV: NavItem[] = [
   { href: "/projects", label: "Projects", icon: "▤" },
   { href: "/calendar", label: "Calendar", icon: "▧" },
   { href: "/discussion", label: "Discussion", icon: "◈" },
+  { href: "/notifications", label: "Inbox", icon: "✦" },
   { href: "/messages", label: "Messages", icon: "✉" },
   { href: "/documents", label: "Documents", icon: "▣" },
   { href: "/timesheet", label: "Time sheet", icon: "◷" },
@@ -83,11 +84,18 @@ export default function SidebarNav({
         />
       ))}
       {isManager && (
-        <NavLink
-          item={{ href: "/templates", label: "Templates", icon: "❏" }}
-          active={isActive("/templates")}
-          onNavigate={onNavigate}
-        />
+        <>
+          <NavLink
+            item={{ href: "/workload", label: "Workload", icon: "▚" }}
+            active={isActive("/workload")}
+            onNavigate={onNavigate}
+          />
+          <NavLink
+            item={{ href: "/templates", label: "Templates", icon: "❏" }}
+            active={isActive("/templates")}
+            onNavigate={onNavigate}
+          />
+        </>
       )}
       {isAdmin && (
         <>

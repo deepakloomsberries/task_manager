@@ -1,4 +1,5 @@
 import Link from "next/link";
+import DatePicker from "@/components/DatePicker";
 import { RANGE_PRESETS, isActivePreset } from "@/lib/timerange";
 import { toInputDate } from "@/lib/ui";
 
@@ -40,11 +41,11 @@ export default function RangePicker({
         <input type="hidden" name="range" value="custom" />
         <div>
           <label className="label !mb-0.5">From</label>
-          <input type="date" name="from" defaultValue={fromParam ?? toInputDate(from)} className="input !py-1.5" />
+          <DatePicker name="from" defaultValue={fromParam ?? toInputDate(from)} className="!py-1.5" />
         </div>
         <div>
           <label className="label !mb-0.5">To</label>
-          <input type="date" name="to" defaultValue={toParam ?? toInputDate(to)} className="input !py-1.5" />
+          <DatePicker name="to" defaultValue={toParam ?? toInputDate(to)} className="!py-1.5" />
         </div>
         <button type="submit" className="btn-secondary !py-1.5 text-xs">
           Apply

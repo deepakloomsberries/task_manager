@@ -147,6 +147,20 @@ export function lastSeenLabel(lastSeenAt: Date | string | null | undefined) {
   return `Last seen ${d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}`;
 }
 
+/** Short relative time, e.g. "just now", "5m ago", "3h ago", "2d ago", or a date. */
+export function fmtRelative(d: Date | string | null | undefined) {
+  if (!d) return "";
+  const diff = Date.now() - new Date(d).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+}
+
 /**
  * Formats a decimal hours value as human "Xh Ym" (e.g. 0.766… → "46m",
  * 2.5 → "2h 30m"). Used for logged time so we never surface raw floats.

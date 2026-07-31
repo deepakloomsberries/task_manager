@@ -5,14 +5,20 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 
-export async function markAllNotificationsRead() {
+/** Where to return after an inbox action, preserving the current filter view. */
+function backFrom(formData: FormData) {
+  const back = String(formData.get("back") ?? "").trim();
+  return back.startsWith("/notifications") ? back : "/notifications";
+}
+
+export async function markAllNotificationsRead(formData: FormData) {
   const user = await requireUser();
   await db.notification.updateMany({
     where: { userId: user.id, read: false },
     data: { read: true },
   });
   revalidatePath("/notifications");
-  redirect("/notifications");
+  redirect(backFrom(formData));
 }
 
 /** Flip a single notification between read and unread. */
@@ -27,12 +33,24 @@ export async function toggleNotificationRead(formData: FormData) {
     });
   }
   revalidatePath("/notifications");
-  redirect("/notifications");
+  redirect(backFrom(formData));
 }
 
-export async function clearNotifications() {
+/** Mark every notification for one thread (link) as read. */
+export async function markThreadRead(formData: FormData) {
+  const user = await requireUser();
+  const link = String(formData.get("link") ?? "");
+  await db.notification.updateMany({
+    where: { userId: user.id, read: false, link: link || null },
+    data: { read: true },
+  });
+  revalidatePath("/notifications");
+  redirect(backFrom(formData));
+}
+
+export async function clearNotifications(formData: FormData) {
   const user = await requireUser();
   await db.notification.deleteMany({ where: { userId: user.id } });
   revalidatePath("/notifications");
-  redirect("/notifications");
+  redirect(backFrom(formData));
 }
