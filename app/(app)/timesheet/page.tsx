@@ -1,26 +1,96 @@
+import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { createTimeEntry, deleteTimeEntry } from "@/lib/actions/time";
+import { createTimeEntry, updateTimeEntry, deleteTimeEntry } from "@/lib/actions/time";
 import ActiveTimerBanner from "@/components/ActiveTimerBanner";
 import { fmtDate, toInputDate, fmtHours } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
 
+const PRESETS = [
+  { key: "week", label: "This week" },
+  { key: "last-week", label: "Last week" },
+  { key: "month", label: "This month" },
+  { key: "30d", label: "30 days" },
+];
+
+/** Resolves the selected reporting window from the query string. */
+function rangeBounds(range: string, fromParam?: string, toParam?: string) {
+  const now = new Date();
+  const end = new Date(now);
+  end.setHours(23, 59, 59, 999);
+
+  if (range === "week") {
+    const s = new Date(now);
+    s.setDate(s.getDate() - s.getDay());
+    s.setHours(0, 0, 0, 0);
+    return { from: s, to: end, label: "This week" };
+  }
+  if (range === "last-week") {
+    const s = new Date(now);
+    s.setDate(s.getDate() - s.getDay() - 7);
+    s.setHours(0, 0, 0, 0);
+    const e = new Date(s);
+    e.setDate(e.getDate() + 6);
+    e.setHours(23, 59, 59, 999);
+    return { from: s, to: e, label: "Last week" };
+  }
+  if (range === "month") {
+    const s = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { from: s, to: end, label: "This month" };
+  }
+  if (range === "custom" && fromParam) {
+    const s = new Date(fromParam);
+    s.setHours(0, 0, 0, 0);
+    const e = toParam ? new Date(toParam) : new Date(now);
+    e.setHours(23, 59, 59, 999);
+    return { from: s, to: e, label: "Custom range" };
+  }
+  const s = new Date(now);
+  s.setDate(s.getDate() - 30);
+  s.setHours(0, 0, 0, 0);
+  return { from: s, to: end, label: "Last 30 days" };
+}
+
 export default async function TimesheetPage({
   searchParams,
 }: {
-  searchParams: { error?: string };
+  searchParams: { error?: string; edit?: string; range?: string; from?: string; to?: string };
 }) {
   const user = await requireUser();
 
-  const since = new Date();
-  since.setDate(since.getDate() - 30);
+  const rangeKey = searchParams.range ?? "30d";
+  const { from, to, label } = rangeBounds(rangeKey, searchParams.from, searchParams.to);
+  const editingId = searchParams.edit ? Number(searchParams.edit) : null;
 
-  const [entries, tasks, projects, activeTimer] = await Promise.all([
+  // Preserve the active range when returning from an edit/delete/create.
+  const viewParams = new URLSearchParams();
+  if (rangeKey !== "30d") viewParams.set("range", rangeKey);
+  if (rangeKey === "custom") {
+    if (searchParams.from) viewParams.set("from", searchParams.from);
+    if (searchParams.to) viewParams.set("to", searchParams.to);
+  }
+  const viewQuery = viewParams.toString();
+  const viewHref = viewQuery ? `/timesheet?${viewQuery}` : "/timesheet";
+  const editHref = (id: number) => {
+    const q = new URLSearchParams(viewQuery);
+    q.set("edit", String(id));
+    return `/timesheet?${q.toString()}`;
+  };
+
+  const chartSince = new Date();
+  chartSince.setDate(chartSince.getDate() - 6);
+  chartSince.setHours(0, 0, 0, 0);
+
+  const [entries, chartEntries, tasks, projects, activeTimer] = await Promise.all([
     db.timeEntry.findMany({
-      where: { userId: user.id, date: { gte: since } },
+      where: { userId: user.id, date: { gte: from, lte: to } },
       orderBy: { date: "desc" },
       include: { task: true, project: true },
+    }),
+    db.timeEntry.findMany({
+      where: { userId: user.id, date: { gte: chartSince } },
+      select: { date: true, hours: true },
     }),
     db.task.findMany({
       where: { assigneeId: user.id, status: { not: "DONE" }, deletedAt: null },
@@ -36,49 +106,66 @@ export default async function TimesheetPage({
     }),
   ]);
 
-  const totalHours = entries.reduce((s, e) => s + e.hours, 0);
-  const weekStart = new Date();
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-  weekStart.setHours(0, 0, 0, 0);
-  const weekHours = entries
-    .filter((e) => new Date(e.date) >= weekStart)
-    .reduce((s, e) => s + e.hours, 0);
+  const rangeTotal = entries.reduce((s, e) => s + e.hours, 0);
 
-  // Last 7 days for the mini bar chart, scaled to the busiest day so short days
-  // still read clearly (with a small floor so a 10-minute bar isn't invisible).
+  // Last 7 days mini chart, scaled to the busiest day (with a small floor).
   const week = Array.from({ length: 7 }, (_, i) => {
     const day = new Date();
     day.setDate(day.getDate() - (6 - i));
     day.setHours(0, 0, 0, 0);
     const next = new Date(day.getTime() + 86400000);
-    const hours = entries
+    const hours = chartEntries
       .filter((e) => new Date(e.date) >= day && new Date(e.date) < next)
       .reduce((s, e) => s + e.hours, 0);
-    return {
-      label: day.toLocaleDateString("en-GB", { weekday: "short" }),
-      hours,
-      isToday: i === 6,
-    };
+    return { label: day.toLocaleDateString("en-GB", { weekday: "short" }), hours, isToday: i === 6 };
   });
   const peak = Math.max(...week.map((d) => d.hours), 1 / 6);
 
   return (
     <div className="space-y-4">
-      <div className="flex items-end justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Time sheet</h1>
           <p className="text-sm text-slate-500">Log the hours you spend on tasks and projects.</p>
         </div>
-        <div className="flex gap-6 text-right">
-          <div>
-            <div className="text-2xl font-bold text-sky-600">{fmtHours(weekHours)}</div>
-            <div className="text-xs text-slate-500">This week</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold">{fmtHours(totalHours)}</div>
-            <div className="text-xs text-slate-500">Last 30 days</div>
-          </div>
+        <div className="text-right">
+          <div className="text-2xl font-bold text-sky-600">{fmtHours(rangeTotal)}</div>
+          <div className="text-xs text-slate-500">{label}</div>
         </div>
+      </div>
+
+      {/* Range picker */}
+      <div className="card flex flex-wrap items-center gap-2 p-3">
+        {PRESETS.map((p) => {
+          const active = rangeKey === p.key || (p.key === "30d" && !["week", "last-week", "month", "custom"].includes(rangeKey));
+          return (
+            <Link
+              key={p.key}
+              href={`/timesheet?range=${p.key}`}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                active
+                  ? "bg-sky-600 text-white"
+                  : "border border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+              }`}
+            >
+              {p.label}
+            </Link>
+          );
+        })}
+        <form action="/timesheet" method="GET" className="ml-auto flex flex-wrap items-end gap-2">
+          <input type="hidden" name="range" value="custom" />
+          <div>
+            <label className="label !mb-0.5">From</label>
+            <input type="date" name="from" defaultValue={searchParams.from ?? toInputDate(from)} className="input !py-1.5" />
+          </div>
+          <div>
+            <label className="label !mb-0.5">To</label>
+            <input type="date" name="to" defaultValue={searchParams.to ?? toInputDate(to)} className="input !py-1.5" />
+          </div>
+          <button type="submit" className="btn-secondary !py-1.5 text-xs">
+            Apply
+          </button>
+        </form>
       </div>
 
       {searchParams.error === "invalid" && (
@@ -121,15 +208,10 @@ export default async function TimesheetPage({
 
       <div className="card p-5">
         <form action={createTimeEntry} className="grid items-end gap-3 md:grid-cols-6">
+          <input type="hidden" name="back" value={viewHref} />
           <div>
             <label className="label">Date *</label>
-            <input
-              name="date"
-              type="date"
-              required
-              defaultValue={toInputDate(new Date())}
-              className="input"
-            />
+            <input name="date" type="date" required defaultValue={toInputDate(new Date())} className="input" />
           </div>
           <div>
             <label className="label">Hours *</label>
@@ -175,7 +257,7 @@ export default async function TimesheetPage({
       </div>
 
       <div className="card overflow-x-auto">
-        <table className="w-full min-w-[640px]">
+        <table className="w-full min-w-[720px]">
           <thead className="border-b border-slate-200 bg-slate-50">
             <tr>
               <th className="th">Date</th>
@@ -183,46 +265,114 @@ export default async function TimesheetPage({
               <th className="th">Task</th>
               <th className="th">Project</th>
               <th className="th">Note</th>
-              <th className="th"></th>
+              <th className="th text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {entries.length === 0 && (
               <tr>
                 <td colSpan={6} className="td py-10 text-center text-slate-400">
-                  No time logged in the last 30 days.
+                  No time logged for {label.toLowerCase()}.
                 </td>
               </tr>
             )}
-            {entries.map((e) => (
-              <tr key={e.id} className="hover:bg-slate-50">
-                <td className="td">{fmtDate(e.date)}</td>
-                <td className="td font-medium">
-                  <span className="inline-flex items-center gap-1.5">
-                    {fmtHours(e.hours)}
-                    {e.source === "timer" && (
-                      <span
-                        title="Tracked with the task timer"
-                        className="badge bg-sky-100 text-sky-700 !px-1.5 !py-0 text-[10px]"
-                      >
-                        ⏱
-                      </span>
-                    )}
-                  </span>
-                </td>
-                <td className="td text-slate-600">{e.task?.title ?? "—"}</td>
-                <td className="td text-slate-600">{e.project?.name ?? "—"}</td>
-                <td className="td text-slate-600">{e.note ?? "—"}</td>
-                <td className="td text-right">
-                  <form action={deleteTimeEntry}>
-                    <input type="hidden" name="id" value={e.id} />
-                    <button type="submit" className="text-xs text-slate-400 hover:text-red-600">
-                      Delete
-                    </button>
-                  </form>
-                </td>
-              </tr>
-            ))}
+            {entries.map((e) => {
+              if (editingId === e.id) {
+                // Include this entry's own task in the options even if it's not
+                // in the active-tasks list (e.g. it's since been completed).
+                const hasTask = e.taskId && tasks.some((t) => t.id === e.taskId);
+                return (
+                  <tr key={e.id} className="bg-sky-50/50 dark:bg-sky-950/20">
+                    <td colSpan={6} className="td">
+                      <form action={updateTimeEntry} className="grid items-end gap-3 md:grid-cols-6">
+                        <input type="hidden" name="id" value={e.id} />
+                        <input type="hidden" name="back" value={viewHref} />
+                        <div>
+                          <label className="label">Date *</label>
+                          <input name="date" type="date" required defaultValue={toInputDate(e.date)} className="input" />
+                        </div>
+                        <div>
+                          <label className="label">Hours *</label>
+                          <input name="hours" type="text" required defaultValue={fmtHours(e.hours)} className="input" />
+                        </div>
+                        <div>
+                          <label className="label">Task</label>
+                          <select name="taskId" defaultValue={e.taskId ?? ""} className="input">
+                            <option value="">— None —</option>
+                            {!hasTask && e.task && (
+                              <option value={e.task.id}>{e.task.title}</option>
+                            )}
+                            {tasks.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.title}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="label">Project</label>
+                          <select name="projectId" defaultValue={e.projectId ?? ""} className="input">
+                            <option value="">— None —</option>
+                            {projects.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="label">Note</label>
+                          <input name="note" defaultValue={e.note ?? ""} className="input" />
+                        </div>
+                        <div className="flex gap-2">
+                          <button type="submit" className="btn-primary !py-2 text-xs">
+                            Save
+                          </button>
+                          <Link href={viewHref} className="btn-secondary !py-2 text-xs">
+                            Cancel
+                          </Link>
+                        </div>
+                      </form>
+                    </td>
+                  </tr>
+                );
+              }
+              return (
+                <tr key={e.id} className="hover:bg-slate-50">
+                  <td className="td">{fmtDate(e.date)}</td>
+                  <td className="td font-medium">
+                    <span className="inline-flex items-center gap-1.5">
+                      {fmtHours(e.hours)}
+                      {e.source === "timer" && (
+                        <span
+                          title="Tracked with the task timer"
+                          className="badge bg-sky-100 text-sky-700 !px-1.5 !py-0 text-[10px]"
+                        >
+                          ⏱
+                        </span>
+                      )}
+                    </span>
+                  </td>
+                  <td className="td text-slate-600">{e.task?.title ?? "—"}</td>
+                  <td className="td text-slate-600">{e.project?.name ?? "—"}</td>
+                  <td className="td text-slate-600">{e.note ?? "—"}</td>
+                  <td className="td text-right">
+                    <div className="flex justify-end gap-3 text-xs">
+                      <Link href={editHref(e.id)} className="text-sky-600 hover:underline">
+                        Edit
+                      </Link>
+                      <form action={deleteTimeEntry}>
+                        <input type="hidden" name="id" value={e.id} />
+                        <input type="hidden" name="back" value={viewHref} />
+                        <button type="submit" className="text-slate-400 hover:text-red-600">
+                          Delete
+                        </button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

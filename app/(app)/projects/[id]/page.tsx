@@ -9,12 +9,14 @@ import {
   deleteProject,
 } from "@/lib/actions/projects";
 import { saveProjectAsTemplate } from "@/lib/actions/templates";
+import UserAvatar from "@/components/UserAvatar";
 import {
   PROJECT_STATUSES,
   TASK_STATUSES,
   TASK_PRIORITIES,
   lookup,
   fmtDate,
+  fmtHours,
   isOverdue,
   initials,
   avatarColor,
@@ -50,6 +52,25 @@ export default async function ProjectDetailPage({
     db.user.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
   ]);
   if (!project) notFound();
+
+  // Roll up all time logged against this project — either tagged to the project
+  // directly or logged on one of its tasks.
+  const taskIds = project.tasks.map((t) => t.id);
+  const timeEntries = await db.timeEntry.findMany({
+    where: {
+      OR: [{ projectId: id }, ...(taskIds.length ? [{ taskId: { in: taskIds } }] : [])],
+    },
+    include: { user: { select: { id: true, name: true, avatarPath: true } } },
+  });
+  const timeByUser = new Map<number, { user: { id: number; name: string; avatarPath: string | null }; hours: number }>();
+  let projectHours = 0;
+  for (const e of timeEntries) {
+    projectHours += e.hours;
+    const cur = timeByUser.get(e.userId) ?? { user: e.user, hours: 0 };
+    cur.hours += e.hours;
+    timeByUser.set(e.userId, cur);
+  }
+  const timeRows = Array.from(timeByUser.values()).sort((a, b) => b.hours - a.hours);
 
   const canManage = isManagerOrAdmin(user.role);
   const editing = searchParams.edit === "1" && canManage;
@@ -241,6 +262,38 @@ export default async function ProjectDetailPage({
             </form>
           )}
         </div>
+      </div>
+
+      <div className="card p-6">
+        <h2 className="mb-4 flex items-baseline justify-between font-semibold">
+          <span>Time logged</span>
+          <span className="text-sm font-normal text-slate-400">{fmtHours(projectHours)} total</span>
+        </h2>
+        {timeRows.length === 0 ? (
+          <p className="text-sm text-slate-400">No time logged on this project yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {timeRows.map((r) => {
+              const pct = projectHours > 0 ? Math.round((r.hours / projectHours) * 100) : 0;
+              return (
+                <div key={r.user.id} className="flex items-center gap-3">
+                  <UserAvatar user={r.user} size={28} />
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex items-baseline justify-between gap-2 text-sm">
+                      <span className="truncate font-medium">{r.user.name}</span>
+                      <span className="shrink-0 text-slate-500">
+                        {fmtHours(r.hours)} · {pct}%
+                      </span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full rounded-full bg-sky-500" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
