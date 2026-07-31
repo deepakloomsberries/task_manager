@@ -3,8 +3,19 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { requireUser } from "@/lib/auth";
+import { requireUser, isManagerOrAdmin } from "@/lib/auth";
+import { pushNotification } from "@/lib/notify";
 import { parseHours } from "@/lib/ui";
+import { weekStartOf } from "@/lib/timerange";
+
+/** Whether a user's week has been submitted/approved and is therefore locked. */
+async function weekLocked(userId: number, date: Date | string) {
+  const weekStart = weekStartOf(date);
+  const sub = await db.timesheetSubmission.findUnique({
+    where: { userId_weekStart: { userId, weekStart } },
+  });
+  return !!sub && (sub.status === "SUBMITTED" || sub.status === "APPROVED");
+}
 
 export async function createTimeEntry(formData: FormData) {
   const user = await requireUser();
@@ -15,6 +26,9 @@ export async function createTimeEntry(formData: FormData) {
   const note = String(formData.get("note") ?? "").trim() || null;
 
   if (!date || hours === null || hours <= 0 || hours > 24) redirect("/timesheet?error=invalid");
+  if (await weekLocked(user.id, date)) {
+    redirect(`${backFrom(formData)}${backFrom(formData).includes("?") ? "&" : "?"}error=locked`);
+  }
 
   await db.timeEntry.create({
     data: { userId: user.id, date: new Date(date), hours, taskId, projectId, note },
@@ -39,14 +53,21 @@ export async function updateTimeEntry(formData: FormData) {
   const note = String(formData.get("note") ?? "").trim() || null;
 
   const back = backFrom(formData);
+  const sep = back.includes("?") ? "&" : "?";
   if (!id || !date || hours === null || hours <= 0 || hours > 24) {
-    redirect(`${back}${back.includes("?") ? "&" : "?"}error=invalid`);
+    redirect(`${back}${sep}error=invalid`);
   }
 
   // Scope the update to the caller's own entries so nobody can edit another
-  // person's timesheet.
-  await db.timeEntry.updateMany({
-    where: { id, userId: user.id },
+  // person's timesheet, and block edits to a locked (submitted) week.
+  const existing = await db.timeEntry.findFirst({ where: { id, userId: user.id } });
+  if (!existing) redirect(back);
+  if ((await weekLocked(user.id, existing.date)) || (await weekLocked(user.id, date))) {
+    redirect(`${back}${sep}error=locked`);
+  }
+
+  await db.timeEntry.update({
+    where: { id },
     data: { date: new Date(date), hours, taskId, projectId, note },
   });
   revalidatePath("/timesheet");
@@ -56,9 +77,14 @@ export async function updateTimeEntry(formData: FormData) {
 export async function deleteTimeEntry(formData: FormData) {
   const user = await requireUser();
   const id = Number(formData.get("id"));
+  const back = backFrom(formData);
+  const entry = await db.timeEntry.findFirst({ where: { id, userId: user.id } });
+  if (entry && (await weekLocked(user.id, entry.date))) {
+    redirect(`${back}${back.includes("?") ? "&" : "?"}error=locked`);
+  }
   await db.timeEntry.deleteMany({ where: { id, userId: user.id } });
   revalidatePath("/timesheet");
-  redirect(backFrom(formData));
+  redirect(back);
 }
 
 /** Converts a running timer into a logged time entry. Returns the hours logged. */
@@ -128,5 +154,112 @@ export async function cancelTaskTimer(formData: FormData) {
   const back = String(formData.get("back") ?? "/timesheet");
   await db.taskTimer.deleteMany({ where: { userId: user.id } });
   revalidatePath(back);
+  redirect(back);
+}
+
+// --- Weekly timesheet submit & approve -------------------------------------
+
+/** Employee submits a week's timesheet for manager approval (locks the week). */
+export async function submitTimesheet(formData: FormData) {
+  const user = await requireUser();
+  const weekStart = weekStartOf(String(formData.get("weekStart") ?? ""));
+  const back = backFrom(formData);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 7);
+
+  const agg = await db.timeEntry.aggregate({
+    _sum: { hours: true },
+    where: { userId: user.id, date: { gte: weekStart, lt: weekEnd } },
+  });
+  const totalHours = agg._sum.hours ?? 0;
+
+  await db.timesheetSubmission.upsert({
+    where: { userId_weekStart: { userId: user.id, weekStart } },
+    create: { userId: user.id, weekStart, totalHours, status: "SUBMITTED" },
+    // Resubmitting after a rejection clears the previous review.
+    update: {
+      totalHours,
+      status: "SUBMITTED",
+      submittedAt: new Date(),
+      reviewedById: null,
+      reviewedAt: null,
+      reviewNote: null,
+    },
+  });
+
+  // Let managers know there's something to review.
+  const managers = await db.user.findMany({
+    where: { active: true, role: { in: ["ADMIN", "MANAGER"] }, id: { not: user.id } },
+    select: { id: true },
+  });
+  const label = weekStart.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+  await Promise.all(
+    managers.map((m) =>
+      pushNotification(m.id, `${user.name} submitted their timesheet for week of ${label}`, "/timesheet/team")
+    )
+  );
+
+  revalidatePath("/timesheet");
+  revalidatePath("/timesheet/team");
+  redirect(back);
+}
+
+/** Employee withdraws a still-pending submission so they can edit again. */
+export async function withdrawTimesheet(formData: FormData) {
+  const user = await requireUser();
+  const weekStart = weekStartOf(String(formData.get("weekStart") ?? ""));
+  const back = backFrom(formData);
+
+  // Only a submission that hasn't been approved yet can be withdrawn.
+  await db.timesheetSubmission.deleteMany({
+    where: { userId: user.id, weekStart, status: "SUBMITTED" },
+  });
+  revalidatePath("/timesheet");
+  revalidatePath("/timesheet/team");
+  redirect(back);
+}
+
+/** Manager approves a submitted week (keeps it locked). */
+export async function approveTimesheet(formData: FormData) {
+  const user = await requireUser();
+  if (!isManagerOrAdmin(user.role)) redirect("/timesheet");
+  const id = Number(formData.get("id"));
+  const back = String(formData.get("back") ?? "/timesheet/team");
+
+  const sub = await db.timesheetSubmission.findUnique({ where: { id } });
+  if (sub && sub.status === "SUBMITTED") {
+    await db.timesheetSubmission.update({
+      where: { id },
+      data: { status: "APPROVED", reviewedById: user.id, reviewedAt: new Date() },
+    });
+    const label = sub.weekStart.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+    await pushNotification(sub.userId, `${user.name} approved your timesheet for week of ${label}`, "/timesheet");
+  }
+  revalidatePath("/timesheet/team");
+  redirect(back);
+}
+
+/** Manager rejects a submission, unlocking the week so the employee can fix it. */
+export async function rejectTimesheet(formData: FormData) {
+  const user = await requireUser();
+  if (!isManagerOrAdmin(user.role)) redirect("/timesheet");
+  const id = Number(formData.get("id"));
+  const note = String(formData.get("note") ?? "").trim() || null;
+  const back = String(formData.get("back") ?? "/timesheet/team");
+
+  const sub = await db.timesheetSubmission.findUnique({ where: { id } });
+  if (sub && sub.status === "SUBMITTED") {
+    await db.timesheetSubmission.update({
+      where: { id },
+      data: { status: "REJECTED", reviewedById: user.id, reviewedAt: new Date(), reviewNote: note },
+    });
+    const label = sub.weekStart.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+    await pushNotification(
+      sub.userId,
+      `${user.name} requested changes to your timesheet for week of ${label}`,
+      "/timesheet"
+    );
+  }
+  revalidatePath("/timesheet/team");
   redirect(back);
 }

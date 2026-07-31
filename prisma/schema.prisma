@@ -60,6 +60,8 @@ model User {
   messagesReceived   DirectMessage[]     @relation("dmRecipient")
   activeTimer        TaskTimer?
   pushSubscriptions  PushSubscription[]
+  timesheetSubmissions TimesheetSubmission[] @relation("tsSubmitter")
+  timesheetReviews     TimesheetSubmission[] @relation("tsReviewer")
 }
 
 model Project {
@@ -113,6 +115,27 @@ model Task {
   subtasks   Task[]         @relation("subtasks")
   tags       TaskTag[]
   activities TaskActivity[]
+
+  // Dependency edges: `blockedBy` are tasks that must finish before this one;
+  // `blocking` are tasks that are waiting on this one.
+  blockedBy  TaskDependency[] @relation("blockedTask")
+  blocking   TaskDependency[] @relation("blockerTask")
+}
+
+/**
+ * A "this task is blocked by that task" edge, Asana-style. A task can be blocked
+ * by many others and can block many others.
+ */
+model TaskDependency {
+  id        Int  @id @default(autoincrement())
+  task      Task @relation("blockedTask", fields: [taskId], references: [id], onDelete: Cascade)
+  taskId    Int // the task that is blocked
+  blocker   Task @relation("blockerTask", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockerId Int // the task that must be completed first
+  createdAt DateTime @default(now())
+
+  @@unique([taskId, blockerId])
+  @@index([blockerId])
 }
 
 model Tag {
@@ -251,6 +274,29 @@ model TimeEntry {
   note      String?
   source    String   @default("manual") // manual | timer
   createdAt DateTime @default(now())
+}
+
+/**
+ * An employee's weekly timesheet submitted for a manager to approve. One row
+ * per person per week (weekStart is the Sunday 00:00 of that week). Once
+ * submitted or approved, that week's entries are locked from further edits.
+ */
+model TimesheetSubmission {
+  id           Int       @id @default(autoincrement())
+  user         User      @relation("tsSubmitter", fields: [userId], references: [id], onDelete: Cascade)
+  userId       Int
+  weekStart    DateTime
+  status       String    @default("SUBMITTED") // SUBMITTED | APPROVED | REJECTED
+  totalHours   Float     @default(0)
+  note         String?
+  reviewedBy   User?     @relation("tsReviewer", fields: [reviewedById], references: [id])
+  reviewedById Int?
+  reviewNote   String?
+  submittedAt  DateTime  @default(now())
+  reviewedAt   DateTime?
+
+  @@unique([userId, weekStart])
+  @@index([status])
 }
 
 /**

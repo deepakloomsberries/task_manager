@@ -297,3 +297,54 @@ export async function addComment(formData: FormData) {
   revalidatePath(`/tasks/${taskId}`);
   redirect(`/tasks/${taskId}`);
 }
+
+// --- Task dependencies (blockers) ------------------------------------------
+
+/** Marks `taskId` as blocked by `blockerId` (blocker must finish first). */
+export async function addTaskDependency(formData: FormData) {
+  const user = await requireUser();
+  const taskId = Number(formData.get("taskId"));
+  const blockerId = Number(formData.get("blockerId"));
+  if (!taskId || !blockerId) redirect(`/tasks/${taskId || ""}`);
+  if (taskId === blockerId) redirect(`/tasks/${taskId}?error=self-block`);
+
+  const [task, blocker] = await Promise.all([
+    db.task.findFirst({ where: { id: taskId, deletedAt: null } }),
+    db.task.findFirst({ where: { id: blockerId, deletedAt: null } }),
+  ]);
+  if (!task || !blocker) redirect(`/tasks/${taskId}`);
+  if (!canEditTask(user, task)) redirect(`/tasks/${taskId}?error=forbidden`);
+
+  // Reject a direct cycle: A can't be blocked by B if A already blocks B.
+  const reverse = await db.taskDependency.findUnique({
+    where: { taskId_blockerId: { taskId: blockerId, blockerId: taskId } },
+  });
+  if (reverse) redirect(`/tasks/${taskId}?error=cycle`);
+
+  await db.taskDependency.upsert({
+    where: { taskId_blockerId: { taskId, blockerId } },
+    create: { taskId, blockerId },
+    update: {},
+  });
+  await logActivity(taskId, user.id, "details", `added blocker "${blocker.title}"`);
+  await revalidateTaskViews(taskId);
+  revalidatePath(`/tasks/${blockerId}`);
+  redirect(`/tasks/${taskId}`);
+}
+
+/** Removes a blocker relationship from `taskId`. */
+export async function removeTaskDependency(formData: FormData) {
+  const user = await requireUser();
+  const taskId = Number(formData.get("taskId"));
+  const blockerId = Number(formData.get("blockerId"));
+  if (!taskId || !blockerId) redirect(`/tasks/${taskId || ""}`);
+
+  const task = await db.task.findFirst({ where: { id: taskId } });
+  if (!task) redirect("/tasks");
+  if (!canEditTask(user, task)) redirect(`/tasks/${taskId}?error=forbidden`);
+
+  await db.taskDependency.deleteMany({ where: { taskId, blockerId } });
+  await revalidateTaskViews(taskId);
+  revalidatePath(`/tasks/${blockerId}`);
+  redirect(`/tasks/${taskId}`);
+}
