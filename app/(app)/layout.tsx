@@ -54,6 +54,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const navBadges: Record<string, number> = {
     "/messages": unreadMessages,
     "/my-tasks": myTasksDue,
+    "/notifications": unread,
   };
 
   const isAdmin = user.role === "ADMIN";

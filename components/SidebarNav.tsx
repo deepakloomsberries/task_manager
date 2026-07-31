@@ -12,6 +12,7 @@ const MAIN_NAV: NavItem[] = [
   { href: "/projects", label: "Projects", icon: "▤" },
   { href: "/calendar", label: "Calendar", icon: "▧" },
   { href: "/discussion", label: "Discussion", icon: "◈" },
+  { href: "/notifications", label: "Inbox", icon: "✦" },
   { href: "/messages", label: "Messages", icon: "✉" },
   { href: "/documents", label: "Documents", icon: "▣" },
   { href: "/timesheet", label: "Time sheet", icon: "◷" },
