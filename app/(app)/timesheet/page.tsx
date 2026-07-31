@@ -1,56 +1,13 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { requireUser } from "@/lib/auth";
+import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import { createTimeEntry, updateTimeEntry, deleteTimeEntry } from "@/lib/actions/time";
 import ActiveTimerBanner from "@/components/ActiveTimerBanner";
+import RangePicker from "@/components/RangePicker";
 import { fmtDate, toInputDate, fmtHours } from "@/lib/ui";
+import { rangeBounds } from "@/lib/timerange";
 
 export const dynamic = "force-dynamic";
-
-const PRESETS = [
-  { key: "week", label: "This week" },
-  { key: "last-week", label: "Last week" },
-  { key: "month", label: "This month" },
-  { key: "30d", label: "30 days" },
-];
-
-/** Resolves the selected reporting window from the query string. */
-function rangeBounds(range: string, fromParam?: string, toParam?: string) {
-  const now = new Date();
-  const end = new Date(now);
-  end.setHours(23, 59, 59, 999);
-
-  if (range === "week") {
-    const s = new Date(now);
-    s.setDate(s.getDate() - s.getDay());
-    s.setHours(0, 0, 0, 0);
-    return { from: s, to: end, label: "This week" };
-  }
-  if (range === "last-week") {
-    const s = new Date(now);
-    s.setDate(s.getDate() - s.getDay() - 7);
-    s.setHours(0, 0, 0, 0);
-    const e = new Date(s);
-    e.setDate(e.getDate() + 6);
-    e.setHours(23, 59, 59, 999);
-    return { from: s, to: e, label: "Last week" };
-  }
-  if (range === "month") {
-    const s = new Date(now.getFullYear(), now.getMonth(), 1);
-    return { from: s, to: end, label: "This month" };
-  }
-  if (range === "custom" && fromParam) {
-    const s = new Date(fromParam);
-    s.setHours(0, 0, 0, 0);
-    const e = toParam ? new Date(toParam) : new Date(now);
-    e.setHours(23, 59, 59, 999);
-    return { from: s, to: e, label: "Custom range" };
-  }
-  const s = new Date(now);
-  s.setDate(s.getDate() - 30);
-  s.setHours(0, 0, 0, 0);
-  return { from: s, to: end, label: "Last 30 days" };
-}
 
 export default async function TimesheetPage({
   searchParams,
@@ -128,45 +85,27 @@ export default async function TimesheetPage({
           <h1 className="text-2xl font-bold">Time sheet</h1>
           <p className="text-sm text-slate-500">Log the hours you spend on tasks and projects.</p>
         </div>
-        <div className="text-right">
-          <div className="text-2xl font-bold text-sky-600">{fmtHours(rangeTotal)}</div>
-          <div className="text-xs text-slate-500">{label}</div>
+        <div className="flex items-end gap-6">
+          {isManagerOrAdmin(user.role) && (
+            <Link href="/timesheet/team" className="btn-secondary">
+              Team timesheet →
+            </Link>
+          )}
+          <div className="text-right">
+            <div className="text-2xl font-bold text-sky-600">{fmtHours(rangeTotal)}</div>
+            <div className="text-xs text-slate-500">{label}</div>
+          </div>
         </div>
       </div>
 
-      {/* Range picker */}
-      <div className="card flex flex-wrap items-center gap-2 p-3">
-        {PRESETS.map((p) => {
-          const active = rangeKey === p.key || (p.key === "30d" && !["week", "last-week", "month", "custom"].includes(rangeKey));
-          return (
-            <Link
-              key={p.key}
-              href={`/timesheet?range=${p.key}`}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                active
-                  ? "bg-sky-600 text-white"
-                  : "border border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
-              }`}
-            >
-              {p.label}
-            </Link>
-          );
-        })}
-        <form action="/timesheet" method="GET" className="ml-auto flex flex-wrap items-end gap-2">
-          <input type="hidden" name="range" value="custom" />
-          <div>
-            <label className="label !mb-0.5">From</label>
-            <input type="date" name="from" defaultValue={searchParams.from ?? toInputDate(from)} className="input !py-1.5" />
-          </div>
-          <div>
-            <label className="label !mb-0.5">To</label>
-            <input type="date" name="to" defaultValue={searchParams.to ?? toInputDate(to)} className="input !py-1.5" />
-          </div>
-          <button type="submit" className="btn-secondary !py-1.5 text-xs">
-            Apply
-          </button>
-        </form>
-      </div>
+      <RangePicker
+        basePath="/timesheet"
+        rangeKey={rangeKey}
+        from={from}
+        to={to}
+        fromParam={searchParams.from}
+        toParam={searchParams.to}
+      />
 
       {searchParams.error === "invalid" && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

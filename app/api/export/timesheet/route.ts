@@ -18,12 +18,31 @@ export async function GET(req: NextRequest) {
     return new NextResponse("Forbidden", { status: 403 });
   }
 
-  const days = Math.min(365, Number(req.nextUrl.searchParams.get("days") ?? 30) || 30);
-  const since = new Date();
-  since.setDate(since.getDate() - days);
+  const sp = req.nextUrl.searchParams;
+  const fromParam = sp.get("from");
+  const toParam = sp.get("to");
+  const userId = sp.get("user") ? Number(sp.get("user")) : null;
+
+  // Either an explicit from/to window, or a rolling number of days (default 30).
+  let from: Date;
+  let to: Date;
+  let rangeTag: string;
+  if (fromParam) {
+    from = new Date(fromParam);
+    from.setHours(0, 0, 0, 0);
+    to = toParam ? new Date(toParam) : new Date();
+    to.setHours(23, 59, 59, 999);
+    rangeTag = `${fromParam}_${toParam ?? new Date().toISOString().slice(0, 10)}`;
+  } else {
+    const days = Math.min(365, Number(sp.get("days") ?? 30) || 30);
+    from = new Date();
+    from.setDate(from.getDate() - days);
+    to = new Date();
+    rangeTag = `${days}d`;
+  }
 
   const entries = await db.timeEntry.findMany({
-    where: { date: { gte: since } },
+    where: { date: { gte: from, lte: to }, ...(userId ? { userId } : {}) },
     include: { user: { include: { company: true } }, task: true, project: true },
     orderBy: [{ date: "desc" }],
   });
@@ -47,7 +66,7 @@ export async function GET(req: NextRequest) {
   return new NextResponse("﻿" + csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="timesheet-${days}d-${new Date().toISOString().slice(0, 10)}.csv"`,
+      "Content-Disposition": `attachment; filename="timesheet-${rangeTag}${userId ? `-user${userId}` : ""}.csv"`,
     },
   });
 }
