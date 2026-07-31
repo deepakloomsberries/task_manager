@@ -13,9 +13,14 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: { show?: string };
+}) {
   const user = await requireUser();
 
+  const showAllRecent = searchParams.show === "all";
   const onlineSince = new Date(Date.now() - ONLINE_WINDOW_MS);
 
   const [
@@ -56,7 +61,11 @@ export default async function DashboardPage() {
         },
       }),
       db.task.findMany({
-        where: { deletedAt: null, OR: [{ assigneeId: user.id }, { createdById: user.id }] },
+        where: {
+          deletedAt: null,
+          ...(showAllRecent ? {} : { status: { not: "DONE" } }),
+          OR: [{ assigneeId: user.id }, { createdById: user.id }],
+        },
         orderBy: { updatedAt: "desc" },
         take: 8,
         include: { project: true, assignee: true },
@@ -115,14 +124,24 @@ export default async function DashboardPage() {
         <div className="card lg:col-span-2">
           <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
             <h2 className="font-semibold">Recent tasks</h2>
-            <Link href="/tasks" className="text-sm text-sky-600 hover:underline">
-              View all
-            </Link>
+            <div className="flex items-center gap-4 text-sm">
+              <Link
+                href={showAllRecent ? "/dashboard" : "/dashboard?show=all"}
+                className="text-slate-500 hover:text-sky-600 hover:underline"
+              >
+                {showAllRecent ? "Active only" : "Show completed"}
+              </Link>
+              <Link href="/tasks" className="text-sky-600 hover:underline">
+                View all
+              </Link>
+            </div>
           </div>
           <div className="divide-y divide-slate-100">
             {recentTasks.length === 0 && (
               <p className="px-5 py-8 text-center text-sm text-slate-400">
-                No tasks yet. Create your first task to get started.
+                {showAllRecent
+                  ? "No tasks yet. Create your first task to get started."
+                  : "No active tasks — nice, you're all caught up!"}
               </p>
             )}
             {recentTasks.map((t) => {

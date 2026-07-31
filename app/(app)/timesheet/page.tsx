@@ -6,7 +6,11 @@ import { fmtDate, toInputDate, fmtHours } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
 
-export default async function TimesheetPage() {
+export default async function TimesheetPage({
+  searchParams,
+}: {
+  searchParams: { error?: string };
+}) {
   const user = await requireUser();
 
   const since = new Date();
@@ -40,6 +44,24 @@ export default async function TimesheetPage() {
     .filter((e) => new Date(e.date) >= weekStart)
     .reduce((s, e) => s + e.hours, 0);
 
+  // Last 7 days for the mini bar chart, scaled to the busiest day so short days
+  // still read clearly (with a small floor so a 10-minute bar isn't invisible).
+  const week = Array.from({ length: 7 }, (_, i) => {
+    const day = new Date();
+    day.setDate(day.getDate() - (6 - i));
+    day.setHours(0, 0, 0, 0);
+    const next = new Date(day.getTime() + 86400000);
+    const hours = entries
+      .filter((e) => new Date(e.date) >= day && new Date(e.date) < next)
+      .reduce((s, e) => s + e.hours, 0);
+    return {
+      label: day.toLocaleDateString("en-GB", { weekday: "short" }),
+      hours,
+      isToday: i === 6,
+    };
+  });
+  const peak = Math.max(...week.map((d) => d.hours), 1 / 6);
+
   return (
     <div className="space-y-4">
       <div className="flex items-end justify-between">
@@ -59,6 +81,13 @@ export default async function TimesheetPage() {
         </div>
       </div>
 
+      {searchParams.error === "invalid" && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          Couldn&apos;t read that time. Try formats like <b>2h 30m</b>, <b>0:45</b>, <b>45m</b> or a
+          decimal such as <b>2.5</b> (must be between 0 and 24 hours).
+        </div>
+      )}
+
       {activeTimer && (
         <ActiveTimerBanner
           taskId={activeTimer.task.id}
@@ -70,27 +99,19 @@ export default async function TimesheetPage() {
       <div className="card p-5">
         <h2 className="mb-3 text-sm font-semibold text-slate-600">Last 7 days</h2>
         <div className="flex h-28 items-end gap-2">
-          {Array.from({ length: 7 }, (_, i) => {
-            const day = new Date();
-            day.setDate(day.getDate() - (6 - i));
-            day.setHours(0, 0, 0, 0);
-            const next = new Date(day.getTime() + 86400000);
-            const hours = entries
-              .filter((e) => new Date(e.date) >= day && new Date(e.date) < next)
-              .reduce((s, e) => s + e.hours, 0);
-            const pct = Math.min(100, (hours / 10) * 100);
-            const isToday = i === 6;
+          {week.map((d, i) => {
+            const pct = d.hours > 0 ? Math.max(8, Math.round((d.hours / peak) * 100)) : 0;
             return (
               <div key={i} className="flex flex-1 flex-col items-center gap-1">
-                <span className="text-[10px] text-slate-500">{hours > 0 ? fmtHours(hours) : ""}</span>
+                <span className="text-[10px] text-slate-500">{d.hours > 0 ? fmtHours(d.hours) : ""}</span>
                 <div className="flex h-16 w-full items-end rounded bg-slate-100">
                   <div
-                    className={`w-full rounded ${isToday ? "bg-sky-500" : "bg-sky-300"}`}
+                    className={`w-full rounded ${d.isToday ? "bg-sky-500" : "bg-sky-300"}`}
                     style={{ height: `${pct}%` }}
                   />
                 </div>
-                <span className={`text-[10px] ${isToday ? "font-semibold text-sky-600" : "text-slate-400"}`}>
-                  {day.toLocaleDateString("en-GB", { weekday: "short" })}
+                <span className={`text-[10px] ${d.isToday ? "font-semibold text-sky-600" : "text-slate-400"}`}>
+                  {d.label}
                 </span>
               </div>
             );
@@ -114,13 +135,11 @@ export default async function TimesheetPage() {
             <label className="label">Hours *</label>
             <input
               name="hours"
-              type="number"
-              step="0.25"
-              min="0.25"
-              max="24"
+              type="text"
               required
               className="input"
-              placeholder="e.g. 2.5"
+              placeholder="2h 30m, 0:45 or 2.5"
+              title="Enter time as 2h 30m, 0:45, 45m or a decimal like 2.5"
             />
           </div>
           <div>

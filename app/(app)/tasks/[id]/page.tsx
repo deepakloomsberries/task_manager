@@ -24,6 +24,7 @@ import {
   lookup,
   fmtDate,
   fmtDateTime,
+  fmtHours,
   toInputDate,
 } from "@/lib/ui";
 
@@ -40,7 +41,7 @@ export default async function TaskDetailPage({
   const id = Number(params.id);
   if (!id) notFound();
 
-  const [task, users, projects, activeTimer, loggedAgg] = await Promise.all([
+  const [task, users, projects, activeTimer, loggedAgg, timeLogs] = await Promise.all([
     db.task.findUnique({
       where: { id },
       include: {
@@ -66,8 +67,21 @@ export default async function TaskDetailPage({
       include: { task: { select: { id: true, title: true } } },
     }),
     db.timeEntry.aggregate({ _sum: { hours: true }, where: { taskId: id } }),
+    db.timeEntry.findMany({
+      where: { taskId: id },
+      include: { user: { select: { id: true, name: true, avatarPath: true } } },
+    }),
   ]);
   if (!task || task.deletedAt) notFound();
+
+  // Roll up who has logged how much time on this task, biggest contributor first.
+  const timeByUser = new Map<number, { user: { id: number; name: string; avatarPath: string | null }; hours: number }>();
+  for (const e of timeLogs) {
+    const cur = timeByUser.get(e.userId) ?? { user: e.user, hours: 0 };
+    cur.hours += e.hours;
+    timeByUser.set(e.userId, cur);
+  }
+  const timeRows = Array.from(timeByUser.values()).sort((a, b) => b.hours - a.hours);
 
   const runningStartedAt =
     activeTimer && activeTimer.taskId === task.id ? activeTimer.startedAt.toISOString() : null;
@@ -321,6 +335,36 @@ export default async function TaskDetailPage({
           runningStartedAt={runningStartedAt}
           otherTimer={otherTimer}
         />
+      )}
+
+      {timeRows.length > 0 && (
+        <div className="card p-6">
+          <h2 className="mb-4 flex items-baseline justify-between font-semibold">
+            <span>Time logged</span>
+            <span className="text-sm font-normal text-slate-400">{fmtHours(loggedHours)} total</span>
+          </h2>
+          <div className="space-y-3">
+            {timeRows.map((r) => {
+              const pct = loggedHours > 0 ? Math.round((r.hours / loggedHours) * 100) : 0;
+              return (
+                <div key={r.user.id} className="flex items-center gap-3">
+                  <UserAvatar user={r.user} size={28} />
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex items-baseline justify-between gap-2 text-sm">
+                      <span className="truncate font-medium">{r.user.name}</span>
+                      <span className="shrink-0 text-slate-500">
+                        {fmtHours(r.hours)} · {pct}%
+                      </span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full rounded-full bg-sky-500" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {!task.parentId && (
