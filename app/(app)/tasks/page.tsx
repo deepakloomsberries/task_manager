@@ -2,8 +2,9 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
-import { createTask, moveTask, setTaskStatus } from "@/lib/actions/tasks";
+import { createTask, moveTask } from "@/lib/actions/tasks";
 import Board, { type BoardTask } from "@/components/Board";
+import BulkTaskTable, { type ListRow } from "@/components/BulkTaskTable";
 import RememberTaskView from "@/components/RememberTaskView";
 import {
   TASK_STATUSES,
@@ -32,6 +33,8 @@ export default async function TasksPage({
     open?: string;
     overdue?: string;
     due?: string;
+    blocked?: string;
+    sort?: string;
   };
 }) {
   const user = await requireUser();
@@ -51,6 +54,10 @@ export default async function TasksPage({
     where.status = { not: "DONE" };
     where.dueDate = { gte: new Date(), lt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) };
   }
+  // Only tasks with at least one unfinished blocker.
+  if (searchParams.blocked) {
+    where.blockedBy = { some: { blocker: { status: { not: "DONE" }, deletedAt: null } } };
+  }
   if (searchParams.q) {
     const q = searchParams.q.trim();
     // Support searching by task ID, e.g. "TM-42", "#42" or plain "42".
@@ -60,16 +67,26 @@ export default async function TasksPage({
   }
   if (searchParams.tag) where.tags = { some: { tag: { name: searchParams.tag } } };
 
+  const orderBy =
+    searchParams.sort === "updated"
+      ? [{ updatedAt: "desc" as const }]
+      : searchParams.sort === "created"
+        ? [{ createdAt: "desc" as const }]
+        : searchParams.sort === "title"
+          ? [{ title: "asc" as const }]
+          : [{ status: "asc" as const }, { dueDate: "asc" as const }, { createdAt: "desc" as const }];
+
   const [tasks, users, projects, allTags] = await Promise.all([
     db.task.findMany({
       where,
-      orderBy: [{ status: "asc" }, { dueDate: "asc" }, { createdAt: "desc" }],
+      orderBy,
       include: {
         project: true,
         assignee: true,
         parent: true,
         tags: { include: { tag: true } },
         subtasks: { where: { deletedAt: null }, select: { id: true, status: true } },
+        blockedBy: { include: { blocker: { select: { status: true } } } },
       },
     }),
     db.user.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
@@ -111,7 +128,31 @@ export default async function TasksPage({
       projectName: t.project?.name ?? null,
       dueLabel: t.dueDate ? fmtDate(t.dueDate) : null,
       overdue: isOverdue(t),
+      blocked: t.blockedBy.some((d) => d.blocker.status !== "DONE"),
       canMove: t.assigneeId === user.id || canManage,
+      tags: t.tags.map(({ tag }) => ({ name: tag.name, badge: tagBadge(tag.color) })),
+    };
+  });
+
+  const listRows: ListRow[] = tasks.map((t) => {
+    const status = lookup(TASK_STATUSES, t.status);
+    const priority = lookup(TASK_PRIORITIES, t.priority);
+    return {
+      id: t.id,
+      title: t.title,
+      statusValue: t.status,
+      statusLabel: status.label,
+      statusBadge: status.badge,
+      priorityLabel: priority.label,
+      priorityBadge: priority.badge,
+      projectName: t.project?.name ?? null,
+      assigneeName: t.assignee?.name ?? null,
+      dueLabel: t.dueDate ? fmtDate(t.dueDate) : null,
+      overdue: isOverdue(t),
+      blocked: t.blockedBy.some((d) => d.blocker.status !== "DONE"),
+      subDone: t.subtasks.filter((s) => s.status === "DONE").length,
+      subTotal: t.subtasks.length,
+      parentTitle: t.parent?.title ?? null,
       tags: t.tags.map(({ tag }) => ({ name: tag.name, badge: tagBadge(tag.color) })),
     };
   });
@@ -164,6 +205,16 @@ export default async function TasksPage({
         >
           Assigned to me
         </Link>
+        <Link
+          href={`/tasks?blocked=1&view=${viewParam}`}
+          className={`rounded-full px-3 py-1 text-xs font-medium ${
+            searchParams.blocked
+              ? "bg-red-600 text-white"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+          }`}
+        >
+          ⛔ Blocked
+        </Link>
       </div>
 
       {showNew && (
@@ -211,8 +262,21 @@ export default async function TasksPage({
               </select>
             </div>
             <div>
+              <label className="label">Start date</label>
+              <input name="startDate" type="date" className="input" />
+            </div>
+            <div>
               <label className="label">Due date</label>
               <input name="dueDate" type="date" className="input" />
+            </div>
+            <div>
+              <label className="label">Repeat</label>
+              <select name="recurrence" defaultValue="" className="input">
+                <option value="">Does not repeat</option>
+                <option value="DAILY">Daily</option>
+                <option value="WEEKLY">Weekly</option>
+                <option value="MONTHLY">Monthly</option>
+              </select>
             </div>
             <div className="md:col-span-2">
               <button type="submit" className="btn-primary">
@@ -276,6 +340,15 @@ export default async function TasksPage({
             </select>
           </div>
         )}
+        <div>
+          <label className="label">Sort</label>
+          <select name="sort" defaultValue={searchParams.sort ?? ""} className="input">
+            <option value="">Default (status · due)</option>
+            <option value="updated">Recently updated</option>
+            <option value="created">Recently created</option>
+            <option value="title">Title (A–Z)</option>
+          </select>
+        </div>
         <button type="submit" className="btn-primary">
           Apply filters
         </button>
@@ -291,92 +364,7 @@ export default async function TasksPage({
       {boardView ? (
         <Board columns={TASK_STATUSES} tasks={boardTasks} moveAction={moveTask} />
       ) : (
-        <div className="card overflow-x-auto">
-          <table className="w-full min-w-[760px]">
-            <thead className="border-b border-slate-200 bg-slate-50">
-              <tr>
-                <th className="th w-10"></th>
-                <th className="th">Task</th>
-                <th className="th">Project</th>
-                <th className="th">Assignee</th>
-                <th className="th">Priority</th>
-                <th className="th">Status</th>
-                <th className="th">Due</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {tasks.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="td py-10 text-center text-slate-400">
-                    No tasks match your filters.
-                  </td>
-                </tr>
-              )}
-              {tasks.map((t) => {
-                const status = lookup(TASK_STATUSES, t.status);
-                const priority = lookup(TASK_PRIORITIES, t.priority);
-                const doneSubs = t.subtasks.filter((s) => s.status === "DONE").length;
-                return (
-                  <tr key={t.id} className="hover:bg-slate-50">
-                    <td className="td">
-                      <form action={setTaskStatus}>
-                        <input type="hidden" name="id" value={t.id} />
-                        <input type="hidden" name="status" value={t.status === "DONE" ? "TODO" : "DONE"} />
-                        <input type="hidden" name="back" value="/tasks" />
-                        <button
-                          type="submit"
-                          title={t.status === "DONE" ? "Reopen task" : "Mark as done"}
-                          className={`flex h-5 w-5 items-center justify-center rounded-full border-2 text-xs transition-colors ${
-                            t.status === "DONE"
-                              ? "border-green-500 bg-green-500 text-white"
-                              : "border-slate-300 text-transparent hover:border-green-500 hover:bg-green-500 hover:text-white"
-                          }`}
-                        >
-                          ✓
-                        </button>
-                      </form>
-                    </td>
-                    <td className="td">
-                      <Link href={`/tasks/${t.id}`} className="font-medium text-sky-700 hover:underline">
-                        {t.title}
-                      </Link>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="font-mono text-[10px] text-slate-400">TM-{t.id}</span>
-                        {t.parent && (
-                          <span className="text-xs text-slate-400">↳ {t.parent.title}</span>
-                        )}
-                        {t.subtasks.length > 0 && (
-                          <span className="text-xs text-slate-400">
-                            {doneSubs}/{t.subtasks.length} subtasks
-                          </span>
-                        )}
-                        {t.tags.map(({ tag }) => (
-                          <span
-                            key={tag.id}
-                            className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${tagBadge(tag.color)}`}
-                          >
-                            {tag.name}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="td text-slate-600">{t.project?.name ?? "—"}</td>
-                    <td className="td text-slate-600">{t.assignee?.name ?? "—"}</td>
-                    <td className="td">
-                      <span className={`badge ${priority.badge}`}>{priority.label}</span>
-                    </td>
-                    <td className="td">
-                      <span className={`badge ${status.badge}`}>{status.label}</span>
-                    </td>
-                    <td className={`td ${isOverdue(t) ? "font-semibold text-red-600" : "text-slate-600"}`}>
-                      {fmtDate(t.dueDate)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <BulkTaskTable rows={listRows} users={users} projects={projects} back={listHref} />
       )}
     </div>
   );

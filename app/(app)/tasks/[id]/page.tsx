@@ -9,6 +9,8 @@ import {
   addComment,
   addSubtask,
   sendTaskReminder,
+  addTaskDependency,
+  removeTaskDependency,
 } from "@/lib/actions/tasks";
 import { deleteAttachment } from "@/lib/actions/files";
 import PasteAttachment from "@/components/PasteAttachment";
@@ -41,7 +43,7 @@ export default async function TaskDetailPage({
   const id = Number(params.id);
   if (!id) notFound();
 
-  const [task, users, projects, activeTimer, loggedAgg, timeLogs] = await Promise.all([
+  const [task, users, projects, activeTimer, loggedAgg, timeLogs, allTasks] = await Promise.all([
     db.task.findUnique({
       where: { id },
       include: {
@@ -58,6 +60,8 @@ export default async function TaskDetailPage({
         },
         tags: { include: { tag: true } },
         activities: { include: { actor: true }, orderBy: { createdAt: "desc" }, take: 30 },
+        blockedBy: { include: { blocker: { select: { id: true, title: true, status: true } } } },
+        blocking: { include: { task: { select: { id: true, title: true, status: true } } } },
       },
     }),
     db.user.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
@@ -71,8 +75,22 @@ export default async function TaskDetailPage({
       where: { taskId: id },
       include: { user: { select: { id: true, name: true, avatarPath: true } } },
     }),
+    db.task.findMany({
+      where: { deletedAt: null, id: { not: id } },
+      select: { id: true, title: true },
+      orderBy: { title: "asc" },
+      take: 200,
+    }),
   ]);
   if (!task || task.deletedAt) notFound();
+
+  // Dependency edges.
+  const blockers = task.blockedBy.map((d) => d.blocker);
+  const blocking = task.blocking.map((d) => d.task);
+  const openBlockers = blockers.filter((b) => b.status !== "DONE");
+  const isBlocked = openBlockers.length > 0;
+  const blockerIds = new Set(blockers.map((b) => b.id));
+  const dependencyOptions = allTasks.filter((t) => !blockerIds.has(t.id));
 
   // Roll up who has logged how much time on this task, biggest contributor first.
   const timeByUser = new Map<number, { user: { id: number; name: string; avatarPath: string | null }; hours: number }>();
@@ -99,6 +117,9 @@ export default async function TaskDetailPage({
   const canEdit = isManagerOrAdmin(user.role) || task.createdById === user.id;
   const canProgress = canEdit || task.assigneeId === user.id;
   const canDelete = canEdit;
+  // Approval-required users (e.g. designers) can move up to Review only; the
+  // task owner/manager approves completion (Review → Done).
+  const canCompleteDone = canEdit || !user.requiresApproval;
   const editing = searchParams.edit === "1" && canEdit;
   const taskCode = `TM-${task.id}`;
 
@@ -111,7 +132,15 @@ export default async function TaskDetailPage({
           ? { text: "Assign this task to someone before sending a reminder.", error: true }
           : searchParams.error === "forbidden"
             ? { text: "Only the person who assigned this task can do that.", error: true }
-            : null;
+            : searchParams.error === "cycle"
+              ? { text: "That task already depends on this one — adding it would create a loop.", error: true }
+              : searchParams.error === "self-block"
+                ? { text: "A task can't block itself.", error: true }
+                : searchParams.error === "blocked"
+                  ? { text: "This task can't be completed yet — finish the tasks blocking it first.", error: true }
+                  : searchParams.error === "needs-approval"
+                    ? { text: "Send this task to Review — its owner will approve completion.", error: true }
+                    : null;
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
@@ -144,6 +173,19 @@ export default async function TaskDetailPage({
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <span className={`badge ${status.badge}`}>{status.label}</span>
                   <span className={`badge ${priority.badge}`}>{priority.label}</span>
+                  {isBlocked && (
+                    <span
+                      className="badge bg-red-100 text-red-700"
+                      title={`Blocked by ${openBlockers.length} unfinished task(s)`}
+                    >
+                      ⛔ Blocked
+                    </span>
+                  )}
+                  {task.recurrence && (
+                    <span className="badge bg-indigo-100 text-indigo-700" title="Recreates when completed">
+                      🔁 {task.recurrence.charAt(0) + task.recurrence.slice(1).toLowerCase()}
+                    </span>
+                  )}
                   {task.tags.map(({ tag }) => (
                     <span key={tag.id} className={`badge ${tagBadge(tag.color)}`}>
                       {tag.name}
@@ -236,6 +278,10 @@ export default async function TaskDetailPage({
                 <dd className="mt-0.5 font-medium">{task.assignee?.name ?? "Unassigned"}</dd>
               </div>
               <div>
+                <dt className="text-xs text-slate-500">Start date</dt>
+                <dd className="mt-0.5 font-medium">{fmtDate(task.startDate)}</dd>
+              </div>
+              <div>
                 <dt className="text-xs text-slate-500">Due date</dt>
                 <dd className="mt-0.5 font-medium">
                   {fmtDate(task.dueDate)}
@@ -251,15 +297,50 @@ export default async function TaskDetailPage({
               <div className="mt-6 border-t border-slate-100 pt-4">
                 <div className="mb-2 text-xs font-medium text-slate-500">Move to</div>
                 <div className="flex flex-wrap gap-2">
-                  {TASK_STATUSES.filter((s) => s.value !== task.status).map((s) => (
-                    <form key={s.value} action={setTaskStatus}>
-                      <input type="hidden" name="id" value={task.id} />
-                      <input type="hidden" name="status" value={s.value} />
-                      <button type="submit" className="btn-secondary !py-1.5 text-xs">
-                        {s.label}
-                      </button>
-                    </form>
-                  ))}
+                  {TASK_STATUSES.filter((s) => s.value !== task.status).map((s) => {
+                    const isDone = s.value === "DONE";
+                    if (isDone && !canCompleteDone) {
+                      return (
+                        <button
+                          key={s.value}
+                          type="button"
+                          disabled
+                          title="Only the task owner can mark this Done — send it to Review for approval."
+                          className="btn-secondary !py-1.5 text-xs cursor-not-allowed opacity-50"
+                        >
+                          🔒 Done — owner approves
+                        </button>
+                      );
+                    }
+                    if (isDone && isBlocked) {
+                      return (
+                        <button
+                          key={s.value}
+                          type="button"
+                          disabled
+                          title={`Blocked by ${openBlockers.length} unfinished task(s)`}
+                          className="btn-secondary !py-1.5 text-xs cursor-not-allowed opacity-50"
+                        >
+                          🔒 Done
+                        </button>
+                      );
+                    }
+                    // When an owner is looking at a task in Review, frame Done as an approval.
+                    const label =
+                      isDone && task.status === "REVIEW" && canEdit ? "✓ Approve (Done)" : s.label;
+                    return (
+                      <form key={s.value} action={setTaskStatus}>
+                        <input type="hidden" name="id" value={task.id} />
+                        <input type="hidden" name="status" value={s.value} />
+                        <button
+                          type="submit"
+                          className={`!py-1.5 text-xs ${isDone && task.status === "REVIEW" && canEdit ? "btn-primary" : "btn-secondary"}`}
+                        >
+                          {label}
+                        </button>
+                      </form>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -313,8 +394,21 @@ export default async function TaskDetailPage({
               </select>
             </div>
             <div>
+              <label className="label">Start date</label>
+              <input name="startDate" type="date" defaultValue={toInputDate(task.startDate)} className="input" />
+            </div>
+            <div>
               <label className="label">Due date</label>
               <input name="dueDate" type="date" defaultValue={toInputDate(task.dueDate)} className="input" />
+            </div>
+            <div>
+              <label className="label">Repeat</label>
+              <select name="recurrence" defaultValue={task.recurrence ?? ""} className="input">
+                <option value="">Does not repeat</option>
+                <option value="DAILY">Daily</option>
+                <option value="WEEKLY">Weekly</option>
+                <option value="MONTHLY">Monthly</option>
+              </select>
             </div>
             <div className="flex gap-2 md:col-span-2">
               <button type="submit" className="btn-primary">
@@ -364,6 +458,88 @@ export default async function TaskDetailPage({
               );
             })}
           </div>
+        </div>
+      )}
+
+      {(canEdit || blockers.length > 0 || blocking.length > 0) && (
+        <div className="card p-6">
+          <h2 className="mb-4 font-semibold">Dependencies</h2>
+
+          <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Blocked by
+          </div>
+          {blockers.length === 0 ? (
+            <p className="mb-3 text-sm text-slate-400">Nothing is blocking this task.</p>
+          ) : (
+            <div className="mb-3 space-y-2">
+              {blockers.map((b) => {
+                const bs = lookup(TASK_STATUSES, b.status);
+                const done = b.status === "DONE";
+                return (
+                  <div key={b.id} className="flex items-center gap-3">
+                    <span title={done ? "Done" : "Not done"}>{done ? "✅" : "⛔"}</span>
+                    <Link
+                      href={`/tasks/${b.id}`}
+                      className={`flex-1 text-sm hover:text-sky-700 ${done ? "text-slate-400 line-through" : "font-medium"}`}
+                    >
+                      {b.title}
+                    </Link>
+                    <span className={`badge ${bs.badge}`}>{bs.label}</span>
+                    {canEdit && (
+                      <form action={removeTaskDependency}>
+                        <input type="hidden" name="taskId" value={task.id} />
+                        <input type="hidden" name="blockerId" value={b.id} />
+                        <button type="submit" title="Remove blocker" className="text-slate-400 hover:text-red-600">
+                          ✕
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {canEdit && dependencyOptions.length > 0 && (
+            <form action={addTaskDependency} className="mb-5 flex flex-col gap-2 sm:flex-row">
+              <input type="hidden" name="taskId" value={task.id} />
+              <select name="blockerId" required defaultValue="" className="input flex-1">
+                <option value="" disabled>
+                  Add a task this one is blocked by…
+                </option>
+                {dependencyOptions.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.title}
+                  </option>
+                ))}
+              </select>
+              <button type="submit" className="btn-secondary">
+                Add blocker
+              </button>
+            </form>
+          )}
+
+          {blocking.length > 0 && (
+            <>
+              <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Blocking
+              </div>
+              <div className="space-y-2">
+                {blocking.map((b) => {
+                  const bs = lookup(TASK_STATUSES, b.status);
+                  return (
+                    <div key={b.id} className="flex items-center gap-3">
+                      <span>↳</span>
+                      <Link href={`/tasks/${b.id}`} className="flex-1 text-sm font-medium hover:text-sky-700">
+                        {b.title}
+                      </Link>
+                      <span className={`badge ${bs.badge}`}>{bs.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
       )}
 

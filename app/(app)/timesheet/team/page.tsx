@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import RangePicker from "@/components/RangePicker";
 import UserAvatar from "@/components/UserAvatar";
+import { approveTimesheet, rejectTimesheet, approveAllTimesheets } from "@/lib/actions/time";
 import { fmtDate, fmtHours, toInputDate } from "@/lib/ui";
 import { rangeBounds } from "@/lib/timerange";
 
@@ -19,7 +20,7 @@ export default async function TeamTimesheetPage({
 
   const { from, to, label, key } = rangeBounds(searchParams.range ?? "30d", searchParams.from, searchParams.to);
 
-  const [users, entries] = await Promise.all([
+  const [users, entries, pending] = await Promise.all([
     db.user.findMany({
       where: { active: true },
       include: { department: true },
@@ -33,6 +34,11 @@ export default async function TeamTimesheetPage({
         project: true,
       },
       orderBy: { date: "desc" },
+    }),
+    db.timesheetSubmission.findMany({
+      where: { status: "SUBMITTED" },
+      include: { user: { select: { id: true, name: true, avatarPath: true } } },
+      orderBy: { submittedAt: "asc" },
     }),
   ]);
 
@@ -59,6 +65,7 @@ export default async function TeamTimesheetPage({
     if (searchParams.to) viewParams.set("to", searchParams.to);
   }
   const viewQuery = viewParams.toString();
+  const backHref = viewQuery ? `/timesheet/team?${viewQuery}` : "/timesheet/team";
   const rowHref = (id: number) => {
     const q = new URLSearchParams(viewQuery);
     q.set("user", String(id));
@@ -111,6 +118,62 @@ export default async function TeamTimesheetPage({
         fromParam={searchParams.from}
         toParam={searchParams.to}
       />
+
+      {pending.length > 0 && (
+        <div className="card border-amber-200 dark:border-amber-900/60">
+          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+            <h2 className="flex items-center gap-2 font-semibold">
+              ⏳ Pending approvals
+              <span className="badge bg-amber-100 text-amber-700">{pending.length}</span>
+            </h2>
+            {pending.length > 1 && (
+              <form action={approveAllTimesheets}>
+                <input type="hidden" name="back" value={backHref} />
+                <button type="submit" className="btn-primary !py-1.5 text-xs">
+                  Approve all ({pending.length})
+                </button>
+              </form>
+            )}
+          </div>
+          <div className="divide-y divide-slate-100">
+            {pending.map((s) => {
+              const weekEnd = new Date(s.weekStart);
+              weekEnd.setDate(weekEnd.getDate() + 6);
+              return (
+                <div key={s.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+                  <UserAvatar user={s.user} size={32} />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium">{s.user.name}</div>
+                    <div className="text-xs text-slate-500">
+                      Week of {fmtDate(s.weekStart)} – {fmtDate(weekEnd)} · {fmtHours(s.totalHours)} ·
+                      submitted {fmtDate(s.submittedAt)}
+                    </div>
+                  </div>
+                  <form action={approveTimesheet}>
+                    <input type="hidden" name="id" value={s.id} />
+                    <input type="hidden" name="back" value={backHref} />
+                    <button type="submit" className="btn-primary !py-1.5 text-xs">
+                      Approve
+                    </button>
+                  </form>
+                  <form action={rejectTimesheet} className="flex items-center gap-1.5">
+                    <input type="hidden" name="id" value={s.id} />
+                    <input type="hidden" name="back" value={backHref} />
+                    <input
+                      name="note"
+                      placeholder="Reason (optional)"
+                      className="input !w-40 !py-1.5 text-xs"
+                    />
+                    <button type="submit" className="btn-secondary !py-1.5 text-xs">
+                      Request changes
+                    </button>
+                  </form>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="card overflow-x-auto">
         <table className="w-full min-w-[720px]">

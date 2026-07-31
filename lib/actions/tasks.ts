@@ -9,16 +9,29 @@ import { fmtDate, lookup, TASK_STATUSES } from "@/lib/ui";
 
 const STATUSES = ["TODO", "IN_PROGRESS", "REVIEW", "DONE"];
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"];
+const RECURRENCES = ["DAILY", "WEEKLY", "MONTHLY"];
 
 function parseTaskForm(formData: FormData) {
+  const recurrenceRaw = String(formData.get("recurrence") ?? "");
   return {
     title: String(formData.get("title") ?? "").trim(),
     description: String(formData.get("description") ?? "").trim() || null,
     priority: String(formData.get("priority") ?? "MEDIUM"),
     projectId: formData.get("projectId") ? Number(formData.get("projectId")) : null,
     assigneeId: formData.get("assigneeId") ? Number(formData.get("assigneeId")) : null,
+    startDate: formData.get("startDate") ? new Date(String(formData.get("startDate"))) : null,
     dueDate: formData.get("dueDate") ? new Date(String(formData.get("dueDate"))) : null,
+    recurrence: RECURRENCES.includes(recurrenceRaw) ? recurrenceRaw : null,
   };
+}
+
+/** Advances a date by one recurrence interval. */
+function advanceDate(date: Date, recurrence: string) {
+  const d = new Date(date);
+  if (recurrence === "DAILY") d.setDate(d.getDate() + 1);
+  else if (recurrence === "WEEKLY") d.setDate(d.getDate() + 7);
+  else if (recurrence === "MONTHLY") d.setMonth(d.getMonth() + 1);
+  return d;
 }
 
 /**
@@ -139,15 +152,32 @@ export async function updateTask(formData: FormData) {
   redirect(`/tasks/${id}`);
 }
 
+/** True when the task still has at least one unfinished blocker. */
+async function hasOpenBlockers(taskId: number) {
+  const open = await db.taskDependency.count({
+    where: { taskId, blocker: { status: { not: "DONE" }, deletedAt: null } },
+  });
+  return open > 0;
+}
+
 async function changeStatus(
-  user: { id: number; name: string; role: string },
+  user: { id: number; name: string; role: string; requiresApproval?: boolean },
   taskId: number,
   status: string
-) {
-  if (!STATUSES.includes(status)) return;
+): Promise<"ok" | "noop" | "blocked" | "needs-approval"> {
+  if (!STATUSES.includes(status)) return "noop";
   const task = await db.task.findUnique({ where: { id: taskId } });
-  if (!task || task.deletedAt || !canChangeStatus(user, task)) return;
-  if (task.status === status) return;
+  if (!task || task.deletedAt || !canChangeStatus(user, task)) return "noop";
+  if (task.status === status) return "noop";
+
+  if (status === "DONE") {
+    // Approval-required users (e.g. designers) can't complete their own work —
+    // they send it to Review and the task owner/manager approves.
+    const isOwnerOrManager = isManagerOrAdmin(user.role) || task.createdById === user.id;
+    if (!isOwnerOrManager && user.requiresApproval) return "needs-approval";
+    // Can't complete a task while something it depends on is still open.
+    if (await hasOpenBlockers(taskId)) return "blocked";
+  }
 
   await db.task.update({
     where: { id: taskId },
@@ -157,14 +187,66 @@ async function changeStatus(
   const to = lookup(TASK_STATUSES, status).label;
   await logActivity(taskId, user.id, "status", `${from} → ${to}`);
 
-  // Tell the task creator when someone else completes their task.
-  if (status === "DONE" && task.createdById !== user.id) {
+  // Sent for review → ping the task owner so they can approve completion.
+  if (status === "REVIEW" && task.createdById !== user.id) {
     await pushNotification(
       task.createdById,
-      `${user.name} completed: ${task.title}`,
+      `${user.name} sent "${task.title}" for your review`,
       `/tasks/${taskId}`
     );
   }
+
+  if (status === "DONE") {
+    // Tell the task creator when someone else completes their task.
+    if (task.createdById !== user.id) {
+      await pushNotification(
+        task.createdById,
+        `${user.name} completed: ${task.title}`,
+        `/tasks/${taskId}`
+      );
+    }
+    // Notify assignees of tasks this one was blocking that are now unblocked.
+    const dependents = await db.taskDependency.findMany({
+      where: { blockerId: taskId },
+      include: { task: { select: { id: true, title: true, assigneeId: true, deletedAt: true } } },
+    });
+    for (const d of dependents) {
+      if (!d.task || d.task.deletedAt || !d.task.assigneeId) continue;
+      if (d.task.assigneeId === user.id) continue;
+      if (await hasOpenBlockers(d.task.id)) continue; // still blocked by something else
+      await pushNotification(
+        d.task.assigneeId,
+        `"${d.task.title}" is unblocked and ready to start`,
+        `/tasks/${d.task.id}`
+      );
+    }
+
+    // Recurring tasks spawn their next occurrence when completed.
+    if (task.recurrence && task.dueDate && !task.parentId) {
+      const next = await db.task.create({
+        data: {
+          title: task.title,
+          description: task.description,
+          priority: task.priority,
+          projectId: task.projectId,
+          assigneeId: task.assigneeId,
+          createdById: task.createdById,
+          startDate: task.startDate ? advanceDate(task.startDate, task.recurrence) : null,
+          dueDate: advanceDate(task.dueDate, task.recurrence),
+          recurrence: task.recurrence,
+        },
+      });
+      await logActivity(next.id, user.id, "created");
+      if (next.assigneeId && next.assigneeId !== user.id) {
+        await pushNotification(
+          next.assigneeId,
+          `Recurring task ready: ${next.title}`,
+          `/tasks/${next.id}`
+        );
+      }
+    }
+  }
+  return "ok";
 }
 
 export async function setTaskStatus(formData: FormData) {
@@ -173,8 +255,11 @@ export async function setTaskStatus(formData: FormData) {
   const status = String(formData.get("status") ?? "");
   const back = String(formData.get("back") ?? `/tasks/${id}`);
 
-  await changeStatus(user, id, status);
+  const result = await changeStatus(user, id, status);
   await revalidateTaskViews(id);
+  if (result === "blocked" || result === "needs-approval") {
+    redirect(`${back}${back.includes("?") ? "&" : "?"}error=${result}`);
+  }
   redirect(back);
 }
 
@@ -296,4 +381,138 @@ export async function addComment(formData: FormData) {
 
   revalidatePath(`/tasks/${taskId}`);
   redirect(`/tasks/${taskId}`);
+}
+
+// --- Task dependencies (blockers) ------------------------------------------
+
+/** Marks `taskId` as blocked by `blockerId` (blocker must finish first). */
+export async function addTaskDependency(formData: FormData) {
+  const user = await requireUser();
+  const taskId = Number(formData.get("taskId"));
+  const blockerId = Number(formData.get("blockerId"));
+  if (!taskId || !blockerId) redirect(`/tasks/${taskId || ""}`);
+  if (taskId === blockerId) redirect(`/tasks/${taskId}?error=self-block`);
+
+  const [task, blocker] = await Promise.all([
+    db.task.findFirst({ where: { id: taskId, deletedAt: null } }),
+    db.task.findFirst({ where: { id: blockerId, deletedAt: null } }),
+  ]);
+  if (!task || !blocker) redirect(`/tasks/${taskId}`);
+  if (!canEditTask(user, task)) redirect(`/tasks/${taskId}?error=forbidden`);
+
+  // Reject a direct cycle: A can't be blocked by B if A already blocks B.
+  const reverse = await db.taskDependency.findUnique({
+    where: { taskId_blockerId: { taskId: blockerId, blockerId: taskId } },
+  });
+  if (reverse) redirect(`/tasks/${taskId}?error=cycle`);
+
+  await db.taskDependency.upsert({
+    where: { taskId_blockerId: { taskId, blockerId } },
+    create: { taskId, blockerId },
+    update: {},
+  });
+  await logActivity(taskId, user.id, "details", `added blocker "${blocker.title}"`);
+  await revalidateTaskViews(taskId);
+  revalidatePath(`/tasks/${blockerId}`);
+  redirect(`/tasks/${taskId}`);
+}
+
+/** Removes a blocker relationship from `taskId`. */
+export async function removeTaskDependency(formData: FormData) {
+  const user = await requireUser();
+  const taskId = Number(formData.get("taskId"));
+  const blockerId = Number(formData.get("blockerId"));
+  if (!taskId || !blockerId) redirect(`/tasks/${taskId || ""}`);
+
+  const task = await db.task.findFirst({ where: { id: taskId } });
+  if (!task) redirect("/tasks");
+  if (!canEditTask(user, task)) redirect(`/tasks/${taskId}?error=forbidden`);
+
+  await db.taskDependency.deleteMany({ where: { taskId, blockerId } });
+  await revalidateTaskViews(taskId);
+  revalidatePath(`/tasks/${blockerId}`);
+  redirect(`/tasks/${taskId}`);
+}
+
+/** Moves a task's due date (used by the project timeline's drag-to-reschedule). */
+export async function rescheduleTask(taskId: number, dueISO: string | null) {
+  const user = await requireUser();
+  if (!taskId) return;
+  const task = await db.task.findUnique({ where: { id: taskId } });
+  if (!task || task.deletedAt || !canChangeStatus(user, task)) return;
+
+  const due = dueISO ? new Date(dueISO) : null;
+  await db.task.update({ where: { id: taskId }, data: { dueDate: due } });
+  await logActivity(
+    taskId,
+    user.id,
+    "due",
+    due ? `due date set to ${fmtDate(due)}` : "due date cleared"
+  );
+  await revalidateTaskViews(taskId);
+  if (task.projectId) revalidatePath(`/projects/${task.projectId}`);
+}
+
+// --- Bulk actions from the task list ---------------------------------------
+
+/**
+ * Applies one operation to many selected tasks at once. Each task is checked
+ * individually against the caller's permissions, so a bulk action only touches
+ * the tasks they're actually allowed to change.
+ */
+export async function bulkTaskAction(formData: FormData) {
+  const user = await requireUser();
+  const op = String(formData.get("op") ?? "");
+  const value = String(formData.get("value") ?? "").trim();
+  const back = String(formData.get("back") ?? "/tasks");
+  const ids = String(formData.get("ids") ?? "")
+    .split(",")
+    .map((s) => Number(s))
+    .filter((n) => Number.isFinite(n) && n > 0);
+
+  for (const id of ids) {
+    const task = await db.task.findUnique({ where: { id } });
+    if (!task || task.deletedAt) continue;
+
+    if (op === "status") {
+      if (STATUSES.includes(value) && canChangeStatus(user, task)) {
+        await changeStatus(user, id, value);
+      }
+      continue;
+    }
+
+    // The remaining operations edit task details — owner/manager only.
+    if (!canEditTask(user, task)) continue;
+
+    if (op === "assignee") {
+      const assigneeId = value ? Number(value) : null;
+      await db.task.update({ where: { id }, data: { assigneeId } });
+      if (assigneeId && assigneeId !== task.assigneeId) {
+        const assignee = await db.user.findUnique({ where: { id: assigneeId } });
+        if (assignee) {
+          await logActivity(id, user.id, "assignee", `assigned to ${assignee.name}`);
+          await notifyAssignment({
+            assignee,
+            task: { id: task.id, title: task.title, dueDate: task.dueDate, priority: task.priority },
+            actor: user,
+          });
+        }
+      }
+    } else if (op === "due") {
+      const dueDate = value ? new Date(value) : null;
+      await db.task.update({ where: { id }, data: { dueDate } });
+      await logActivity(id, user.id, "due", dueDate ? `due date set to ${fmtDate(dueDate)}` : "due date cleared");
+    } else if (op === "project") {
+      const projectId = value ? Number(value) : null;
+      await db.task.update({ where: { id }, data: { projectId } });
+    } else if (op === "delete") {
+      await db.task.updateMany({
+        where: { OR: [{ id }, { parentId: id }] },
+        data: { deletedAt: new Date() },
+      });
+    }
+  }
+
+  await revalidateTaskViews();
+  redirect(back);
 }

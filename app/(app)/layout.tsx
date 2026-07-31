@@ -8,6 +8,7 @@ import UserAvatar from "@/components/UserAvatar";
 import Heartbeat from "@/components/Heartbeat";
 import RunningTimerPill from "@/components/RunningTimerPill";
 import PushSetup from "@/components/PushSetup";
+import CommandPalette, { CommandButton } from "@/components/CommandPalette";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { logout } from "@/lib/actions/auth";
@@ -26,22 +27,29 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const endOfToday = new Date();
   endOfToday.setHours(23, 59, 59, 999);
 
-  const [unread, unreadMessages, activeTimer, myTasksDue] = await Promise.all([
-    db.notification.count({ where: { userId: user.id, read: false } }),
-    db.directMessage.count({ where: { recipientId: user.id, read: false } }),
-    db.taskTimer.findUnique({
-      where: { userId: user.id },
-      include: { task: { select: { id: true, title: true } } },
-    }),
-    db.task.count({
-      where: {
-        assigneeId: user.id,
-        deletedAt: null,
-        status: { not: "DONE" },
-        dueDate: { not: null, lte: endOfToday },
-      },
-    }),
-  ]);
+  const [unread, unreadMessages, activeTimer, myTasksDue, paletteUsers, paletteProjects] =
+    await Promise.all([
+      db.notification.count({ where: { userId: user.id, read: false } }),
+      db.directMessage.count({ where: { recipientId: user.id, read: false } }),
+      db.taskTimer.findUnique({
+        where: { userId: user.id },
+        include: { task: { select: { id: true, title: true } } },
+      }),
+      db.task.count({
+        where: {
+          assigneeId: user.id,
+          deletedAt: null,
+          status: { not: "DONE" },
+          dueDate: { not: null, lte: endOfToday },
+        },
+      }),
+      db.user.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+      db.project.findMany({
+        where: { status: { in: ["ACTIVE", "ON_HOLD"] } },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      }),
+    ]);
 
   const navBadges: Record<string, number> = {
     "/messages": unreadMessages,
@@ -55,17 +63,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="flex h-screen">
       <Heartbeat />
       <PushSetup />
+      <CommandPalette users={paletteUsers} projects={paletteProjects} />
       <Sidebar isAdmin={isAdmin} isManager={isManager} badges={navBadges} />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 sm:gap-4 sm:px-6 dark:border-slate-700 dark:bg-slate-800">
           <MobileSidebar isAdmin={isAdmin} isManager={isManager} badges={navBadges} />
-          <form action="/search" method="GET" className="max-w-md flex-1">
-            <input
-              name="q"
-              placeholder="Search…"
-              className="input !bg-slate-50"
-            />
-          </form>
+          <CommandButton />
           <div className="hidden flex-1 sm:block" />
           {activeTimer && (
             <RunningTimerPill

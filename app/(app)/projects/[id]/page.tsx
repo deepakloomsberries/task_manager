@@ -10,6 +10,7 @@ import {
 } from "@/lib/actions/projects";
 import { saveProjectAsTemplate } from "@/lib/actions/templates";
 import UserAvatar from "@/components/UserAvatar";
+import ProjectTimeline from "@/components/ProjectTimeline";
 import {
   PROJECT_STATUSES,
   TASK_STATUSES,
@@ -71,6 +72,18 @@ export default async function ProjectDetailPage({
     timeByUser.set(e.userId, cur);
   }
   const timeRows = Array.from(timeByUser.values()).sort((a, b) => b.hours - a.hours);
+
+  // Blocker edges for the timeline (which task waits on which).
+  const deps = taskIds.length
+    ? await db.taskDependency.findMany({
+        where: { taskId: { in: taskIds } },
+        include: { blocker: { select: { title: true, status: true } } },
+      })
+    : [];
+  const blockersByTask: Record<number, { title: string; status: string }[]> = {};
+  for (const d of deps) {
+    (blockersByTask[d.taskId] ??= []).push(d.blocker);
+  }
 
   const canManage = isManagerOrAdmin(user.role);
   const editing = searchParams.edit === "1" && canManage;
@@ -262,6 +275,23 @@ export default async function ProjectDetailPage({
             </form>
           )}
         </div>
+      </div>
+
+      <div className="card p-6">
+        <h2 className="mb-4 font-semibold">Timeline</h2>
+        <ProjectTimeline
+          tasks={project.tasks.map((t) => ({
+            id: t.id,
+            title: t.title,
+            status: t.status,
+            createdAt: t.createdAt,
+            startDate: t.startDate,
+            dueDate: t.dueDate,
+          }))}
+          blockersByTask={blockersByTask}
+          projectStart={project.createdAt}
+          canReschedule={canManage}
+        />
       </div>
 
       <div className="card p-6">

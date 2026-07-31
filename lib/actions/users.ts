@@ -22,6 +22,7 @@ export async function createUser(formData: FormData) {
     ? Number(formData.get("departmentId"))
     : null;
   const jobTitle = String(formData.get("jobTitle") ?? "").trim();
+  const requiresApproval = formData.get("requiresApproval") === "on";
 
   if (!email || !name || !ROLES.includes(role) || !companyId) {
     redirect("/users?error=invalid");
@@ -39,6 +40,7 @@ export async function createUser(formData: FormData) {
       companyId,
       departmentId: departmentId || null,
       jobTitle: jobTitle || null,
+      requiresApproval,
       passwordHash: await bcrypt.hash(password, 10),
       mustChangePassword: true,
     },
@@ -60,6 +62,7 @@ export async function updateUser(formData: FormData) {
     ? Number(formData.get("departmentId"))
     : null;
   const jobTitle = String(formData.get("jobTitle") ?? "").trim();
+  const requiresApproval = formData.get("requiresApproval") === "on";
 
   if (!id || !name || !ROLES.includes(role) || !companyId) redirect("/users?error=invalid");
   // An admin cannot demote themselves — prevents locking everyone out.
@@ -67,7 +70,14 @@ export async function updateUser(formData: FormData) {
 
   await db.user.update({
     where: { id },
-    data: { name, role, companyId, departmentId: departmentId || null, jobTitle: jobTitle || null },
+    data: {
+      name,
+      role,
+      companyId,
+      departmentId: departmentId || null,
+      jobTitle: jobTitle || null,
+      requiresApproval,
+    },
   });
   revalidatePath("/users");
   redirect("/users?updated=1");
