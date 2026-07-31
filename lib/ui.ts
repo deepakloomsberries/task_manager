@@ -147,6 +147,20 @@ export function lastSeenLabel(lastSeenAt: Date | string | null | undefined) {
   return `Last seen ${d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}`;
 }
 
+/**
+ * Formats a decimal hours value as human "Xh Ym" (e.g. 0.766… → "46m",
+ * 2.5 → "2h 30m"). Used for logged time so we never surface raw floats.
+ */
+export function fmtHours(hours: number | null | undefined) {
+  const totalMinutes = Math.round((hours ?? 0) * 60);
+  if (totalMinutes <= 0) return "0m";
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+}
+
 /** Formats a number of seconds as H:MM:SS (or M:SS under an hour) for timers. */
 export function fmtDuration(totalSeconds: number) {
   const s = Math.max(0, Math.floor(totalSeconds));

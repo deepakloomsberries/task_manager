@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { createTimeEntry, deleteTimeEntry } from "@/lib/actions/time";
 import ActiveTimerBanner from "@/components/ActiveTimerBanner";
-import { fmtDate, toInputDate } from "@/lib/ui";
+import { fmtDate, toInputDate, fmtHours } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -49,11 +49,11 @@ export default async function TimesheetPage() {
         </div>
         <div className="flex gap-6 text-right">
           <div>
-            <div className="text-2xl font-bold text-sky-600">{weekHours.toFixed(1)}h</div>
+            <div className="text-2xl font-bold text-sky-600">{fmtHours(weekHours)}</div>
             <div className="text-xs text-slate-500">This week</div>
           </div>
           <div>
-            <div className="text-2xl font-bold">{totalHours.toFixed(1)}h</div>
+            <div className="text-2xl font-bold">{fmtHours(totalHours)}</div>
             <div className="text-xs text-slate-500">Last 30 days</div>
           </div>
         </div>
@@ -82,7 +82,7 @@ export default async function TimesheetPage() {
             const isToday = i === 6;
             return (
               <div key={i} className="flex flex-1 flex-col items-center gap-1">
-                <span className="text-[10px] text-slate-500">{hours > 0 ? `${hours}h` : ""}</span>
+                <span className="text-[10px] text-slate-500">{hours > 0 ? fmtHours(hours) : ""}</span>
                 <div className="flex h-16 w-full items-end rounded bg-slate-100">
                   <div
                     className={`w-full rounded ${isToday ? "bg-sky-500" : "bg-sky-300"}`}
@@ -180,7 +180,7 @@ export default async function TimesheetPage() {
                 <td className="td">{fmtDate(e.date)}</td>
                 <td className="td font-medium">
                   <span className="inline-flex items-center gap-1.5">
-                    {e.hours}h
+                    {fmtHours(e.hours)}
                     {e.source === "timer" && (
                       <span
                         title="Tracked with the task timer"

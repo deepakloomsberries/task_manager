@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
-import { TASK_STATUSES } from "@/lib/ui";
+import { TASK_STATUSES, fmtHours } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -128,7 +128,7 @@ export default async function ReportsPage() {
                 <td className={`td ${r.overdue ? "font-semibold text-red-600" : ""}`}>
                   {r.overdue}
                 </td>
-                <td className="td">{r.hours.toFixed(1)}h</td>
+                <td className="td">{fmtHours(r.hours)}</td>
               </tr>
             ))}
           </tbody>
@@ -175,7 +175,7 @@ export default async function ReportsPage() {
                     <span className="text-xs text-slate-500">{r.pct}%</span>
                   </div>
                 </td>
-                <td className="td">{r.hours.toFixed(1)}h</td>
+                <td className="td">{fmtHours(r.hours)}</td>
               </tr>
             ))}
           </tbody>

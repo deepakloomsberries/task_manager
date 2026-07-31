@@ -1,15 +1,32 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { TASK_STATUSES, TASK_PRIORITIES, lookup, fmtDate, isOverdue } from "@/lib/ui";
+import UserAvatar from "@/components/UserAvatar";
+import {
+  TASK_STATUSES,
+  TASK_PRIORITIES,
+  lookup,
+  fmtDate,
+  isOverdue,
+  ONLINE_WINDOW_MS,
+} from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const user = await requireUser();
 
-  const [myOpen, myOverdue, myDueThisWeek, myDoneThisMonth, recentTasks, activeProjects] =
-    await Promise.all([
+  const onlineSince = new Date(Date.now() - ONLINE_WINDOW_MS);
+
+  const [
+    myOpen,
+    myOverdue,
+    myDueThisWeek,
+    myDoneThisMonth,
+    recentTasks,
+    activeProjects,
+    activeUsers,
+  ] = await Promise.all([
       db.task.count({ where: { assigneeId: user.id, status: { not: "DONE" }, deletedAt: null } }),
       db.task.count({
         where: {
@@ -50,13 +67,19 @@ export default async function DashboardPage() {
         take: 5,
         include: { company: true, _count: { select: { tasks: true } } },
       }),
+      db.user.findMany({
+        where: { active: true, id: { not: user.id }, lastSeenAt: { gte: onlineSince } },
+        orderBy: { lastSeenAt: "desc" },
+        take: 12,
+        select: { id: true, name: true, jobTitle: true, avatarPath: true, lastSeenAt: true },
+      }),
     ]);
 
   const stats = [
-    { label: "My open tasks", value: myOpen, color: "text-sky-600" },
-    { label: "Overdue", value: myOverdue, color: "text-red-600" },
-    { label: "Due in 7 days", value: myDueThisWeek, color: "text-amber-600" },
-    { label: "Completed this month", value: myDoneThisMonth, color: "text-green-600" },
+    { label: "My open tasks", value: myOpen, color: "text-sky-600", href: "/tasks?assignee=me&open=1" },
+    { label: "Overdue", value: myOverdue, color: "text-red-600", href: "/tasks?assignee=me&overdue=1" },
+    { label: "Due in 7 days", value: myDueThisWeek, color: "text-amber-600", href: "/tasks?assignee=me&due=week" },
+    { label: "Completed this month", value: myDoneThisMonth, color: "text-green-600", href: "/tasks?assignee=me&status=DONE" },
   ];
 
   return (
@@ -77,10 +100,14 @@ export default async function DashboardPage() {
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {stats.map((s) => (
-          <div key={s.label} className="card p-5">
+          <Link
+            key={s.label}
+            href={s.href}
+            className="card p-5 transition-shadow hover:shadow-md hover:ring-1 hover:ring-sky-200 dark:hover:ring-sky-900"
+          >
             <div className={`text-3xl font-bold ${s.color}`}>{s.value}</div>
             <div className="mt-1 text-sm text-slate-500">{s.label}</div>
-          </div>
+          </Link>
         ))}
       </div>
 
@@ -129,29 +156,63 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        <div className="card">
-          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-            <h2 className="font-semibold">Active projects</h2>
-            <Link href="/projects" className="text-sm text-sky-600 hover:underline">
-              View all
-            </Link>
-          </div>
-          <div className="divide-y divide-slate-100">
-            {activeProjects.length === 0 && (
-              <p className="px-5 py-8 text-center text-sm text-slate-400">No active projects.</p>
-            )}
-            {activeProjects.map((p) => (
-              <Link
-                key={p.id}
-                href={`/projects/${p.id}`}
-                className="block px-5 py-3 hover:bg-slate-50"
-              >
-                <div className="text-sm font-medium">{p.name}</div>
-                <div className="text-xs text-slate-500">
-                  {p.company.name} · {p._count.tasks} tasks
-                </div>
+        <div className="space-y-6">
+          <div className="card">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <h2 className="flex items-center gap-2 font-semibold">
+                <span className="h-2 w-2 rounded-full bg-green-500" />
+                Active now
+                <span className="text-sm font-normal text-slate-400">({activeUsers.length})</span>
+              </h2>
+              <Link href="/messages" className="text-sm text-sky-600 hover:underline">
+                Message
               </Link>
-            ))}
+            </div>
+            <div className="p-4">
+              {activeUsers.length === 0 ? (
+                <p className="py-4 text-center text-sm text-slate-400">No one else is online right now.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {activeUsers.map((u) => (
+                    <Link
+                      key={u.id}
+                      href={`/messages/${u.id}`}
+                      title={`Message ${u.name}${u.jobTitle ? ` · ${u.jobTitle}` : ""}`}
+                      className="flex items-center gap-2 rounded-full border border-slate-200 py-1 pl-1 pr-3 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-700/50"
+                    >
+                      <UserAvatar user={u} size={30} presence={u.lastSeenAt} />
+                      <span className="text-sm">{u.name.split(" ")[0]}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <h2 className="font-semibold">Active projects</h2>
+              <Link href="/projects" className="text-sm text-sky-600 hover:underline">
+                View all
+              </Link>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {activeProjects.length === 0 && (
+                <p className="px-5 py-8 text-center text-sm text-slate-400">No active projects.</p>
+              )}
+              {activeProjects.map((p) => (
+                <Link
+                  key={p.id}
+                  href={`/projects/${p.id}`}
+                  className="block px-5 py-3 hover:bg-slate-50"
+                >
+                  <div className="text-sm font-medium">{p.name}</div>
+                  <div className="text-xs text-slate-500">
+                    {p.company.name} · {p._count.tasks} tasks
+                  </div>
+                </Link>
+              ))}
+            </div>
           </div>
         </div>
       </div>

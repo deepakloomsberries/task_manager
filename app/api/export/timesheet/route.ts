@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
       e.date.toISOString().slice(0, 10),
       e.user.name,
       e.user.company.code,
-      e.hours,
+      Math.round(e.hours * 100) / 100,
       e.task?.title ?? "",
       e.project?.name ?? "",
       e.note ?? "",
