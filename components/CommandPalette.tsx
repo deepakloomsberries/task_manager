@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createTask } from "@/lib/actions/tasks";
+import DatePicker from "@/components/DatePicker";
 import { TASK_PRIORITIES } from "@/lib/ui";
 
 type Lite = { id: number; name: string };
@@ -274,7 +275,7 @@ function QuickAdd({
             </option>
           ))}
         </select>
-        <input name="dueDate" type="date" className="input" />
+        <DatePicker name="dueDate" placeholder="Due date" />
       </div>
       <div className="mt-3 flex justify-end">
         <button type="submit" className="btn-primary">

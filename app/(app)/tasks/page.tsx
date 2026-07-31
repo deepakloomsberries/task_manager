@@ -5,6 +5,7 @@ import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import { createTask, moveTask } from "@/lib/actions/tasks";
 import Board, { type BoardTask } from "@/components/Board";
 import BulkTaskTable, { type ListRow } from "@/components/BulkTaskTable";
+import DatePicker from "@/components/DatePicker";
 import RememberTaskView from "@/components/RememberTaskView";
 import {
   TASK_STATUSES,
@@ -263,11 +264,11 @@ export default async function TasksPage({
             </div>
             <div>
               <label className="label">Start date</label>
-              <input name="startDate" type="date" className="input" />
+              <DatePicker name="startDate" />
             </div>
             <div>
               <label className="label">Due date</label>
-              <input name="dueDate" type="date" className="input" />
+              <DatePicker name="dueDate" />
             </div>
             <div>
               <label className="label">Repeat</label>

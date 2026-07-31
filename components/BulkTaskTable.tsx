@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { setTaskStatus, bulkTaskAction } from "@/lib/actions/tasks";
+import DatePicker from "@/components/DatePicker";
 import { TASK_STATUSES } from "@/lib/ui";
 
 export type ListRow = {
@@ -99,7 +100,7 @@ export default function BulkTaskTable({
             <input type="hidden" name="ids" value={idsStr} />
             <input type="hidden" name="op" value="due" />
             <input type="hidden" name="back" value={back} />
-            <input type="date" name="value" className="input !w-auto !py-1.5 text-xs" />
+            <DatePicker name="value" className="!py-1.5 text-xs" placeholder="Due date" />
             <button type="submit" className="btn-secondary !py-1.5 text-xs">Set due</button>
           </form>
 
