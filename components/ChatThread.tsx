@@ -6,11 +6,14 @@ import UserAvatar from "@/components/UserAvatar";
 import { sendMessage } from "@/lib/actions/messages";
 import { isOnline, lastSeenLabel } from "@/lib/ui";
 
+type Att = { id: number; name: string; mimeType: string; size: number };
+
 type Msg = {
   id: number;
   body: string;
   senderId: number;
   createdAt: string;
+  attachments?: Att[];
   pending?: boolean;
   failed?: boolean;
 };
@@ -39,6 +42,48 @@ function timeLabel(iso: string) {
   return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
+function fmtSize(b: number) {
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+  return `${(b / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const isImage = (a: Att) => a.mimeType.startsWith("image/");
+
+function AttachmentList({ atts, mine }: { atts: Att[]; mine: boolean }) {
+  if (!atts.length) return null;
+  return (
+    <div className="mt-1 flex flex-col gap-1">
+      {atts.map((a) =>
+        isImage(a) ? (
+          <a key={a.id} href={`/api/files/${a.id}`} target="_blank" rel="noreferrer">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`/api/files/${a.id}`}
+              alt={a.name}
+              className="max-h-60 max-w-full rounded-lg object-cover"
+            />
+          </a>
+        ) : (
+          <a
+            key={a.id}
+            href={`/api/files/${a.id}?download=1`}
+            className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs ${
+              mine ? "bg-sky-700/40" : "bg-white/70 dark:bg-slate-800/70"
+            }`}
+          >
+            <span className="text-base">📎</span>
+            <span className="min-w-0">
+              <span className="block max-w-[12rem] truncate font-medium">{a.name}</span>
+              <span className="opacity-70">{fmtSize(a.size)}</span>
+            </span>
+          </a>
+        )
+      )}
+    </div>
+  );
+}
+
 export default function ChatThread({
   meId,
   other,
@@ -56,10 +101,13 @@ export default function ChatThread({
   const [lastReadMyId, setLastReadMyId] = useState(initialLastReadMyId);
   const [partnerLastSeen, setPartnerLastSeen] = useState<string | null>(initialPartnerLastSeenAt);
   const [text, setText] = useState("");
+  const [atts, setAtts] = useState<Att[]>([]);
+  const [uploading, setUploading] = useState(0);
   const [partnerTyping, setPartnerTyping] = useState(false);
   const [, forceTick] = useState(0);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const atBottomRef = useRef(true);
   const lastTypingPing = useRef(0);
   const messagesRef = useRef(messages);
@@ -76,14 +124,11 @@ export default function ChatThread({
     atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
   };
 
-  // Land at the newest message on first paint.
   useEffect(() => {
     scrollToBottom();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Merge helper — dedupes by id and drops an optimistic bubble once its real
-  // counterpart (same author + body) arrives from the server.
   const mergeIncoming = useCallback((incoming: Msg[]) => {
     if (incoming.length === 0) return;
     setMessages((prev) => {
@@ -92,7 +137,6 @@ export default function ChatThread({
       const pendings = prev.filter((m) => m.pending);
       for (const m of incoming) {
         if (byId.has(m.id)) continue;
-        // Reconcile against an optimistic bubble we already drew.
         const twin = pendings.find((p) => p.senderId === m.senderId && p.body === m.body);
         if (twin) {
           byId.delete(twin.id);
@@ -110,7 +154,6 @@ export default function ChatThread({
     });
   }, []);
 
-  // Poll for new messages, read receipts and presence.
   useEffect(() => {
     let active = true;
     const poll = async () => {
@@ -118,9 +161,7 @@ export default function ChatThread({
       const realIds = messagesRef.current.filter((m) => m.id > 0).map((m) => m.id);
       const after = realIds.length ? Math.max(...realIds) : 0;
       try {
-        const res = await fetch(`/api/messages/${other.id}?after=${after}`, {
-          cache: "no-store",
-        });
+        const res = await fetch(`/api/messages/${other.id}?after=${after}`, { cache: "no-store" });
         if (!res.ok || !active) return;
         const data = await res.json();
         mergeIncoming(data.messages as Msg[]);
@@ -142,14 +183,10 @@ export default function ChatThread({
     };
   }, [other.id, mergeIncoming]);
 
-  // Keep the view pinned to the newest message (or the typing bubble) when the
-  // user is already at the bottom.
   useEffect(() => {
     if (atBottomRef.current) scrollToBottom();
-  }, [messages, partnerTyping, scrollToBottom]);
+  }, [messages, partnerTyping, atts, scrollToBottom]);
 
-  // Let the other side know we're typing — throttled so it's at most one ping
-  // every couple of seconds no matter how fast someone types.
   const pingTyping = useCallback(() => {
     const now = Date.now();
     if (now - lastTypingPing.current < 2500) return;
@@ -157,29 +194,62 @@ export default function ChatThread({
     fetch(`/api/messages/${other.id}/typing`, { method: "POST", keepalive: true }).catch(() => {});
   }, [other.id]);
 
-  // Let the "Active now / last seen" label decay over time.
   useEffect(() => {
     const id = setInterval(() => forceTick((n) => n + 1), 30000);
     return () => clearInterval(id);
   }, []);
 
+  // Upload chosen / pasted / dropped files, then show them as pending chips.
+  const uploadFiles = useCallback((files: File[]) => {
+    for (const f of files) {
+      if (!f || f.size === 0) continue;
+      setUploading((u) => u + 1);
+      const fd = new FormData();
+      fd.append("file", f);
+      fetch("/api/messages/upload", { method: "POST", body: fd })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error("upload failed"))))
+        .then((a: Att) => setAtts((prev) => (prev.length >= 10 ? prev : [...prev, a])))
+        .catch(() => {})
+        .finally(() => setUploading((u) => u - 1));
+    }
+  }, []);
+
+  const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const files: File[] = [];
+    for (const it of Array.from(items)) {
+      if (it.kind === "file") {
+        const f = it.getAsFile();
+        if (f) files.push(f);
+      }
+    }
+    if (files.length) {
+      e.preventDefault();
+      uploadFiles(files);
+    }
+  };
+
   async function submit() {
     const body = text.trim();
-    if (!body) return;
+    if (!body && atts.length === 0) return;
+    const sending = atts;
     const tempId = -Date.now();
     const optimistic: Msg = {
       id: tempId,
       body,
       senderId: meId,
       createdAt: new Date().toISOString(),
+      attachments: sending,
       pending: true,
     };
     setMessages((prev) => [...prev, optimistic]);
     setText("");
+    setAtts([]);
     atBottomRef.current = true;
     requestAnimationFrame(() => scrollToBottom(true));
 
-    const res = await sendMessage(other.id, body);
+    const res = await sendMessage(other.id, body, sending.map((a) => a.id));
     if ("error" in res) {
       setMessages((prev) =>
         prev.map((m) => (m.id === tempId ? { ...m, pending: false, failed: true } : m))
@@ -192,7 +262,13 @@ export default function ChatThread({
       }
       return prev.map((m) =>
         m.id === tempId
-          ? { id: res.id, body: res.body, senderId: res.senderId, createdAt: res.createdAt }
+          ? {
+              id: res.id,
+              body: res.body,
+              senderId: res.senderId,
+              createdAt: res.createdAt,
+              attachments: res.attachments,
+            }
           : m
       );
     });
@@ -206,12 +282,9 @@ export default function ChatThread({
   }
 
   const online = isOnline(partnerLastSeen);
-  // The last message I sent (including a still-pending optimistic one) — this is
-  // where the "sending… / Delivered / Seen" receipt is shown, iMessage-style.
   let lastMineKey: number | null = null;
   for (const m of messages) if (m.senderId === meId) lastMineKey = m.id;
 
-  // Group consecutive messages by day for the date separators.
   const groups: { label: string; items: Msg[] }[] = [];
   for (const m of messages) {
     const label = dayLabel(m.createdAt);
@@ -220,8 +293,19 @@ export default function ChatThread({
     else groups.push({ label, items: [m] });
   }
 
+  const canSend = !!text.trim() || atts.length > 0;
+
   return (
-    <div className="mx-auto flex h-full max-w-3xl flex-col gap-3">
+    <div
+      className="mx-auto flex h-full max-w-3xl flex-col gap-3"
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        if (e.dataTransfer?.files?.length) {
+          e.preventDefault();
+          uploadFiles(Array.from(e.dataTransfer.files));
+        }
+      }}
+    >
       {/* Header */}
       <div className="card flex items-center gap-3 p-3">
         <Link href="/messages" className="rounded-lg px-1.5 py-1 text-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">
@@ -249,11 +333,7 @@ export default function ChatThread({
       </div>
 
       {/* Message list */}
-      <div
-        ref={scrollRef}
-        onScroll={onScroll}
-        className="card flex-1 space-y-4 overflow-y-auto p-4 sm:p-5"
-      >
+      <div ref={scrollRef} onScroll={onScroll} className="card flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
         {messages.length === 0 && (
           <p className="py-10 text-center text-sm text-slate-400">
             No messages yet. Say hello to {other.name.split(" ")[0]}.
@@ -282,9 +362,10 @@ export default function ChatThread({
                           : "rounded-bl-md bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-100"
                       }`}
                     >
-                      <p className="whitespace-pre-wrap text-sm">{m.body}</p>
+                      {m.body && <p className="whitespace-pre-wrap text-sm">{m.body}</p>}
+                      <AttachmentList atts={m.attachments ?? []} mine={mine} />
                     </div>
-                    <div className={`mt-0.5 flex items-center gap-1 px-1 text-[10px] ${mine ? "text-slate-400" : "text-slate-400"}`}>
+                    <div className="mt-0.5 flex items-center gap-1 px-1 text-[10px] text-slate-400">
                       <span>{timeLabel(m.createdAt)}</span>
                       {isLastMine && (
                         <span>
@@ -318,31 +399,85 @@ export default function ChatThread({
       </div>
 
       {/* Composer */}
-      <div className="card flex items-end gap-2 p-2.5">
-        <textarea
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            if (e.target.value.trim()) pingTyping();
-          }}
-          onKeyDown={onKeyDown}
-          rows={1}
-          maxLength={4000}
-          placeholder={`Message ${other.name.split(" ")[0]}…`}
-          className="input max-h-40 flex-1 resize-none !py-2.5"
-        />
-        <button
-          type="button"
-          onClick={submit}
-          disabled={!text.trim()}
-          className="btn-primary shrink-0 !rounded-xl disabled:cursor-not-allowed disabled:opacity-40"
-          aria-label="Send message"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m22 2-7 20-4-9-9-4Z" />
-            <path d="M22 2 11 13" />
-          </svg>
-        </button>
+      <div className="card p-2.5">
+        {(atts.length > 0 || uploading > 0) && (
+          <div className="mb-2 flex flex-wrap gap-2 border-b border-slate-100 pb-2 dark:border-slate-700">
+            {atts.map((a) => (
+              <div key={a.id} className="relative">
+                {isImage(a) ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={`/api/files/${a.id}`} alt={a.name} className="h-16 w-16 rounded-lg object-cover" />
+                ) : (
+                  <div className="flex h-16 w-32 items-center gap-1.5 rounded-lg bg-slate-100 px-2 text-[11px] dark:bg-slate-700">
+                    <span>📎</span>
+                    <span className="truncate">{a.name}</span>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setAtts((prev) => prev.filter((x) => x.id !== a.id))}
+                  className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-slate-700 text-xs text-white shadow"
+                  aria-label="Remove attachment"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            {uploading > 0 && (
+              <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-slate-100 text-[11px] text-slate-400 dark:bg-slate-700">
+                Uploading…
+              </div>
+            )}
+          </div>
+        )}
+        <div className="flex items-end gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files?.length) uploadFiles(Array.from(e.target.files));
+              e.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            title="Attach a file"
+            className="btn-secondary shrink-0 !rounded-xl !px-3"
+            aria-label="Attach a file"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+            </svg>
+          </button>
+          <textarea
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              if (e.target.value.trim()) pingTyping();
+            }}
+            onKeyDown={onKeyDown}
+            onPaste={onPaste}
+            rows={1}
+            maxLength={4000}
+            placeholder={`Message ${other.name.split(" ")[0]}… (paste a screenshot too)`}
+            className="input max-h-40 flex-1 resize-none !py-2.5"
+          />
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!canSend}
+            className="btn-primary shrink-0 !rounded-xl disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label="Send message"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m22 2-7 20-4-9-9-4Z" />
+              <path d="M22 2 11 13" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   );

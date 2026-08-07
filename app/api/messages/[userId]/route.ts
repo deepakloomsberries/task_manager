@@ -37,6 +37,9 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
       },
       orderBy: { createdAt: "asc" },
       take: 200,
+      include: {
+        attachments: { select: { id: true, originalName: true, mimeType: true, size: true }, orderBy: { id: "asc" } },
+      },
     }),
     // The highest id among OUR messages that the partner has already read.
     db.directMessage.findFirst({
@@ -53,6 +56,12 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
       body: m.body,
       senderId: m.senderId,
       createdAt: m.createdAt.toISOString(),
+      attachments: m.attachments.map((a) => ({
+        id: a.id,
+        name: a.originalName,
+        mimeType: a.mimeType,
+        size: a.size,
+      })),
     })),
     lastReadMyId: lastRead?.id ?? 0,
     partnerLastSeenAt: partner?.lastSeenAt ? partner.lastSeenAt.toISOString() : null,
