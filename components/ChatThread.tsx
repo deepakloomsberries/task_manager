@@ -6,8 +6,6 @@ import UserAvatar from "@/components/UserAvatar";
 import { sendMessage, deleteMessage } from "@/lib/actions/messages";
 import { isOnline, lastSeenLabel } from "@/lib/ui";
 
-const JITSI_DOMAIN = process.env.NEXT_PUBLIC_JITSI_DOMAIN || "meet.jit.si";
-
 type Att = { id: number; name: string; mimeType: string; size: number };
 
 type Msg = {
@@ -296,9 +294,9 @@ export default function ChatThread({
   }
 
   function startCall() {
-    const pair = [meId, other.id].sort((a, b) => a - b).join("-");
-    const room = `LoomsBerries-${pair}-${Math.random().toString(36).slice(2, 8)}`;
-    const url = `https://${JITSI_DOMAIN}/${room}`;
+    // Random, ID-free room so the link can't be guessed from who's in the chat.
+    const room = `lb-${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 8)}`;
+    const url = `${window.location.origin}/call/${room}`;
     void sendBody(`📹 I started a video call — join here: ${url}`);
     window.open(url, "_blank", "noopener,noreferrer");
   }
