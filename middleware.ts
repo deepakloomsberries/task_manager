@@ -5,7 +5,7 @@ const secret = new TextEncoder().encode(
   process.env.AUTH_SECRET ?? "dev-secret-do-not-use-in-production"
 );
 
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/forgot"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
