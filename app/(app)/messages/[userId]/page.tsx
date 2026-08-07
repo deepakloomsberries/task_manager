@@ -29,6 +29,9 @@ export default async function ConversationPage({ params }: { params: { userId: s
       },
       orderBy: { createdAt: "asc" },
       take: 500,
+      include: {
+        attachments: { select: { id: true, originalName: true, mimeType: true, size: true }, orderBy: { id: "asc" } },
+      },
     }),
     db.directMessage.findFirst({
       where: { senderId: user.id, recipientId: otherId, read: true },
@@ -49,9 +52,18 @@ export default async function ConversationPage({ params }: { params: { userId: s
       }}
       initialMessages={messages.map((m) => ({
         id: m.id,
-        body: m.body,
+        body: m.deletedAt ? "" : m.body,
         senderId: m.senderId,
         createdAt: m.createdAt.toISOString(),
+        deleted: !!m.deletedAt,
+        attachments: m.deletedAt
+          ? []
+          : m.attachments.map((a) => ({
+              id: a.id,
+              name: a.originalName,
+              mimeType: a.mimeType,
+              size: a.size,
+            })),
       }))}
       initialLastReadMyId={lastRead?.id ?? 0}
       initialPartnerLastSeenAt={other.lastSeenAt ? other.lastSeenAt.toISOString() : null}

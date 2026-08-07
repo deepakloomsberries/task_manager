@@ -15,7 +15,7 @@ export default async function MessagesPage() {
     db.directMessage.findMany({
       where: { OR: [{ senderId: user.id }, { recipientId: user.id }] },
       orderBy: { createdAt: "desc" },
-      include: { sender: true, recipient: true },
+      include: { sender: true, recipient: true, attachments: { select: { mimeType: true } } },
       take: 500,
     }),
     db.user.findMany({ where: { active: true, id: { not: user.id } }, orderBy: { name: "asc" } }),
@@ -33,9 +33,17 @@ export default async function MessagesPage() {
     const partner = m.senderId === user.id ? m.recipient : m.sender;
     const existing = convos.get(partner.id);
     if (!existing) {
+      const preview = m.deletedAt
+        ? "🚫 Message deleted"
+        : m.body ||
+          (m.attachments.length
+            ? m.attachments.some((a) => a.mimeType.startsWith("image/"))
+              ? "📷 Photo"
+              : "📎 Attachment"
+            : "");
       convos.set(partner.id, {
         partner,
-        lastBody: m.body,
+        lastBody: preview,
         lastAt: m.createdAt,
         fromMe: m.senderId === user.id,
         unread: 0,

@@ -10,13 +10,21 @@ export const dynamic = "force-dynamic";
 
 const DAY = 86400000;
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DAILY_CAPACITY = 8; // hours
+const WEEKLY_CAPACITY = 40; // hours
 
-/** Colour a day cell by how many tasks are due that day. */
-function loadClass(n: number) {
-  if (n <= 0) return "bg-slate-50 text-slate-300 dark:bg-slate-800";
-  if (n <= 2) return "bg-sky-100 text-sky-700";
-  if (n <= 4) return "bg-amber-100 text-amber-700";
+/** Colour a day cell by estimated hours of work due that day. */
+function loadClass(h: number) {
+  if (h <= 0) return "bg-slate-50 text-slate-300 dark:bg-slate-800";
+  if (h <= DAILY_CAPACITY / 2) return "bg-sky-100 text-sky-700";
+  if (h <= DAILY_CAPACITY) return "bg-amber-100 text-amber-700";
   return "bg-red-100 text-red-700";
+}
+
+/** Compact hours label for tight cells, e.g. "6h", "1.5h". */
+function hCompact(h: number) {
+  if (!h) return "";
+  return Number.isInteger(h) ? `${h}h` : `${h.toFixed(1)}h`;
 }
 
 function toDateParam(d: Date) {
@@ -38,7 +46,6 @@ export default async function WorkloadPage({ searchParams }: { searchParams: { s
       include: { department: true },
       orderBy: { name: "asc" },
     }),
-    // Open, assigned, dated tasks up to the end of this week (covers overdue + this week).
     db.task.findMany({
       where: {
         deletedAt: null,
@@ -46,7 +53,7 @@ export default async function WorkloadPage({ searchParams }: { searchParams: { s
         assigneeId: { not: null },
         dueDate: { not: null, lt: weekEnd },
       },
-      select: { id: true, assigneeId: true, dueDate: true },
+      select: { id: true, assigneeId: true, dueDate: true, estimateHours: true },
     }),
     db.timeEntry.findMany({
       where: { date: { gte: weekStart, lt: weekEnd } },
@@ -58,32 +65,47 @@ export default async function WorkloadPage({ searchParams }: { searchParams: { s
   for (const e of entries) hoursByUser.set(e.userId, (hoursByUser.get(e.userId) ?? 0) + e.hours);
 
   const rows = users.map((u) => {
-    const perDay = [0, 0, 0, 0, 0, 0, 0];
+    const perDayHours = [0, 0, 0, 0, 0, 0, 0];
+    const perDayCount = [0, 0, 0, 0, 0, 0, 0];
     let overdue = 0;
     for (const t of tasks) {
       if (t.assigneeId !== u.id || !t.dueDate) continue;
       const due = new Date(t.dueDate);
+      const est = t.estimateHours ?? 0;
       if (due < weekStart) {
         overdue += 1;
       } else {
         const idx = Math.floor((due.getTime() - weekStart.getTime()) / DAY);
-        if (idx >= 0 && idx < 7) perDay[idx] += 1;
+        if (idx >= 0 && idx < 7) {
+          perDayHours[idx] += est;
+          perDayCount[idx] += 1;
+        }
       }
     }
-    const dueThisWeek = perDay.reduce((a, b) => a + b, 0);
-    const maxDay = Math.max(...perDay);
-    const load = dueThisWeek >= 10 || maxDay >= 5 ? "heavy" : dueThisWeek >= 5 ? "busy" : dueThisWeek > 0 ? "ok" : "free";
+    const weekEstimate = perDayHours.reduce((a, b) => a + b, 0);
+    const weekCount = perDayCount.reduce((a, b) => a + b, 0);
+    const maxDay = Math.max(...perDayHours);
+    const load =
+      weekEstimate > WEEKLY_CAPACITY || maxDay > DAILY_CAPACITY
+        ? "heavy"
+        : weekEstimate > WEEKLY_CAPACITY * 0.6
+          ? "busy"
+          : weekCount > 0
+            ? "ok"
+            : "free";
     return {
       user: u,
-      perDay,
-      dueThisWeek,
+      perDayHours,
+      perDayCount,
+      weekEstimate,
+      weekCount,
       overdue,
-      hours: hoursByUser.get(u.id) ?? 0,
+      logged: hoursByUser.get(u.id) ?? 0,
       load,
     };
   });
 
-  const teamDue = rows.reduce((s, r) => s + r.dueThisWeek, 0);
+  const teamEstimate = rows.reduce((s, r) => s + r.weekEstimate, 0);
   const heavyCount = rows.filter((r) => r.load === "heavy").length;
   const isThisWeek = weekStart.getTime() === weekStartOf(new Date()).getTime();
   const weekLabel = `${weekStart.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })} – ${new Date(
@@ -96,33 +118,29 @@ export default async function WorkloadPage({ searchParams }: { searchParams: { s
         <div>
           <h1 className="text-2xl font-bold">Workload</h1>
           <p className="text-sm text-slate-500">
-            Open tasks due per person this week — spot who&apos;s overloaded and rebalance.
+            Estimated hours of work due per person this week — spot who&apos;s over capacity
+            (~{WEEKLY_CAPACITY}h/week).
           </p>
         </div>
         <div className="text-right">
-          <div className="text-2xl font-bold text-sky-600">{teamDue}</div>
-          <div className="text-xs text-slate-500">
-            tasks due · {heavyCount} overloaded
-          </div>
+          <div className="text-2xl font-bold text-sky-600">{fmtHours(teamEstimate)}</div>
+          <div className="text-xs text-slate-500">estimated · {heavyCount} over capacity</div>
         </div>
       </div>
 
-      {/* Week navigator */}
       <div className="card flex items-center justify-between p-3">
         <Link href={`/workload?start=${prev}`} className="btn-secondary !py-1.5 text-xs">← Prev week</Link>
         <div className="text-sm font-medium">
           {isThisWeek ? "This week" : "Week of"} · {weekLabel}
         </div>
         <div className="flex gap-2">
-          {!isThisWeek && (
-            <Link href="/workload" className="btn-secondary !py-1.5 text-xs">Today</Link>
-          )}
+          {!isThisWeek && <Link href="/workload" className="btn-secondary !py-1.5 text-xs">Today</Link>}
           <Link href={`/workload?start=${next}`} className="btn-secondary !py-1.5 text-xs">Next week →</Link>
         </div>
       </div>
 
       <div className="card overflow-x-auto">
-        <table className="w-full min-w-[860px]">
+        <table className="w-full min-w-[900px]">
           <thead className="border-b border-slate-200 bg-slate-50">
             <tr>
               <th className="th">Employee</th>
@@ -135,9 +153,9 @@ export default async function WorkloadPage({ searchParams }: { searchParams: { s
                   </th>
                 );
               })}
-              <th className="th text-center">Due</th>
+              <th className="th text-center">Est.</th>
               <th className="th text-center">Overdue</th>
-              <th className="th text-center">Hours</th>
+              <th className="th text-center">Logged</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -150,25 +168,31 @@ export default async function WorkloadPage({ searchParams }: { searchParams: { s
                       <span className="font-medium">{r.user.name}</span>
                       {r.load === "heavy" && (
                         <span className="ml-2 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
-                          Overloaded
+                          Over capacity
                         </span>
                       )}
                       <span className="block text-xs text-slate-400">{r.user.department?.name ?? "—"}</span>
                     </span>
                   </Link>
                 </td>
-                {r.perDay.map((n, i) => (
+                {r.perDayHours.map((h, i) => (
                   <td key={i} className="td text-center">
-                    <span className={`inline-flex h-8 w-8 items-center justify-center rounded-md text-sm font-semibold ${loadClass(n)}`}>
-                      {n > 0 ? n : ""}
+                    <span
+                      className={`inline-flex h-9 w-11 flex-col items-center justify-center rounded-md text-xs font-semibold leading-tight ${loadClass(h)}`}
+                      title={`${r.perDayCount[i]} task(s), ${fmtHours(h)} estimated`}
+                    >
+                      {h > 0 ? hCompact(h) : r.perDayCount[i] > 0 ? "·" : ""}
+                      {r.perDayCount[i] > 0 && (
+                        <span className="text-[9px] font-normal opacity-70">{r.perDayCount[i]}t</span>
+                      )}
                     </span>
                   </td>
                 ))}
-                <td className="td text-center font-medium">{r.dueThisWeek}</td>
+                <td className="td text-center font-medium">{r.weekEstimate > 0 ? fmtHours(r.weekEstimate) : "—"}</td>
                 <td className={`td text-center ${r.overdue > 0 ? "font-semibold text-red-600" : "text-slate-400"}`}>
                   {r.overdue || "—"}
                 </td>
-                <td className="td text-center text-slate-600">{r.hours > 0 ? fmtHours(r.hours) : "—"}</td>
+                <td className="td text-center text-slate-600">{r.logged > 0 ? fmtHours(r.logged) : "—"}</td>
               </tr>
             ))}
           </tbody>
@@ -176,10 +200,11 @@ export default async function WorkloadPage({ searchParams }: { searchParams: { s
       </div>
 
       <div className="flex flex-wrap items-center gap-3 px-1 text-[11px] text-slate-500">
-        <span>Tasks due per day:</span>
-        <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-sky-100" /> 1–2</span>
-        <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-amber-100" /> 3–4</span>
-        <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-red-100" /> 5+</span>
+        <span>Estimated hours due per day:</span>
+        <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-sky-100" /> ≤{DAILY_CAPACITY / 2}h</span>
+        <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-amber-100" /> ≤{DAILY_CAPACITY}h</span>
+        <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-red-100" /> &gt;{DAILY_CAPACITY}h</span>
+        <span className="text-slate-400">· “·” = tasks with no estimate</span>
       </div>
     </div>
   );

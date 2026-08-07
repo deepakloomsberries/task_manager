@@ -76,7 +76,7 @@ export default function DatePicker({
       <input type="hidden" name={name} value={value} />
       <button
         type="button"
-        aria-required={required}
+        data-required={required || undefined}
         onClick={() => setOpen((o) => !o)}
         className={`input flex items-center justify-between gap-2 text-left ${className}`}
       >

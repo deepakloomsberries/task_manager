@@ -289,6 +289,12 @@ export default async function TaskDetailPage({
                 </dd>
               </div>
               <div>
+                <dt className="text-xs text-slate-500">Estimate</dt>
+                <dd className="mt-0.5 font-medium">
+                  {task.estimateHours ? fmtHours(task.estimateHours) : "—"}
+                </dd>
+              </div>
+              <div>
                 <dt className="text-xs text-slate-500">Created by</dt>
                 <dd className="mt-0.5 font-medium">{task.createdBy.name}</dd>
               </div>
@@ -411,6 +417,15 @@ export default async function TaskDetailPage({
                 <option value="MONTHLY">Monthly</option>
               </select>
             </div>
+            <div>
+              <label className="label">Estimate</label>
+              <input
+                name="estimate"
+                defaultValue={task.estimateHours ? fmtHours(task.estimateHours) : ""}
+                className="input"
+                placeholder="e.g. 3h or 1h 30m"
+              />
+            </div>
             <div className="flex gap-2 md:col-span-2">
               <button type="submit" className="btn-primary">
                 Save changes
@@ -432,12 +447,37 @@ export default async function TaskDetailPage({
         />
       )}
 
-      {timeRows.length > 0 && (
+      {(timeRows.length > 0 || task.estimateHours) && (
         <div className="card p-6">
           <h2 className="mb-4 flex items-baseline justify-between font-semibold">
             <span>Time logged</span>
-            <span className="text-sm font-normal text-slate-400">{fmtHours(loggedHours)} total</span>
+            <span className="text-sm font-normal text-slate-400">
+              {task.estimateHours
+                ? `${fmtHours(loggedHours)} of ${fmtHours(task.estimateHours)} estimated`
+                : `${fmtHours(loggedHours)} total`}
+            </span>
           </h2>
+          {task.estimateHours ? (
+            (() => {
+              const pct = Math.min(100, Math.round((loggedHours / task.estimateHours!) * 100));
+              const over = loggedHours > task.estimateHours!;
+              return (
+                <div className="mb-5">
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className={`h-full rounded-full ${over ? "bg-red-500" : "bg-sky-500"}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <div className={`mt-1 text-xs ${over ? "font-medium text-red-600" : "text-slate-400"}`}>
+                    {over
+                      ? `${fmtHours(loggedHours - task.estimateHours!)} over estimate`
+                      : `${pct}% of estimate · ${fmtHours(Math.max(0, task.estimateHours! - loggedHours))} remaining`}
+                  </div>
+                </div>
+              );
+            })()
+          ) : null}
           <div className="space-y-3">
             {timeRows.map((r) => {
               const pct = loggedHours > 0 ? Math.round((r.hours / loggedHours) * 100) : 0;
