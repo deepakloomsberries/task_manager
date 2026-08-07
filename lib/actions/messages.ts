@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { pushNotification } from "@/lib/notify";
+import { deleteUpload } from "@/lib/storage";
 
 export async function sendDirectMessage(formData: FormData) {
   const user = await requireUser();
@@ -25,6 +26,30 @@ export async function sendDirectMessage(formData: FormData) {
   revalidatePath(`/messages/${recipientId}`);
   revalidatePath("/messages");
   redirect(`/messages/${recipientId}`);
+}
+
+/**
+ * Deletes one of your own messages for everyone. The row is kept as a tombstone
+ * (so both sides can show "This message was deleted"), but its body is cleared
+ * and any attachments are removed from disk and the database.
+ */
+export async function deleteMessage(messageId: number): Promise<{ ok: boolean }> {
+  const user = await requireUser();
+  const msg = await db.directMessage.findUnique({
+    where: { id: messageId },
+    include: { attachments: true },
+  });
+  if (!msg || msg.senderId !== user.id || msg.deletedAt) return { ok: false };
+
+  await Promise.all(msg.attachments.map((a) => deleteUpload(a.storedName)));
+  await db.attachment.deleteMany({ where: { messageId } });
+  await db.directMessage.update({
+    where: { id: messageId },
+    data: { body: "", deletedAt: new Date() },
+  });
+
+  revalidatePath("/messages");
+  return { ok: true };
 }
 
 export type MessageAttachment = {

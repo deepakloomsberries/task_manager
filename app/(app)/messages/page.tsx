@@ -33,13 +33,14 @@ export default async function MessagesPage() {
     const partner = m.senderId === user.id ? m.recipient : m.sender;
     const existing = convos.get(partner.id);
     if (!existing) {
-      const preview =
-        m.body ||
-        (m.attachments.length
-          ? m.attachments.some((a) => a.mimeType.startsWith("image/"))
-            ? "📷 Photo"
-            : "📎 Attachment"
-          : "");
+      const preview = m.deletedAt
+        ? "🚫 Message deleted"
+        : m.body ||
+          (m.attachments.length
+            ? m.attachments.some((a) => a.mimeType.startsWith("image/"))
+              ? "📷 Photo"
+              : "📎 Attachment"
+            : "");
       convos.set(partner.id, {
         partner,
         lastBody: preview,

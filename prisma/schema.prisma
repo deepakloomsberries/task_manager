@@ -255,6 +255,7 @@ model DirectMessage {
   recipientId Int
   read        Boolean  @default(false)
   createdAt   DateTime @default(now())
+  deletedAt   DateTime?
   attachments Attachment[]
 
   @@index([senderId, recipientId])

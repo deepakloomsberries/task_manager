@@ -26,7 +26,9 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
     data: { read: true },
   });
 
-  const [messages, lastRead, partner] = await Promise.all([
+  const recentlyDeletedSince = new Date(Date.now() - 15 * 60_000);
+
+  const [messages, lastRead, partner, deleted] = await Promise.all([
     db.directMessage.findMany({
       where: {
         id: { gt: after },
@@ -48,23 +50,36 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
       select: { id: true },
     }),
     db.user.findUnique({ where: { id: otherId }, select: { lastSeenAt: true } }),
+    // Messages deleted recently, so already-loaded bubbles can flip to tombstones live.
+    db.directMessage.findMany({
+      where: {
+        deletedAt: { gte: recentlyDeletedSince },
+        OR: [
+          { senderId: meId, recipientId: otherId },
+          { senderId: otherId, recipientId: meId },
+        ],
+      },
+      select: { id: true },
+    }),
   ]);
 
   return NextResponse.json({
-    messages: messages.map((m) => ({
-      id: m.id,
-      body: m.body,
-      senderId: m.senderId,
-      createdAt: m.createdAt.toISOString(),
-      attachments: m.attachments.map((a) => ({
-        id: a.id,
-        name: a.originalName,
-        mimeType: a.mimeType,
-        size: a.size,
-      })),
-    })),
+    messages: messages.map((m) => {
+      const isDeleted = !!m.deletedAt;
+      return {
+        id: m.id,
+        body: isDeleted ? "" : m.body,
+        senderId: m.senderId,
+        createdAt: m.createdAt.toISOString(),
+        deleted: isDeleted,
+        attachments: isDeleted
+          ? []
+          : m.attachments.map((a) => ({ id: a.id, name: a.originalName, mimeType: a.mimeType, size: a.size })),
+      };
+    }),
     lastReadMyId: lastRead?.id ?? 0,
     partnerLastSeenAt: partner?.lastSeenAt ? partner.lastSeenAt.toISOString() : null,
     partnerTyping: isTyping(otherId, meId),
+    deletedIds: deleted.map((d) => d.id),
   });
 }
