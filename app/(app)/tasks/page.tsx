@@ -279,6 +279,10 @@ export default async function TasksPage({
                 <option value="MONTHLY">Monthly</option>
               </select>
             </div>
+            <div>
+              <label className="label">Estimate</label>
+              <input name="estimate" className="input" placeholder="e.g. 3h or 1h 30m" />
+            </div>
             <div className="md:col-span-2">
               <button type="submit" className="btn-primary">
                 Create task

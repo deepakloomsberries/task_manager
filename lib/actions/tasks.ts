@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import { notifyAssignment, notifyComment, notifyReminder, pushNotification, logActivity } from "@/lib/notify";
-import { fmtDate, lookup, TASK_STATUSES } from "@/lib/ui";
+import { fmtDate, lookup, parseHours, TASK_STATUSES } from "@/lib/ui";
 
 const STATUSES = ["TODO", "IN_PROGRESS", "REVIEW", "DONE"];
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"];
@@ -22,6 +22,7 @@ function parseTaskForm(formData: FormData) {
     startDate: formData.get("startDate") ? new Date(String(formData.get("startDate"))) : null,
     dueDate: formData.get("dueDate") ? new Date(String(formData.get("dueDate"))) : null,
     recurrence: RECURRENCES.includes(recurrenceRaw) ? recurrenceRaw : null,
+    estimateHours: parseHours(String(formData.get("estimate") ?? "")),
   };
 }
 
@@ -234,6 +235,7 @@ async function changeStatus(
           startDate: task.startDate ? advanceDate(task.startDate, task.recurrence) : null,
           dueDate: advanceDate(task.dueDate, task.recurrence),
           recurrence: task.recurrence,
+          estimateHours: task.estimateHours,
         },
       });
       await logActivity(next.id, user.id, "created");
