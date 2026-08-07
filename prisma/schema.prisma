@@ -63,6 +63,22 @@ model User {
   pushSubscriptions  PushSubscription[]
   timesheetSubmissions TimesheetSubmission[] @relation("tsSubmitter")
   timesheetReviews     TimesheetSubmission[] @relation("tsReviewer")
+  passwordReset      PasswordReset?
+}
+
+/**
+ * A pending self-service password reset. Holds a hashed one-time code (OTP)
+ * that the user receives by email and enters to set a new password. One active
+ * reset per user; it's replaced on re-request and deleted once used/expired.
+ */
+model PasswordReset {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int      @unique
+  codeHash  String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
 }
 
 model Project {

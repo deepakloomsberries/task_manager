@@ -138,6 +138,21 @@ export function notifyPasswordReset(opts: {
   );
 }
 
+/** Emails a one-time code for self-service password reset. */
+export function notifyPasswordOtp(opts: { to: string; name: string; code: string }) {
+  const lines = [
+    `Hi ${esc(opts.name)},`,
+    `Use this one-time code to reset your ${APP_NAME} password:`,
+    `<div style="font-size:30px;font-weight:bold;letter-spacing:6px;color:#0f172a;margin:10px 0">${esc(opts.code)}</div>`,
+    `This code expires in 15 minutes. If you didn't request a reset, you can safely ignore this email.`,
+  ];
+  sendMail(
+    opts.to,
+    `Your ${APP_NAME} password reset code: ${opts.code}`,
+    emailShell("Password reset code", lines, `${APP_URL}/forgot`, "Reset password")
+  );
+}
+
 export function notifyTaskComment(opts: {
   to: string;
   recipientName: string;

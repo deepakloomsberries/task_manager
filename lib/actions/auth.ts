@@ -5,6 +5,10 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { createSession, destroySession, requireUser } from "@/lib/auth";
 import { isStrongPassword } from "@/lib/password";
+import { notifyPasswordOtp } from "@/lib/mail";
+
+const OTP_TTL_MIN = 15;
+const OTP_MAX_ATTEMPTS = 5;
 
 export async function login(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -22,6 +26,72 @@ export async function login(formData: FormData) {
 export async function logout() {
   destroySession();
   redirect("/login");
+}
+
+/**
+ * Step 1 of self-service reset: emails a 6-digit one-time code to the account.
+ * Always advances to the code step regardless of whether the email exists, so
+ * the form can't be used to discover which emails have accounts.
+ */
+export async function requestPasswordReset(formData: FormData) {
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+
+  if (email) {
+    const user = await db.user.findUnique({ where: { email } });
+    if (user && user.active) {
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      const codeHash = await bcrypt.hash(code, 10);
+      const expiresAt = new Date(Date.now() + OTP_TTL_MIN * 60_000);
+      await db.passwordReset.upsert({
+        where: { userId: user.id },
+        create: { userId: user.id, codeHash, expiresAt, attempts: 0 },
+        update: { codeHash, expiresAt, attempts: 0, createdAt: new Date() },
+      });
+      notifyPasswordOtp({ to: user.email, name: user.name, code });
+    }
+  }
+
+  redirect(`/forgot?step=code&email=${encodeURIComponent(email)}`);
+}
+
+/** Step 2: verifies the code and sets the user's chosen new password. */
+export async function resetPasswordWithOtp(formData: FormData) {
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const code = String(formData.get("code") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+  const failUrl = (err: string) =>
+    `/forgot?step=code&email=${encodeURIComponent(email)}&error=${err}`;
+
+  if (!isStrongPassword(password)) redirect(failUrl("weak"));
+
+  const user = email ? await db.user.findUnique({ where: { email } }) : null;
+  const reset = user ? await db.passwordReset.findUnique({ where: { userId: user.id } }) : null;
+  if (!user || !user.active || !reset) redirect(failUrl("invalid"));
+
+  if (reset.expiresAt < new Date()) {
+    await db.passwordReset.delete({ where: { userId: user.id } });
+    redirect(failUrl("expired"));
+  }
+  if (reset.attempts >= OTP_MAX_ATTEMPTS) {
+    await db.passwordReset.delete({ where: { userId: user.id } });
+    redirect(failUrl("attempts"));
+  }
+
+  if (!(await bcrypt.compare(code, reset.codeHash))) {
+    await db.passwordReset.update({
+      where: { userId: user.id },
+      data: { attempts: { increment: 1 } },
+    });
+    redirect(failUrl("code"));
+  }
+
+  // Valid — set the new password (chosen by the user, so no forced change).
+  await db.user.update({
+    where: { id: user.id },
+    data: { passwordHash: await bcrypt.hash(password, 10), mustChangePassword: false },
+  });
+  await db.passwordReset.delete({ where: { userId: user.id } });
+  redirect("/login?reset=1");
 }
 
 export async function changeOwnPassword(formData: FormData) {
