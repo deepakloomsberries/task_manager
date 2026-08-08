@@ -9,6 +9,7 @@ import {
 } from "@/lib/actions/users";
 import { ROLES, lookup, fmtDate, isOnline, lastSeenLabel } from "@/lib/ui";
 import PasswordField from "@/components/PasswordField";
+import BulkUserImport from "@/components/BulkUserImport";
 import { PASSWORD_RULES } from "@/lib/password";
 
 export const dynamic = "force-dynamic";
@@ -47,6 +48,7 @@ export default async function UsersPage({
       : null;
 
   const showNew = searchParams.new === "1";
+  const showImport = searchParams.import === "1";
   const editId = searchParams.edit ? Number(searchParams.edit) : null;
 
   return (
@@ -58,10 +60,17 @@ export default async function UsersPage({
             {users.filter((u) => u.active).length} active of {users.length} total
           </p>
         </div>
-        <Link href={showNew ? "/users" : "/users?new=1"} className="btn-primary">
-          {showNew ? "Close" : "+ Add User"}
-        </Link>
+        <div className="flex gap-2">
+          <Link href={showImport ? "/users" : "/users?import=1"} className="btn-secondary">
+            {showImport ? "Close" : "⇪ Bulk import"}
+          </Link>
+          <Link href={showNew ? "/users" : "/users?new=1"} className="btn-primary">
+            {showNew ? "Close" : "+ Add User"}
+          </Link>
+        </div>
       </div>
+
+      {showImport && <BulkUserImport />}
 
       {msg && (
         <div

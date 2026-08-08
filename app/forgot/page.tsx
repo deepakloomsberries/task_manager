@@ -81,7 +81,7 @@ export default function ForgotPasswordPage({
               </div>
               <div>
                 <label className="label" htmlFor="password">New password</label>
-                <PasswordField id="password" name="password" autoComplete="new-password" showStrength />
+                <PasswordField id="password" name="password" autoComplete="new-password" withGenerate showStrength />
               </div>
               <button type="submit" className="btn-primary w-full">Set new password</button>
             </form>

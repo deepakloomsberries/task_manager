@@ -34,7 +34,7 @@ function toDateParam(d: Date) {
 export default async function WorkloadPage({
   searchParams,
 }: {
-  searchParams: { start?: string; company?: string; department?: string; over?: string };
+  searchParams: { start?: string; company?: string; department?: string; assignee?: string; over?: string };
 }) {
   const user = await requireUser();
   if (!isManagerOrAdmin(user.role)) redirect("/dashboard");
@@ -44,6 +44,7 @@ export default async function WorkloadPage({
 
   const companyId = searchParams.company ? Number(searchParams.company) : null;
   const departmentId = searchParams.department ? Number(searchParams.department) : null;
+  const assigneeId = searchParams.assignee ? Number(searchParams.assignee) : null;
   const overOnly = searchParams.over === "1";
 
   // Keep active filters attached to the week-navigation links.
@@ -51,6 +52,7 @@ export default async function WorkloadPage({
     const p = new URLSearchParams();
     if (companyId) p.set("company", String(companyId));
     if (departmentId) p.set("department", String(departmentId));
+    if (assigneeId) p.set("assignee", String(assigneeId));
     if (overOnly) p.set("over", "1");
     for (const [k, v] of Object.entries(extra)) {
       if (v) p.set(k, v);
@@ -60,12 +62,13 @@ export default async function WorkloadPage({
     return s ? `/workload?${s}` : "/workload";
   };
 
-  const [users, tasks, entries, companies, departments] = await Promise.all([
+  const [users, tasks, entries, companies, departments, allUsers] = await Promise.all([
     db.user.findMany({
       where: {
         active: true,
         ...(companyId ? { companyId } : {}),
         ...(departmentId ? { departmentId } : {}),
+        ...(assigneeId ? { id: assigneeId } : {}),
       },
       include: { department: true },
       orderBy: { name: "asc" },
@@ -85,6 +88,7 @@ export default async function WorkloadPage({
     }),
     db.company.findMany({ orderBy: { code: "asc" } }),
     db.department.findMany({ include: { company: true }, orderBy: { name: "asc" } }),
+    db.user.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
 
   const hoursByUser = new Map<number, number>();
@@ -136,7 +140,7 @@ export default async function WorkloadPage({
   const teamEstimate = rows.reduce((s, r) => s + r.weekEstimate, 0);
   const heavyCount = rows.filter((r) => r.load === "heavy").length;
   const isThisWeek = weekStart.getTime() === weekStartOf(new Date()).getTime();
-  const filtersActive = !!(companyId || departmentId || overOnly);
+  const filtersActive = !!(companyId || departmentId || assigneeId || overOnly);
   const weekLabel = `${weekStart.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })} – ${new Date(
     weekEnd.getTime() - DAY
   ).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}`;
@@ -162,6 +166,17 @@ export default async function WorkloadPage({
 
       <form className="card flex flex-wrap items-end gap-3 p-4" method="GET">
         <input type="hidden" name="start" value={toDateParam(weekStart)} />
+        <div>
+          <label className="label">Employee</label>
+          <select name="assignee" defaultValue={searchParams.assignee ?? ""} className="input">
+            <option value="">Everyone</option>
+            {allUsers.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <div>
           <label className="label">Company</label>
           <select name="company" defaultValue={searchParams.company ?? ""} className="input">
@@ -192,7 +207,7 @@ export default async function WorkloadPage({
           Apply
         </button>
         {filtersActive && (
-          <Link href={carry({ company: undefined, department: undefined, over: undefined, start: toDateParam(weekStart) })} className="btn-secondary">
+          <Link href={`/workload?start=${toDateParam(weekStart)}`} className="btn-secondary">
             Clear
           </Link>
         )}

@@ -1,8 +1,8 @@
 import { requireUser } from "@/lib/auth";
 import { changeOwnPassword, updateOwnProfile, updateNotificationPrefs } from "@/lib/actions/auth";
-import { updateAvatar, removeAvatar } from "@/lib/actions/profile";
+import { removeAvatar } from "@/lib/actions/profile";
 import PasswordField from "@/components/PasswordField";
-import UserAvatar from "@/components/UserAvatar";
+import AvatarUpload from "@/components/AvatarUpload";
 import { PASSWORD_RULES } from "@/lib/password";
 
 export const dynamic = "force-dynamic";
@@ -50,31 +50,14 @@ export default async function SettingsPage({
 
       <div className="card p-6">
         <h2 className="mb-4 font-semibold">Profile picture</h2>
-        <div className="flex flex-wrap items-center gap-5">
-          <UserAvatar user={user} size={72} />
-          <div className="space-y-2">
-            <form action={updateAvatar} className="flex flex-wrap items-center gap-2">
-              <input
-                type="file"
-                name="avatar"
-                accept="image/*"
-                required
-                className="input max-w-xs text-sm"
-              />
-              <button type="submit" className="btn-secondary">
-                Upload
-              </button>
-            </form>
-            {user.avatarPath && (
-              <form action={removeAvatar}>
-                <button type="submit" className="text-xs text-red-600 hover:underline">
-                  Remove photo
-                </button>
-              </form>
-            )}
-            <p className="text-xs text-slate-400">JPG, PNG or GIF · up to 5 MB.</p>
-          </div>
-        </div>
+        <AvatarUpload user={user} />
+        {user.avatarPath && (
+          <form action={removeAvatar} className="mt-3">
+            <button type="submit" className="text-xs text-red-600 hover:underline">
+              Remove photo
+            </button>
+          </form>
+        )}
       </div>
 
       <div className="card p-6">
