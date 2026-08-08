@@ -8,6 +8,7 @@ import LiveElapsed from "@/components/LiveElapsed";
 import LiveClock from "@/components/LiveClock";
 import OfficeClocks from "@/components/OfficeClocks";
 import QuickAdd from "@/components/QuickAdd";
+import AdminDashboard from "./AdminDashboard";
 import { companyTimezone, zonedStartOfToday, zonedHour, zonedDateLine } from "@/lib/tz";
 import {
   TASK_PRIORITIES,
@@ -31,6 +32,9 @@ function greeting(h: number) {
 
 export default async function DashboardPage() {
   const user = await requireUser();
+
+  // Admins get an org-wide command centre instead of a personal task list.
+  if (user.role === "ADMIN") return <AdminDashboard user={user} />;
 
   const now = new Date();
   // "Today", the week and the greeting all follow the user's office time zone,
