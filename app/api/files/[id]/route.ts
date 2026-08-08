@@ -23,6 +23,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     if (!msg || (msg.senderId !== session.userId && msg.recipientId !== session.userId)) {
       return new NextResponse("Forbidden", { status: 403 });
     }
+  } else if (attachment.discussionMessageId) {
+    // Discussion attachments belong to the company-wide board: any signed-in
+    // user may view them.
   } else if (!attachment.taskId && attachment.uploadedById !== session.userId) {
     // A freshly uploaded, not-yet-attached file is only visible to its uploader.
     return new NextResponse("Forbidden", { status: 403 });

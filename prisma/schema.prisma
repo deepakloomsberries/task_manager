@@ -272,19 +272,26 @@ model Attachment {
   taskId       Int?
   message      DirectMessage? @relation(fields: [messageId], references: [id], onDelete: Cascade)
   messageId    Int?
+  discussion          DiscussionMessage? @relation(fields: [discussionMessageId], references: [id], onDelete: Cascade)
+  discussionMessageId Int?
   uploadedBy   User           @relation(fields: [uploadedById], references: [id])
   uploadedById Int
   createdAt    DateTime       @default(now())
 
   @@index([messageId])
+  @@index([discussionMessageId])
 }
 
 model DiscussionMessage {
-  id        Int      @id @default(autoincrement())
-  body      String
-  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  authorId  Int
-  createdAt DateTime @default(now())
+  id          Int          @id @default(autoincrement())
+  body        String
+  author      User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId    Int
+  createdAt   DateTime     @default(now())
+  deletedAt   DateTime?
+  attachments Attachment[]
+
+  @@index([createdAt])
 }
 
 model TimeEntry {

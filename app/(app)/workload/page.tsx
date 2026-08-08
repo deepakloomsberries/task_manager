@@ -31,18 +31,42 @@ function toDateParam(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
-export default async function WorkloadPage({ searchParams }: { searchParams: { start?: string } }) {
+export default async function WorkloadPage({
+  searchParams,
+}: {
+  searchParams: { start?: string; company?: string; department?: string; over?: string };
+}) {
   const user = await requireUser();
   if (!isManagerOrAdmin(user.role)) redirect("/dashboard");
 
   const weekStart = weekStartOf(searchParams.start ? new Date(searchParams.start) : new Date());
   const weekEnd = new Date(weekStart.getTime() + 7 * DAY);
-  const prev = toDateParam(new Date(weekStart.getTime() - 7 * DAY));
-  const next = toDateParam(new Date(weekStart.getTime() + 7 * DAY));
 
-  const [users, tasks, entries] = await Promise.all([
+  const companyId = searchParams.company ? Number(searchParams.company) : null;
+  const departmentId = searchParams.department ? Number(searchParams.department) : null;
+  const overOnly = searchParams.over === "1";
+
+  // Keep active filters attached to the week-navigation links.
+  const carry = (extra: Record<string, string | undefined>) => {
+    const p = new URLSearchParams();
+    if (companyId) p.set("company", String(companyId));
+    if (departmentId) p.set("department", String(departmentId));
+    if (overOnly) p.set("over", "1");
+    for (const [k, v] of Object.entries(extra)) {
+      if (v) p.set(k, v);
+      else p.delete(k);
+    }
+    const s = p.toString();
+    return s ? `/workload?${s}` : "/workload";
+  };
+
+  const [users, tasks, entries, companies, departments] = await Promise.all([
     db.user.findMany({
-      where: { active: true },
+      where: {
+        active: true,
+        ...(companyId ? { companyId } : {}),
+        ...(departmentId ? { departmentId } : {}),
+      },
       include: { department: true },
       orderBy: { name: "asc" },
     }),
@@ -59,12 +83,14 @@ export default async function WorkloadPage({ searchParams }: { searchParams: { s
       where: { date: { gte: weekStart, lt: weekEnd } },
       select: { userId: true, hours: true },
     }),
+    db.company.findMany({ orderBy: { code: "asc" } }),
+    db.department.findMany({ include: { company: true }, orderBy: { name: "asc" } }),
   ]);
 
   const hoursByUser = new Map<number, number>();
   for (const e of entries) hoursByUser.set(e.userId, (hoursByUser.get(e.userId) ?? 0) + e.hours);
 
-  const rows = users.map((u) => {
+  let rows = users.map((u) => {
     const perDayHours = [0, 0, 0, 0, 0, 0, 0];
     const perDayCount = [0, 0, 0, 0, 0, 0, 0];
     let overdue = 0;
@@ -105,12 +131,18 @@ export default async function WorkloadPage({ searchParams }: { searchParams: { s
     };
   });
 
+  if (overOnly) rows = rows.filter((r) => r.load === "heavy");
+
   const teamEstimate = rows.reduce((s, r) => s + r.weekEstimate, 0);
   const heavyCount = rows.filter((r) => r.load === "heavy").length;
   const isThisWeek = weekStart.getTime() === weekStartOf(new Date()).getTime();
+  const filtersActive = !!(companyId || departmentId || overOnly);
   const weekLabel = `${weekStart.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })} – ${new Date(
     weekEnd.getTime() - DAY
   ).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}`;
+
+  const prev = toDateParam(new Date(weekStart.getTime() - 7 * DAY));
+  const next = toDateParam(new Date(weekStart.getTime() + 7 * DAY));
 
   return (
     <div className="space-y-4">
@@ -128,14 +160,52 @@ export default async function WorkloadPage({ searchParams }: { searchParams: { s
         </div>
       </div>
 
+      <form className="card flex flex-wrap items-end gap-3 p-4" method="GET">
+        <input type="hidden" name="start" value={toDateParam(weekStart)} />
+        <div>
+          <label className="label">Company</label>
+          <select name="company" defaultValue={searchParams.company ?? ""} className="input">
+            <option value="">All companies</option>
+            {companies.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.code} — {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label">Department</label>
+          <select name="department" defaultValue={searchParams.department ?? ""} className="input">
+            <option value="">All departments</option>
+            {departments.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name} ({d.company.code})
+              </option>
+            ))}
+          </select>
+        </div>
+        <label className="flex items-center gap-2 pb-2 text-sm text-slate-600">
+          <input type="checkbox" name="over" value="1" defaultChecked={overOnly} className="h-4 w-4" />
+          Over capacity only
+        </label>
+        <button type="submit" className="btn-primary">
+          Apply
+        </button>
+        {filtersActive && (
+          <Link href={carry({ company: undefined, department: undefined, over: undefined, start: toDateParam(weekStart) })} className="btn-secondary">
+            Clear
+          </Link>
+        )}
+      </form>
+
       <div className="card flex items-center justify-between p-3">
-        <Link href={`/workload?start=${prev}`} className="btn-secondary !py-1.5 text-xs">← Prev week</Link>
+        <Link href={carry({ start: prev })} className="btn-secondary !py-1.5 text-xs">← Prev week</Link>
         <div className="text-sm font-medium">
           {isThisWeek ? "This week" : "Week of"} · {weekLabel}
         </div>
         <div className="flex gap-2">
-          {!isThisWeek && <Link href="/workload" className="btn-secondary !py-1.5 text-xs">Today</Link>}
-          <Link href={`/workload?start=${next}`} className="btn-secondary !py-1.5 text-xs">Next week →</Link>
+          {!isThisWeek && <Link href={carry({ start: undefined })} className="btn-secondary !py-1.5 text-xs">Today</Link>}
+          <Link href={carry({ start: next })} className="btn-secondary !py-1.5 text-xs">Next week →</Link>
         </div>
       </div>
 
@@ -159,6 +229,13 @@ export default async function WorkloadPage({ searchParams }: { searchParams: { s
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={11} className="td py-8 text-center text-slate-400">
+                  No people match these filters.
+                </td>
+              </tr>
+            )}
             {rows.map((r) => (
               <tr key={r.user.id} className="hover:bg-slate-50">
                 <td className="td">
