@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { deleteUpload } from "@/lib/storage";
+import { pushNotification } from "@/lib/notify";
+import { findMentionedIds } from "@/lib/mentions";
 
 export type DiscussionAttachment = {
   id: number;
@@ -56,6 +58,16 @@ export async function postDiscussionMessage(
     select: { id: true, originalName: true, mimeType: true, size: true },
     orderBy: { id: "asc" },
   });
+
+  // Ping anyone @mentioned in the message.
+  if (body) {
+    const directory = await db.user.findMany({ where: { active: true }, select: { id: true, name: true } });
+    const mentioned = new Set(findMentionedIds(body, directory));
+    mentioned.delete(user.id);
+    for (const id of Array.from(mentioned)) {
+      await pushNotification(id, `${user.name} mentioned you in Discussion`, "/discussion");
+    }
+  }
 
   revalidatePath("/discussion");
 

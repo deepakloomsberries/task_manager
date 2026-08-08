@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { postDiscussionMessage, deleteDiscussionMessage } from "@/lib/actions/discussion";
 import { initials, avatarColor } from "@/lib/ui";
+import MentionTextarea, { type MentionPerson } from "@/components/MentionTextarea";
+import { renderRich } from "@/components/RichText";
 
 type Att = { id: number; name: string; mimeType: string; size: number };
 
@@ -43,25 +45,6 @@ function fmtSize(b: number) {
 
 const isImage = (a: Att) => a.mimeType.startsWith("image/");
 
-/** Renders message text with any URLs turned into clickable links. */
-function linkify(text: string, mine: boolean) {
-  return text.split(/(https?:\/\/[^\s]+)/g).map((p, i) =>
-    /^https?:\/\//.test(p) ? (
-      <a
-        key={i}
-        href={p}
-        target="_blank"
-        rel="noreferrer"
-        className={`underline ${mine ? "text-white" : "text-sky-600"}`}
-      >
-        {p}
-      </a>
-    ) : (
-      <span key={i}>{p}</span>
-    )
-  );
-}
-
 function AttachmentList({ atts, mine }: { atts: Att[]; mine: boolean }) {
   if (!atts.length) return null;
   return (
@@ -96,10 +79,12 @@ export default function DiscussionThread({
   meId,
   isAdmin,
   initialMessages,
+  users,
 }: {
   meId: number;
   isAdmin: boolean;
   initialMessages: Msg[];
+  users: MentionPerson[];
 }) {
   const [messages, setMessages] = useState<Msg[]>(initialMessages);
   const [text, setText] = useState("");
@@ -264,13 +249,6 @@ export default function DiscussionThread({
     void deleteDiscussionMessage(id);
   }
 
-  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      submit();
-    }
-  }
-
   const groups: { label: string; items: Msg[] }[] = [];
   for (const m of messages) {
     const label = dayLabel(m.createdAt);
@@ -334,7 +312,7 @@ export default function DiscussionThread({
                     ) : (
                       <>
                         {m.body && (
-                          <p className="whitespace-pre-wrap text-sm">{linkify(m.body, mine)}</p>
+                          <p className="whitespace-pre-wrap text-sm">{renderRich(m.body, users, { mine })}</p>
                         )}
                         <AttachmentList atts={m.attachments ?? []} mine={mine} />
                       </>
@@ -395,15 +373,16 @@ export default function DiscussionThread({
         >
           {uploading > 0 ? "…" : "📎"}
         </button>
-        <textarea
+        <MentionTextarea
+          users={users}
           value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={onKeyDown}
+          onChange={setText}
+          onEnterSubmit={submit}
           onPaste={onPaste}
           rows={2}
           maxLength={4000}
-          placeholder="Write a message to the whole team…  (paste a screenshot to attach it)"
-          className="input flex-1 resize-none"
+          placeholder="Message the whole team…  Type @ to mention · paste a screenshot to attach"
+          className="resize-none"
         />
         <button type="button" onClick={submit} disabled={!canSend} className="btn-primary self-end disabled:opacity-50">
           Send

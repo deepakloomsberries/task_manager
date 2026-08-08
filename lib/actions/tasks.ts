@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import { notifyAssignment, notifyComment, notifyReminder, pushNotification, logActivity } from "@/lib/notify";
+import { findMentionedIds } from "@/lib/mentions";
 import { fmtDate, lookup, parseHours, TASK_STATUSES } from "@/lib/ui";
 
 const STATUSES = ["TODO", "IN_PROGRESS", "REVIEW", "DONE"];
@@ -368,11 +369,23 @@ export async function addComment(formData: FormData) {
 
   await db.taskComment.create({ data: { taskId, body, authorId: user.id } });
 
-  // Notify the assignee and the task creator, except whoever wrote the comment.
+  // Resolve any @mentions in the comment against the active directory and ping
+  // those people directly — they get a mention notification instead of (not in
+  // addition to) the generic "commented" one.
+  const directory = await db.user.findMany({ where: { active: true }, select: { id: true, name: true } });
+  const mentionedIds = new Set(findMentionedIds(body, directory));
+  mentionedIds.delete(user.id);
+  for (const id of Array.from(mentionedIds)) {
+    await pushNotification(id, `${user.name} mentioned you on: ${task.title}`, `/tasks/${taskId}`);
+  }
+
+  // Notify the assignee and the task creator, except whoever wrote the comment
+  // and anyone already pinged by name above.
   const recipients = new Map<number, { id: number; email: string; name: string }>();
   if (task.assignee?.active) recipients.set(task.assignee.id, task.assignee);
   if (task.createdBy.active) recipients.set(task.createdBy.id, task.createdBy);
   recipients.delete(user.id);
+  for (const id of Array.from(mentionedIds)) recipients.delete(id);
 
   await notifyComment({
     recipients: Array.from(recipients.values()),

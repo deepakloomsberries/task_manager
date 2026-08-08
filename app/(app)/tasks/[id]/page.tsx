@@ -14,6 +14,8 @@ import {
 } from "@/lib/actions/tasks";
 import { deleteAttachment } from "@/lib/actions/files";
 import PasteAttachment from "@/components/PasteAttachment";
+import MentionTextarea from "@/components/MentionTextarea";
+import { renderRich } from "@/components/RichText";
 import DatePicker from "@/components/DatePicker";
 import ShareTask from "@/components/ShareTask";
 import UserAvatar from "@/components/UserAvatar";
@@ -730,7 +732,7 @@ export default async function TaskDetailPage({
                   <span className="text-sm font-medium">{c.author.name}</span>
                   <span className="text-xs text-slate-400">{fmtDateTime(c.createdAt)}</span>
                 </div>
-                <p className="whitespace-pre-wrap text-sm text-slate-700">{c.body}</p>
+                <p className="whitespace-pre-wrap text-sm text-slate-700">{renderRich(c.body, users)}</p>
               </div>
             </div>
           ))}
@@ -740,12 +742,12 @@ export default async function TaskDetailPage({
         </div>
         <form action={addComment} key={task.comments.length} className="mt-5 flex gap-3">
           <input type="hidden" name="taskId" value={task.id} />
-          <textarea
+          <MentionTextarea
             name="body"
-            rows={2}
+            users={users}
             required
-            placeholder="Write a comment…"
-            className="input flex-1"
+            rows={2}
+            placeholder="Write a comment…  Type @ to mention someone"
           />
           <button type="submit" className="btn-primary self-end">
             Comment
