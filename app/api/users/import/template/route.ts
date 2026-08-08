@@ -27,8 +27,9 @@ export async function GET() {
       Company: code,
       Department: "",
       "Job Title": "Sales Executive",
-      Password: "",
       "Requires Approval": "no",
+      Status: "Active",
+      Password: "",
     },
     {
       Name: "Ravi Kumar",
@@ -37,13 +38,14 @@ export async function GET() {
       Company: code,
       Department: "",
       "Job Title": "Team Lead",
-      Password: "",
       "Requires Approval": "no",
+      Status: "Active",
+      Password: "",
     },
   ];
 
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws["!cols"] = [{ wch: 20 }, { wch: 30 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 16 }];
+  ws["!cols"] = [{ wch: 20 }, { wch: 30 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 10 }, { wch: 16 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Users");
   const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;

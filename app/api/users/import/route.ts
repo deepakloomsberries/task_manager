@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { notifyUserWelcome } from "@/lib/mail";
+import { notifyUserWelcome, notifyPasswordReset } from "@/lib/mail";
 import { isStrongPassword, generateStrongPassword } from "@/lib/password";
 
 export const dynamic = "force-dynamic";
@@ -34,14 +34,14 @@ type RowResult = {
   row: number;
   name: string;
   email: string;
-  status: "created" | "skipped" | "error";
+  status: "created" | "updated" | "skipped" | "error";
   reason?: string;
 };
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const me = await db.user.findUnique({ where: { id: session.userId }, select: { role: true } });
+  const me = await db.user.findUnique({ where: { id: session.userId }, select: { id: true, role: true } });
   if (me?.role !== "ADMIN") return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const form = await req.formData();
@@ -125,15 +125,48 @@ export async function POST(req: NextRequest) {
 
     const jobTitle = field(r, ["jobtitle", "job title", "title", "designation"]);
     const requiresApproval = truthy(field(r, ["requiresapproval", "requires approval", "approval"]));
+    const passwordRaw = field(r, ["password", "initialpassword", "initial password"]);
 
-    let password = field(r, ["password", "initialpassword", "initial password"]);
-    if (!password || !isStrongPassword(password)) password = generateStrongPassword();
+    // Status column: "active" / "inactive" (or yes/no). Blank means "leave as is".
+    const statusStr = field(r, ["status", "active"]).toLowerCase();
+    const activeFlag =
+      statusStr === "" ? null : ["active", "yes", "y", "true", "1"].includes(statusStr);
 
-    if (await db.user.findUnique({ where: { email }, select: { id: true } })) {
-      push("skipped", "A user with this email already exists.");
+    const existing = await db.user.findUnique({ where: { email }, select: { id: true } });
+
+    if (existing) {
+      // Update an existing user, matched by email. Never lock the importing
+      // admin out of their own account (no self-demote, no self-deactivate).
+      const isSelf = existing.id === me.id;
+      const data: Record<string, unknown> = {
+        name,
+        companyId: company.id,
+        departmentId,
+        jobTitle: jobTitle || null,
+        requiresApproval,
+      };
+      if (!(isSelf && role !== "ADMIN")) data.role = role;
+      if (activeFlag !== null && !(isSelf && activeFlag === false)) data.active = activeFlag;
+      // Only reset the password when a strong one is supplied in the file.
+      if (passwordRaw && isStrongPassword(passwordRaw)) {
+        data.passwordHash = await bcrypt.hash(passwordRaw, 10);
+        data.mustChangePassword = true;
+      }
+      try {
+        await db.user.update({ where: { id: existing.id }, data });
+        if (passwordRaw && isStrongPassword(passwordRaw)) {
+          notifyPasswordReset({ to: email, name, password: passwordRaw });
+        }
+        push("updated");
+      } catch {
+        push("error", "Could not update this user.");
+      }
       continue;
     }
 
+    // New user — generate a strong password if none (or a weak one) was given.
+    let password = passwordRaw;
+    if (!password || !isStrongPassword(password)) password = generateStrongPassword();
     try {
       await db.user.create({
         data: {
@@ -144,6 +177,7 @@ export async function POST(req: NextRequest) {
           departmentId,
           jobTitle: jobTitle || null,
           requiresApproval,
+          active: activeFlag === null ? true : activeFlag,
           passwordHash: await bcrypt.hash(password, 10),
           mustChangePassword: true,
         },
@@ -156,8 +190,9 @@ export async function POST(req: NextRequest) {
   }
 
   const created = results.filter((r) => r.status === "created").length;
+  const updated = results.filter((r) => r.status === "updated").length;
   const skipped = results.filter((r) => r.status === "skipped").length;
   const failed = results.filter((r) => r.status === "error").length;
 
-  return NextResponse.json({ created, skipped, failed, results });
+  return NextResponse.json({ created, updated, skipped, failed, results });
 }

@@ -7,14 +7,15 @@ type RowResult = {
   row: number;
   name: string;
   email: string;
-  status: "created" | "skipped" | "error";
+  status: "created" | "updated" | "skipped" | "error";
   reason?: string;
 };
 
-type Report = { created: number; skipped: number; failed: number; results: RowResult[] };
+type Report = { created: number; updated: number; skipped: number; failed: number; results: RowResult[] };
 
 const STATUS_STYLE: Record<RowResult["status"], string> = {
   created: "bg-green-100 text-green-700",
+  updated: "bg-sky-100 text-sky-700",
   skipped: "bg-amber-100 text-amber-700",
   error: "bg-red-100 text-red-700",
 };
@@ -44,7 +45,7 @@ export default function BulkUserImport() {
         setError(data.error ?? "Import failed. Please check the file and try again.");
       } else {
         setReport(data as Report);
-        if (data.created > 0) router.refresh(); // pull the new people into the table below
+        if (data.created > 0 || data.updated > 0) router.refresh(); // reflect changes in the table below
       }
     } catch {
       setError("Something went wrong uploading the file.");
@@ -57,17 +58,24 @@ export default function BulkUserImport() {
     <div className="card p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="font-semibold">Bulk import from Excel</h2>
+          <h2 className="font-semibold">Bulk import &amp; update from Excel</h2>
           <p className="mt-1 text-sm text-slate-500">
             Upload an <b>.xlsx</b> or <b>.csv</b> with columns: Name, Email, Role, Company, Department,
-            Job Title, Password, Requires Approval. Only Name, Email and Company are required — a strong
-            password is generated when left blank, and everyone is emailed their login and asked to
-            change it on first sign-in.
+            Job Title, Requires Approval, Status, Password. Rows are matched by <b>email</b>: a new email
+            creates a user, an existing one <b>updates</b> that person. Only Name, Email and Company are
+            required. New users get a generated password (if blank) and a welcome email; leave Password
+            blank on existing users to keep their current one. Set <b>Status</b> to Active/Inactive to
+            enable or disable accounts.
           </p>
         </div>
-        <a href="/api/users/import/template" className="btn-secondary !py-1.5 text-xs whitespace-nowrap">
-          ⇩ Download template
-        </a>
+        <div className="flex shrink-0 flex-col gap-2">
+          <a href="/api/users/export" className="btn-secondary !py-1.5 text-xs whitespace-nowrap">
+            ⇩ Download current users
+          </a>
+          <a href="/api/users/import/template" className="btn-secondary !py-1.5 text-xs whitespace-nowrap">
+            ⇩ Blank template
+          </a>
+        </div>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -97,6 +105,9 @@ export default function BulkUserImport() {
           <div className="flex flex-wrap gap-2 text-sm">
             <span className="rounded-full bg-green-100 px-3 py-1 font-medium text-green-700">
               {report.created} created
+            </span>
+            <span className="rounded-full bg-sky-100 px-3 py-1 font-medium text-sky-700">
+              {report.updated} updated
             </span>
             <span className="rounded-full bg-amber-100 px-3 py-1 font-medium text-amber-700">
               {report.skipped} skipped
