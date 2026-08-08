@@ -5,7 +5,10 @@ import { setTaskStatus } from "@/lib/actions/tasks";
 import { startTaskTimer, stopTaskTimer } from "@/lib/actions/time";
 import UserAvatar from "@/components/UserAvatar";
 import LiveElapsed from "@/components/LiveElapsed";
-import { weekStartOf } from "@/lib/timerange";
+import LiveClock from "@/components/LiveClock";
+import OfficeClocks from "@/components/OfficeClocks";
+import QuickAdd from "@/components/QuickAdd";
+import { companyTimezone, zonedStartOfToday, zonedHour, zonedDateLine } from "@/lib/tz";
 import {
   TASK_PRIORITIES,
   lookup,
@@ -30,12 +33,24 @@ export default async function DashboardPage() {
   const user = await requireUser();
 
   const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // "Today", the week and the greeting all follow the user's office time zone,
+  // so a person in Dubai or Riyadh sees their own local day — not the server's.
+  const tz = companyTimezone(user.company);
+  const todayStart = zonedStartOfToday(now, tz);
   const tomorrow = new Date(todayStart.getTime() + DAY);
   const weekFromNow = new Date(todayStart.getTime() + 7 * DAY);
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const weekStart = weekStartOf(now);
+  const dow = new Date(
+    // day-of-week of the local today, derived from the local calendar date
+    Date.UTC(
+      Number(new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric" }).format(now)),
+      Number(new Intl.DateTimeFormat("en-US", { timeZone: tz, month: "numeric" }).format(now)) - 1,
+      Number(new Intl.DateTimeFormat("en-US", { timeZone: tz, day: "numeric" }).format(now))
+    )
+  ).getUTCDay();
+  const localDayOfMonth = Number(new Intl.DateTimeFormat("en-US", { timeZone: tz, day: "numeric" }).format(now));
+  const weekStart = new Date(todayStart.getTime() - dow * DAY);
   const weekEnd = new Date(weekStart.getTime() + 7 * DAY);
+  const monthStart = new Date(todayStart.getTime() - (localDayOfMonth - 1) * DAY);
   const onlineSince = new Date(Date.now() - ONLINE_WINDOW_MS);
 
   const [openTasks, doneThisWeek, doneThisMonth, timer, weekEntries, activeProjects, activeUsers, notifications] =
@@ -81,7 +96,8 @@ export default async function DashboardPage() {
   const peak = Math.max(...perDay.map((d) => d.hours), 1);
 
   const first = user.name.split(" ")[0];
-  const dateLine = now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const dateLine = zonedDateLine(now, tz);
+  const localHour = zonedHour(now, tz);
   const summary =
     overdue.length > 0
       ? `You have ${overdue.length} overdue and ${dueToday.length} due today.`
@@ -104,9 +120,13 @@ export default async function DashboardPage() {
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-sky-600 to-sky-500 p-6 text-white shadow-sm sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-medium text-sky-100">{dateLine}</p>
+            <p className="flex items-center gap-2 text-sm font-medium text-sky-100">
+              <span>{dateLine}</span>
+              <span className="text-sky-200/70">·</span>
+              <LiveClock tz={tz} className="tabular-nums" />
+            </p>
             <h1 className="mt-1 text-2xl font-bold sm:text-3xl">
-              {greeting(now.getHours())}, {first}
+              {greeting(localHour)}, {first}
             </h1>
             <p className="mt-1 text-sky-50/90">{summary}</p>
           </div>
@@ -131,6 +151,8 @@ export default async function DashboardPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Left: focus + agenda */}
         <div className="space-y-6 lg:col-span-2">
+          <QuickAdd />
+
           {/* Focus now */}
           <div className="card p-5">
             <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Focus now</h2>
@@ -237,6 +259,9 @@ export default async function DashboardPage() {
               <span className="text-slate-500">This month <b>{doneThisMonth}</b></span>
             </div>
           </div>
+
+          {/* Office hours across the team */}
+          <OfficeClocks myCode={user.company.code} />
 
           {/* Active now */}
           <div className="card">

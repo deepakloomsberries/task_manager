@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import { notifyAssignment, notifyComment, notifyReminder, pushNotification, logActivity } from "@/lib/notify";
 import { findMentionedIds } from "@/lib/mentions";
+import { companyTimezone, zonedStartOfToday } from "@/lib/tz";
 import { fmtDate, lookup, parseHours, TASK_STATUSES } from "@/lib/ui";
 
 const STATUSES = ["TODO", "IN_PROGRESS", "REVIEW", "DONE"];
@@ -82,6 +83,34 @@ export async function createTask(formData: FormData) {
 
   await revalidateTaskViews(task.id);
   redirect(`/tasks/${task.id}`);
+}
+
+/**
+ * Fast capture from the dashboard: creates a To-Do assigned to the current
+ * user, due today in their office's time zone, so it lands straight in their
+ * "Due today" list. Returns nothing and does not redirect — the inline widget
+ * clears itself and refreshes.
+ */
+export async function quickAddTask(formData: FormData) {
+  const user = await requireUser();
+  const title = String(formData.get("title") ?? "").trim();
+  if (!title || title.length > 300) return;
+
+  const due = zonedStartOfToday(new Date(), companyTimezone(user.company));
+  const task = await db.task.create({
+    data: {
+      title,
+      assigneeId: user.id,
+      createdById: user.id,
+      status: "TODO",
+      priority: "MEDIUM",
+      dueDate: due,
+    },
+  });
+  await logActivity(task.id, user.id, "created");
+  revalidatePath("/dashboard");
+  revalidatePath("/my-tasks");
+  revalidatePath("/tasks");
 }
 
 export async function addSubtask(formData: FormData) {
