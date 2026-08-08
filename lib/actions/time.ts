@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
-import { pushNotification } from "@/lib/notify";
+import { pushNotification, logActivity } from "@/lib/notify";
 import { parseHours } from "@/lib/ui";
 import { weekStartOf } from "@/lib/timerange";
 
@@ -132,6 +132,17 @@ export async function startTaskTimer(formData: FormData) {
   }
 
   await db.taskTimer.create({ data: { userId: user.id, taskId } });
+
+  // Starting the clock means work has begun, so nudge a fresh task out of the
+  // backlog into "In Progress" automatically (only from To-Do — never override
+  // Review or Done).
+  if (task.status === "TODO") {
+    await db.task.update({ where: { id: taskId }, data: { status: "IN_PROGRESS" } });
+    await logActivity(taskId, user.id, "status", "TODO → IN_PROGRESS (timer started)");
+    revalidatePath(`/tasks/${taskId}`);
+    revalidatePath("/tasks");
+  }
+
   revalidatePath(back);
   revalidatePath("/timesheet");
   redirect(back);
