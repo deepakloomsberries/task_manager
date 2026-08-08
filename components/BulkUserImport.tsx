@@ -63,9 +63,10 @@ export default function BulkUserImport() {
             Upload an <b>.xlsx</b> or <b>.csv</b> with columns: Name, Email, Role, Company, Department,
             Job Title, Requires Approval, Status, Password. Rows are matched by <b>email</b>: a new email
             creates a user, an existing one <b>updates</b> that person. Only Name, Email and Company are
-            required. New users get a generated password (if blank) and a welcome email; leave Password
-            blank on existing users to keep their current one. Set <b>Status</b> to Active/Inactive to
-            enable or disable accounts.
+            required. A <b>department</b> that doesn&apos;t exist yet is created automatically. New users
+            get a generated password (if blank) and a welcome email; leave Password blank on existing
+            users to keep their current one. Set <b>Status</b> to Active/Inactive to enable or disable
+            accounts.
           </p>
         </div>
         <div className="flex shrink-0 flex-col gap-2">

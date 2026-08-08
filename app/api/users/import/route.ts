@@ -115,10 +115,23 @@ export async function POST(req: NextRequest) {
     const deptStr = field(r, ["department", "dept"]);
     let departmentId: number | null = null;
     if (deptStr) {
-      const dept = departments.find((d) => d.companyId === company.id && norm(d.name) === norm(deptStr));
+      let dept = departments.find((d) => d.companyId === company.id && norm(d.name) === norm(deptStr));
       if (!dept) {
-        push("error", `Unknown department "${deptStr}" for ${company.code}.`);
-        continue;
+        // Create the department on the fly so a new team name in the sheet just
+        // works, then reuse it for later rows in the same upload.
+        try {
+          dept = await db.department.create({
+            data: { name: deptStr, companyId: company.id },
+            select: { id: true, name: true, companyId: true },
+          });
+          departments.push(dept);
+        } catch {
+          dept = departments.find((d) => d.companyId === company.id && norm(d.name) === norm(deptStr));
+          if (!dept) {
+            push("error", `Could not create department "${deptStr}" for ${company.code}.`);
+            continue;
+          }
+        }
       }
       departmentId = dept.id;
     }
