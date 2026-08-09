@@ -60,7 +60,11 @@ export default async function DashboardPage() {
   const [openTasks, doneThisWeek, doneThisMonth, timer, weekEntries, activeProjects, activeUsers, notifications] =
     await Promise.all([
       db.task.findMany({
-        where: { assigneeId: user.id, status: { not: "DONE" }, deletedAt: null },
+        where: {
+          status: { not: "DONE" },
+          deletedAt: null,
+          OR: [{ assigneeId: user.id }, { collaborators: { some: { userId: user.id } } }],
+        },
         orderBy: [{ dueDate: "asc" }, { priority: "desc" }],
         include: { project: { select: { name: true } }, subtasks: { where: { deletedAt: null }, select: { status: true } } },
       }),

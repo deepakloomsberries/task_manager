@@ -54,9 +54,13 @@ function canEditTask(
  */
 function canChangeStatus(
   user: { id: number; role: string },
-  task: { createdById: number; assigneeId: number | null }
+  task: { createdById: number; assigneeId: number | null; collaborators?: { userId: number }[] }
 ) {
-  return canEditTask(user, task) || task.assigneeId === user.id;
+  return (
+    canEditTask(user, task) ||
+    task.assigneeId === user.id ||
+    (task.collaborators?.some((c) => c.userId === user.id) ?? false)
+  );
 }
 
 async function revalidateTaskViews(taskId?: number) {
@@ -119,7 +123,10 @@ export async function addSubtask(formData: FormData) {
   const title = String(formData.get("title") ?? "").trim();
   const assigneeId = formData.get("assigneeId") ? Number(formData.get("assigneeId")) : null;
 
-  const parent = await db.task.findUnique({ where: { id: parentId } });
+  const parent = await db.task.findUnique({
+    where: { id: parentId },
+    include: { collaborators: { select: { userId: true } } },
+  });
   if (!parent || parent.deletedAt || !title) redirect(`/tasks/${parentId}`);
   // The task's owner, its assignee, or a manager/admin can break it down.
   if (!canChangeStatus(user, parent)) redirect(`/tasks/${parentId}?error=forbidden`);
@@ -197,7 +204,10 @@ async function changeStatus(
   status: string
 ): Promise<"ok" | "noop" | "blocked" | "needs-approval"> {
   if (!STATUSES.includes(status)) return "noop";
-  const task = await db.task.findUnique({ where: { id: taskId } });
+  const task = await db.task.findUnique({
+    where: { id: taskId },
+    include: { collaborators: { select: { userId: true } } },
+  });
   if (!task || task.deletedAt || !canChangeStatus(user, task)) return "noop";
   if (task.status === status) return "noop";
 
@@ -302,13 +312,73 @@ export async function setTaskStatus(formData: FormData) {
 export async function moveTask(taskId: number, status: string) {
   const user = await requireUser();
   if (!STATUSES.includes(status)) return;
-  const task = await db.task.findUnique({ where: { id: taskId } });
+  const task = await db.task.findUnique({
+    where: { id: taskId },
+    include: { collaborators: { select: { userId: true } } },
+  });
   if (!task || task.deletedAt) return;
-  if (task.assigneeId !== user.id && !isManagerOrAdmin(user.role)) return;
+  if (!canChangeStatus(user, task)) return;
   if (task.status === status) return;
 
   await changeStatus(user, taskId, status);
   await revalidateTaskViews(taskId);
+}
+
+// --- Task collaborators ------------------------------------------------------
+
+/** Owner, assignee, or a manager/admin may manage a task's collaborators. */
+function canManageCollaborators(
+  user: { id: number; role: string },
+  task: { createdById: number; assigneeId: number | null }
+) {
+  return isManagerOrAdmin(user.role) || task.createdById === user.id || task.assigneeId === user.id;
+}
+
+export async function addTaskCollaborator(formData: FormData) {
+  const user = await requireUser();
+  const taskId = Number(formData.get("taskId"));
+  const userId = Number(formData.get("userId"));
+  if (!taskId || !userId) redirect(`/tasks/${taskId || ""}`);
+
+  const task = await db.task.findUnique({ where: { id: taskId } });
+  if (!task || task.deletedAt) redirect("/tasks");
+  if (!canManageCollaborators(user, task)) redirect(`/tasks/${taskId}?error=forbidden`);
+
+  const person = await db.user.findUnique({ where: { id: userId } });
+  // Skip if the person is inactive, is the assignee already, or is the creator.
+  if (!person || !person.active || userId === task.assigneeId) redirect(`/tasks/${taskId}`);
+
+  await db.taskCollaborator.upsert({
+    where: { taskId_userId: { taskId, userId } },
+    update: {},
+    create: { taskId, userId },
+  });
+  await logActivity(taskId, user.id, "details", `added ${person.name} as a collaborator`);
+  if (userId !== user.id) {
+    await pushNotification(userId, `${user.name} added you as a collaborator on: ${task.title}`, `/tasks/${taskId}`);
+  }
+  await revalidateTaskViews(taskId);
+  redirect(`/tasks/${taskId}`);
+}
+
+export async function removeTaskCollaborator(formData: FormData) {
+  const user = await requireUser();
+  const taskId = Number(formData.get("taskId"));
+  const userId = Number(formData.get("userId"));
+  if (!taskId || !userId) redirect(`/tasks/${taskId || ""}`);
+
+  const task = await db.task.findUnique({ where: { id: taskId } });
+  if (!task || task.deletedAt) redirect("/tasks");
+  // A collaborator can remove themselves; otherwise owner/assignee/manager only.
+  if (!canManageCollaborators(user, task) && userId !== user.id) {
+    redirect(`/tasks/${taskId}?error=forbidden`);
+  }
+
+  await db.taskCollaborator.deleteMany({ where: { taskId, userId } });
+  const person = await db.user.findUnique({ where: { id: userId }, select: { name: true } });
+  await logActivity(taskId, user.id, "details", `removed ${person?.name ?? "a collaborator"} from collaborators`);
+  await revalidateTaskViews(taskId);
+  redirect(`/tasks/${taskId}`);
 }
 
 export async function deleteTask(formData: FormData) {
@@ -515,7 +585,10 @@ export async function bulkTaskAction(formData: FormData) {
     .filter((n) => Number.isFinite(n) && n > 0);
 
   for (const id of ids) {
-    const task = await db.task.findUnique({ where: { id } });
+    const task = await db.task.findUnique({
+      where: { id },
+      include: { collaborators: { select: { userId: true } } },
+    });
     if (!task || task.deletedAt) continue;
 
     if (op === "status") {

@@ -47,6 +47,7 @@ model User {
 
   tasksAssigned      Task[]              @relation("assignee")
   tasksCreated       Task[]              @relation("creator")
+  taskCollaborations TaskCollaborator[]
   comments           TaskComment[]
   notes              Note[]
   timeEntries        TimeEntry[]
@@ -135,11 +136,28 @@ model Task {
   subtasks   Task[]         @relation("subtasks")
   tags       TaskTag[]
   activities TaskActivity[]
+  collaborators TaskCollaborator[]
 
   // Dependency edges: `blockedBy` are tasks that must finish before this one;
   // `blocking` are tasks that are waiting on this one.
   blockedBy  TaskDependency[] @relation("blockedTask")
   blocking   TaskDependency[] @relation("blockerTask")
+}
+
+/**
+ * Extra people sharing a task alongside its primary assignee. Any collaborator
+ * can work on it, log their own time, and move it forward — so a task can be
+ * tackled together and completed by whoever finishes.
+ */
+model TaskCollaborator {
+  task    Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId  Int
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId  Int
+  addedAt DateTime @default(now())
+
+  @@id([taskId, userId])
+  @@index([userId])
 }
 
 /**

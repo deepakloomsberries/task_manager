@@ -37,10 +37,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       }),
       db.task.count({
         where: {
-          assigneeId: user.id,
           deletedAt: null,
           status: { not: "DONE" },
           dueDate: { not: null, lte: endOfToday },
+          OR: [{ assigneeId: user.id }, { collaborators: { some: { userId: user.id } } }],
         },
       }),
       db.user.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),

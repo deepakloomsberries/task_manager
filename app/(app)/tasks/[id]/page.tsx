@@ -11,6 +11,8 @@ import {
   sendTaskReminder,
   addTaskDependency,
   removeTaskDependency,
+  addTaskCollaborator,
+  removeTaskCollaborator,
 } from "@/lib/actions/tasks";
 import { deleteAttachment } from "@/lib/actions/files";
 import PasteAttachment from "@/components/PasteAttachment";
@@ -54,6 +56,7 @@ export default async function TaskDetailPage({
         assignee: true,
         createdBy: true,
         comments: { include: { author: true }, orderBy: { createdAt: "asc" } },
+        collaborators: { include: { user: true }, orderBy: { addedAt: "asc" } },
         attachments: { include: { uploadedBy: true }, orderBy: { createdAt: "desc" } },
         parent: true,
         subtasks: {
@@ -118,7 +121,10 @@ export default async function TaskDetailPage({
   // assigned the task (its creator), plus managers and admins. The assignee can
   // still move the task through its statuses.
   const canEdit = isManagerOrAdmin(user.role) || task.createdById === user.id;
-  const canProgress = canEdit || task.assigneeId === user.id;
+  const isCollaborator = task.collaborators.some((c) => c.userId === user.id);
+  const canProgress = canEdit || task.assigneeId === user.id || isCollaborator;
+  // Owner, assignee or a manager can add/remove collaborators.
+  const canManageCollab = canEdit || task.assigneeId === user.id;
   const canDelete = canEdit;
   // Approval-required users (e.g. designers) can move up to Review only; the
   // task owner/manager approves completion (Review → Done).
@@ -301,6 +307,60 @@ export default async function TaskDetailPage({
                 <dd className="mt-0.5 font-medium">{task.createdBy.name}</dd>
               </div>
             </dl>
+
+            <div className="mt-6 border-t border-slate-100 pt-4">
+              <div className="mb-2 text-xs font-medium text-slate-500">
+                Collaborators
+                <span className="ml-1 font-normal text-slate-400">— anyone here can work on and complete this task</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {task.assignee && (
+                  <span className="flex items-center gap-1.5 rounded-full bg-slate-100 px-2 py-1 text-xs">
+                    <UserAvatar user={task.assignee} size={20} presence={task.assignee.lastSeenAt} />
+                    {task.assignee.name}
+                    <span className="text-slate-400">· assignee</span>
+                  </span>
+                )}
+                {task.collaborators.map((c) => (
+                  <span key={c.userId} className="flex items-center gap-1.5 rounded-full bg-sky-50 px-2 py-1 text-xs ring-1 ring-sky-100">
+                    <UserAvatar user={c.user} size={20} presence={c.user.lastSeenAt} />
+                    {c.user.name}
+                    {(canManageCollab || c.userId === user.id) && (
+                      <form action={removeTaskCollaborator} className="inline">
+                        <input type="hidden" name="taskId" value={task.id} />
+                        <input type="hidden" name="userId" value={c.userId} />
+                        <button type="submit" title="Remove collaborator" className="ml-0.5 text-slate-400 hover:text-red-600">
+                          ✕
+                        </button>
+                      </form>
+                    )}
+                  </span>
+                ))}
+                {!task.assignee && task.collaborators.length === 0 && (
+                  <span className="text-xs text-slate-400">No one assigned yet.</span>
+                )}
+              </div>
+              {canManageCollab && (
+                <form action={addTaskCollaborator} className="mt-2 flex items-center gap-2">
+                  <input type="hidden" name="taskId" value={task.id} />
+                  <select name="userId" required defaultValue="" className="input !py-1.5 max-w-xs text-sm">
+                    <option value="" disabled>
+                      + Add collaborator…
+                    </option>
+                    {users
+                      .filter((u) => u.id !== task.assigneeId && !task.collaborators.some((c) => c.userId === u.id))
+                      .map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name}
+                        </option>
+                      ))}
+                  </select>
+                  <button type="submit" className="btn-secondary !py-1.5 text-xs">
+                    Add
+                  </button>
+                </form>
+              )}
+            </div>
 
             {canProgress && (
               <div className="mt-6 border-t border-slate-100 pt-4">
