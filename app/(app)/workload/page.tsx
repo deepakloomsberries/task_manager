@@ -180,25 +180,24 @@ export default async function WorkloadPage({
         </div>
         <div>
           <label className="label">Company</label>
-          <select name="company" defaultValue={searchParams.company ?? ""} className="input">
-            <option value="">All companies</option>
-            {companies.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.code} — {c.name}
-              </option>
-            ))}
-          </select>
+          <SearchSelect
+            name="company"
+            defaultValue={searchParams.company ?? ""}
+            className="w-48"
+            placeholder="All companies"
+            options={[{ value: "", label: "All companies" }, ...companies.map((c) => ({ value: String(c.id), label: `${c.code} — ${c.name}` }))]}
+          />
         </div>
         <div>
           <label className="label">Department</label>
-          <select name="department" defaultValue={searchParams.department ?? ""} className="input">
-            <option value="">All departments</option>
-            {departments.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name} ({d.company.code})
-              </option>
-            ))}
-          </select>
+          <SearchSelect
+            name="department"
+            defaultValue={searchParams.department ?? ""}
+            className="w-48"
+            placeholder="All departments"
+            searchPlaceholder="Search departments…"
+            options={[{ value: "", label: "All departments" }, ...departments.map((d) => ({ value: String(d.id), label: `${d.name} (${d.company.code})` }))]}
+          />
         </div>
         <label className="flex items-center gap-2 pb-2 text-sm text-slate-600">
           <input type="checkbox" name="over" value="1" defaultChecked={overOnly} className="h-4 w-4" />

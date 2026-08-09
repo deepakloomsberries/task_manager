@@ -451,13 +451,11 @@ export default async function TaskDetailPage({
             </div>
             <div>
               <label className="label">Priority</label>
-              <select name="priority" defaultValue={task.priority} className="input">
-                {TASK_PRIORITIES.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
+              <SearchSelect
+                name="priority"
+                defaultValue={task.priority}
+                options={TASK_PRIORITIES.map((p) => ({ value: p.value, label: p.label }))}
+              />
             </div>
             <div>
               <label className="label">Start date</label>
@@ -469,12 +467,17 @@ export default async function TaskDetailPage({
             </div>
             <div>
               <label className="label">Repeat</label>
-              <select name="recurrence" defaultValue={task.recurrence ?? ""} className="input">
-                <option value="">Does not repeat</option>
-                <option value="DAILY">Daily</option>
-                <option value="WEEKLY">Weekly</option>
-                <option value="MONTHLY">Monthly</option>
-              </select>
+              <SearchSelect
+                name="recurrence"
+                defaultValue={task.recurrence ?? ""}
+                placeholder="Does not repeat"
+                options={[
+                  { value: "", label: "Does not repeat" },
+                  { value: "DAILY", label: "Daily" },
+                  { value: "WEEKLY", label: "Weekly" },
+                  { value: "MONTHLY", label: "Monthly" },
+                ]}
+              />
             </div>
             <div>
               <label className="label">Estimate</label>

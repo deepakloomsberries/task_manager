@@ -252,13 +252,11 @@ export default async function TasksPage({
             </div>
             <div>
               <label className="label">Priority</label>
-              <select name="priority" className="input" defaultValue="MEDIUM">
-                {TASK_PRIORITIES.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
+              <SearchSelect
+                name="priority"
+                defaultValue="MEDIUM"
+                options={TASK_PRIORITIES.map((p) => ({ value: p.value, label: p.label }))}
+              />
             </div>
             <div>
               <label className="label">Start date</label>
@@ -270,12 +268,17 @@ export default async function TasksPage({
             </div>
             <div>
               <label className="label">Repeat</label>
-              <select name="recurrence" defaultValue="" className="input">
-                <option value="">Does not repeat</option>
-                <option value="DAILY">Daily</option>
-                <option value="WEEKLY">Weekly</option>
-                <option value="MONTHLY">Monthly</option>
-              </select>
+              <SearchSelect
+                name="recurrence"
+                defaultValue=""
+                placeholder="Does not repeat"
+                options={[
+                  { value: "", label: "Does not repeat" },
+                  { value: "DAILY", label: "Daily" },
+                  { value: "WEEKLY", label: "Weekly" },
+                  { value: "MONTHLY", label: "Monthly" },
+                ]}
+              />
             </div>
             <div>
               <label className="label">Estimate</label>
@@ -298,14 +301,13 @@ export default async function TasksPage({
         </div>
         <div>
           <label className="label">Status</label>
-          <select name="status" defaultValue={searchParams.status ?? ""} className="input">
-            <option value="">All</option>
-            {TASK_STATUSES.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
+          <SearchSelect
+            name="status"
+            defaultValue={searchParams.status ?? ""}
+            className="w-36"
+            placeholder="All"
+            options={[{ value: "", label: "All" }, ...TASK_STATUSES.map((s) => ({ value: s.value, label: s.label }))]}
+          />
         </div>
         <div>
           <label className="label">Assignee</label>
@@ -336,24 +338,30 @@ export default async function TasksPage({
         {allTags.length > 0 && (
           <div>
             <label className="label">Tag</label>
-            <select name="tag" defaultValue={searchParams.tag ?? ""} className="input">
-              <option value="">All</option>
-              {allTags.map((t) => (
-                <option key={t.id} value={t.name}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
+            <SearchSelect
+              name="tag"
+              defaultValue={searchParams.tag ?? ""}
+              className="w-36"
+              placeholder="All"
+              searchPlaceholder="Search tags…"
+              options={[{ value: "", label: "All" }, ...allTags.map((t) => ({ value: t.name, label: t.name }))]}
+            />
           </div>
         )}
         <div>
           <label className="label">Sort</label>
-          <select name="sort" defaultValue={searchParams.sort ?? ""} className="input">
-            <option value="">Default (status · due)</option>
-            <option value="updated">Recently updated</option>
-            <option value="created">Recently created</option>
-            <option value="title">Title (A–Z)</option>
-          </select>
+          <SearchSelect
+            name="sort"
+            defaultValue={searchParams.sort ?? ""}
+            className="w-48"
+            placeholder="Default (status · due)"
+            options={[
+              { value: "", label: "Default (status · due)" },
+              { value: "updated", label: "Recently updated" },
+              { value: "created", label: "Recently created" },
+              { value: "title", label: "Title (A–Z)" },
+            ]}
+          />
         </div>
         <button type="submit" className="btn-primary">
           Apply filters

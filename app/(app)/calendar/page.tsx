@@ -169,25 +169,23 @@ export default async function CalendarPage({
         </div>
         <div>
           <label className="label">Status</label>
-          <select name="status" defaultValue={searchParams.status ?? ""} className="input">
-            <option value="">Any status</option>
-            {TASK_STATUSES.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
+          <SearchSelect
+            name="status"
+            defaultValue={searchParams.status ?? ""}
+            className="w-36"
+            placeholder="Any status"
+            options={[{ value: "", label: "Any status" }, ...TASK_STATUSES.map((s) => ({ value: s.value, label: s.label }))]}
+          />
         </div>
         <div>
           <label className="label">Priority</label>
-          <select name="priority" defaultValue={searchParams.priority ?? ""} className="input">
-            <option value="">Any priority</option>
-            {TASK_PRIORITIES.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
-            ))}
-          </select>
+          <SearchSelect
+            name="priority"
+            defaultValue={searchParams.priority ?? ""}
+            className="w-36"
+            placeholder="Any priority"
+            options={[{ value: "", label: "Any priority" }, ...TASK_PRIORITIES.map((p) => ({ value: p.value, label: p.label }))]}
+          />
         </div>
         <button type="submit" className="btn-primary">
           Apply

@@ -147,13 +147,7 @@ export default async function ProjectDetailPage({
             </div>
             <div>
               <label className="label">Status</label>
-              <select name="status" defaultValue={project.status} className="input">
-                {PROJECT_STATUSES.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
+              <SearchSelect name="status" defaultValue={project.status} options={PROJECT_STATUSES.map((s) => ({ value: s.value, label: s.label }))} />
             </div>
             <div className="md:col-span-2">
               <label className="label">Description</label>

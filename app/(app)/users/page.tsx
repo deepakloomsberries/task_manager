@@ -10,6 +10,7 @@ import {
 import { ROLES, lookup, fmtDate, isOnline, lastSeenLabel } from "@/lib/ui";
 import PasswordField from "@/components/PasswordField";
 import BulkUserImport from "@/components/BulkUserImport";
+import SearchSelect from "@/components/SearchSelect";
 import { PASSWORD_RULES } from "@/lib/password";
 
 export const dynamic = "force-dynamic";
@@ -102,34 +103,26 @@ export default async function UsersPage({
             </div>
             <div>
               <label className="label">Role *</label>
-              <select name="role" className="input" defaultValue="EMPLOYEE">
-                {ROLES.map((r) => (
-                  <option key={r.value} value={r.value}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
+              <SearchSelect name="role" defaultValue="EMPLOYEE" options={ROLES.map((r) => ({ value: r.value, label: r.label }))} />
             </div>
             <div>
               <label className="label">Company *</label>
-              <select name="companyId" required className="input">
-                {companies.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <SearchSelect
+                name="companyId"
+                required
+                defaultValue={companies[0] ? String(companies[0].id) : ""}
+                placeholder="Select company…"
+                options={companies.map((c) => ({ value: String(c.id), label: c.name }))}
+              />
             </div>
             <div>
               <label className="label">Department</label>
-              <select name="departmentId" className="input">
-                <option value="">— None —</option>
-                {departments.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name} ({d.company.code})
-                  </option>
-                ))}
-              </select>
+              <SearchSelect
+                name="departmentId"
+                placeholder="— None —"
+                searchPlaceholder="Search departments…"
+                options={[{ value: "", label: "— None —" }, ...departments.map((d) => ({ value: String(d.id), label: `${d.name} (${d.company.code})` }))]}
+              />
             </div>
             <div>
               <label className="label">Job title</label>
@@ -181,34 +174,21 @@ export default async function UsersPage({
                         </div>
                         <div>
                           <label className="label">Role</label>
-                          <select name="role" defaultValue={u.role} className="input">
-                            {ROLES.map((r) => (
-                              <option key={r.value} value={r.value}>
-                                {r.label}
-                              </option>
-                            ))}
-                          </select>
+                          <SearchSelect name="role" defaultValue={u.role} options={ROLES.map((r) => ({ value: r.value, label: r.label }))} />
                         </div>
                         <div>
                           <label className="label">Company</label>
-                          <select name="companyId" defaultValue={u.companyId} className="input">
-                            {companies.map((c) => (
-                              <option key={c.id} value={c.id}>
-                                {c.name}
-                              </option>
-                            ))}
-                          </select>
+                          <SearchSelect name="companyId" defaultValue={String(u.companyId)} options={companies.map((c) => ({ value: String(c.id), label: c.name }))} />
                         </div>
                         <div>
                           <label className="label">Department</label>
-                          <select name="departmentId" defaultValue={u.departmentId ?? ""} className="input">
-                            <option value="">— None —</option>
-                            {departments.map((d) => (
-                              <option key={d.id} value={d.id}>
-                                {d.name} ({d.company.code})
-                              </option>
-                            ))}
-                          </select>
+                          <SearchSelect
+                            name="departmentId"
+                            defaultValue={u.departmentId ? String(u.departmentId) : ""}
+                            placeholder="— None —"
+                            searchPlaceholder="Search departments…"
+                            options={[{ value: "", label: "— None —" }, ...departments.map((d) => ({ value: String(d.id), label: `${d.name} (${d.company.code})` }))]}
+                          />
                         </div>
                         <div>
                           <label className="label">Job title</label>

@@ -19,6 +19,7 @@ export default function SearchSelect({
   searchPlaceholder = "Type to search…",
   className = "",
   required = false,
+  searchable,
   onValueChange,
 }: {
   name?: string;
@@ -28,6 +29,7 @@ export default function SearchSelect({
   searchPlaceholder?: string;
   className?: string;
   required?: boolean;
+  searchable?: boolean;
   onValueChange?: (value: string) => void;
 }) {
   const [value, setValue] = useState(defaultValue);
@@ -37,6 +39,10 @@ export default function SearchSelect({
 
   const rootRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  // Show the search box only when the list is long enough to warrant it.
+  const showSearch = searchable ?? options.length > 7;
 
   const selected = options.find((o) => o.value === value) || null;
 
@@ -54,13 +60,13 @@ export default function SearchSelect({
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener("mousedown", onDown);
-    // focus the search box when the panel opens
-    const t = setTimeout(() => searchRef.current?.focus(), 0);
+    // focus the search box (or the list, when there's no search) on open
+    const t = setTimeout(() => (showSearch ? searchRef.current : listRef.current)?.focus(), 0);
     return () => {
       document.removeEventListener("mousedown", onDown);
       clearTimeout(t);
     };
-  }, [open]);
+  }, [open, showSearch]);
 
   function choose(v: string) {
     setValue(v);
@@ -99,18 +105,25 @@ export default function SearchSelect({
       </button>
 
       {open && (
-        <div className="absolute z-30 mt-1 w-full min-w-[14rem] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
-          <div className="border-b border-slate-100 p-2">
-            <input
-              ref={searchRef}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={onKeyDown}
-              placeholder={searchPlaceholder}
-              className="w-full rounded-md border border-slate-200 px-2.5 py-1.5 text-sm outline-none focus:border-sky-400"
-            />
-          </div>
-          <ul className="max-h-56 overflow-y-auto py-1">
+        <div className="absolute z-30 mt-1 w-full min-w-[12rem] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+          {showSearch && (
+            <div className="border-b border-slate-100 p-2">
+              <input
+                ref={searchRef}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={onKeyDown}
+                placeholder={searchPlaceholder}
+                className="w-full rounded-md border border-slate-200 px-2.5 py-1.5 text-sm outline-none focus:border-sky-400"
+              />
+            </div>
+          )}
+          <ul
+            ref={listRef}
+            tabIndex={-1}
+            onKeyDown={showSearch ? undefined : onKeyDown}
+            className="max-h-56 overflow-y-auto py-1 outline-none"
+          >
             {filtered.length === 0 && <li className="px-3 py-2 text-sm text-slate-400">No matches</li>}
             {filtered.map((o, i) => (
               <li key={o.value || "__empty"}>

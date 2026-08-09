@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import { createProject } from "@/lib/actions/projects";
 import { PROJECT_STATUSES, lookup, fmtDate } from "@/lib/ui";
+import SearchSelect from "@/components/SearchSelect";
 
 export const dynamic = "force-dynamic";
 
@@ -53,13 +54,13 @@ export default async function ProjectsPage({
             </div>
             <div>
               <label className="label">Company *</label>
-              <select name="companyId" required className="input">
-                {companies.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <SearchSelect
+                name="companyId"
+                required
+                defaultValue={companies[0] ? String(companies[0].id) : ""}
+                placeholder="Select company…"
+                options={companies.map((c) => ({ value: String(c.id), label: c.name }))}
+              />
             </div>
             <div className="md:col-span-2">
               <label className="label">Description</label>
@@ -67,14 +68,12 @@ export default async function ProjectsPage({
             </div>
             <div className="md:col-span-2">
               <label className="label">Start from template</label>
-              <select name="templateId" className="input">
-                <option value="">— Blank project —</option>
-                {templates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({t._count.items} tasks)
-                  </option>
-                ))}
-              </select>
+              <SearchSelect
+                name="templateId"
+                placeholder="— Blank project —"
+                searchPlaceholder="Search templates…"
+                options={[{ value: "", label: "— Blank project —" }, ...templates.map((t) => ({ value: String(t.id), label: `${t.name} (${t._count.items} tasks)` }))]}
+              />
               <p className="mt-1 text-xs text-slate-400">
                 Templates are managed on the{" "}
                 <Link href="/templates" className="text-sky-600 hover:underline">
