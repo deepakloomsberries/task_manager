@@ -47,10 +47,15 @@ export async function GET(req: NextRequest) {
     orderBy: [{ date: "desc" }],
   });
 
-  const header = ["Date", "Employee", "Company", "Hours", "Task", "Project", "Note"];
+  const clock = (d: Date | null) =>
+    d ? new Date(d).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "";
+
+  const header = ["Date", "From", "To", "Employee", "Company", "Hours", "Task", "Project", "Note"];
   const rows = entries.map((e) =>
     [
       e.date.toISOString().slice(0, 10),
+      clock(e.startedAt),
+      clock(e.endedAt),
       e.user.name,
       e.user.company.code,
       Math.round(e.hours * 100) / 100,

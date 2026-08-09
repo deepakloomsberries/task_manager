@@ -322,6 +322,8 @@ model TimeEntry {
   projectId Int?
   date      DateTime
   hours     Float
+  startedAt DateTime? // optional precise start of the work window
+  endedAt   DateTime? // optional precise end of the work window
   note      String?
   source    String   @default("manual") // manual | timer
   createdAt DateTime @default(now())

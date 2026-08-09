@@ -110,6 +110,26 @@ export function toInputDate(d: Date | string | null | undefined) {
   return new Date(d).toISOString().slice(0, 10);
 }
 
+/** "09:05" — clock time for display. */
+export function fmtClock(d: Date | string | null | undefined) {
+  if (!d) return "";
+  return new Date(d).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+/** "09:05" — value for an <input type="time"> from a Date. */
+export function toInputTime(d: Date | string | null | undefined) {
+  if (!d) return "";
+  const x = new Date(d);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(x.getHours())}:${p(x.getMinutes())}`;
+}
+
+/** "09:05 – 10:30" when both ends exist, else "". */
+export function fmtTimeRange(start: Date | string | null | undefined, end: Date | string | null | undefined) {
+  if (!start || !end) return "";
+  return `${fmtClock(start)} – ${fmtClock(end)}`;
+}
+
 export function isOverdue(task: { dueDate: Date | null; status: string }) {
   return !!task.dueDate && task.status !== "DONE" && new Date(task.dueDate) < new Date();
 }

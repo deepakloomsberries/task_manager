@@ -12,7 +12,7 @@ import ActiveTimerBanner from "@/components/ActiveTimerBanner";
 import RangePicker from "@/components/RangePicker";
 import SearchSelect from "@/components/SearchSelect";
 import DatePicker from "@/components/DatePicker";
-import { fmtDate, toInputDate, fmtHours } from "@/lib/ui";
+import { fmtDate, toInputDate, fmtHours, toInputTime, fmtTimeRange } from "@/lib/ui";
 import { rangeBounds, weekStartOf } from "@/lib/timerange";
 
 export const dynamic = "force-dynamic";
@@ -231,14 +231,21 @@ export default async function TimesheetPage({
             <DatePicker name="date" required defaultValue={toInputDate(new Date())} />
           </div>
           <div>
-            <label className="label">Hours *</label>
+            <label className="label">From</label>
+            <input name="start" type="time" className="input" />
+          </div>
+          <div>
+            <label className="label">To</label>
+            <input name="end" type="time" className="input" />
+          </div>
+          <div>
+            <label className="label">Hours</label>
             <input
               name="hours"
               type="text"
-              required
               className="input"
-              placeholder="2h 30m, 0:45 or 2.5"
-              title="Enter time as 2h 30m, 0:45, 45m or a decimal like 2.5"
+              placeholder="or 2h 30m"
+              title="Enter a From/To time range, or type hours like 2h 30m, 0:45 or 2.5"
             />
           </div>
           <div>
@@ -275,6 +282,7 @@ export default async function TimesheetPage({
           <thead className="border-b border-slate-200 bg-slate-50">
             <tr>
               <th className="th">Date</th>
+              <th className="th">Time</th>
               <th className="th">Hours</th>
               <th className="th">Task</th>
               <th className="th">Project</th>
@@ -285,7 +293,7 @@ export default async function TimesheetPage({
           <tbody className="divide-y divide-slate-100">
             {entries.length === 0 && (
               <tr>
-                <td colSpan={6} className="td py-10 text-center text-slate-400">
+                <td colSpan={7} className="td py-10 text-center text-slate-400">
                   No time logged for {label.toLowerCase()}.
                 </td>
               </tr>
@@ -297,7 +305,7 @@ export default async function TimesheetPage({
                 const hasTask = e.taskId && tasks.some((t) => t.id === e.taskId);
                 return (
                   <tr key={e.id} className="bg-sky-50/50 dark:bg-sky-950/20">
-                    <td colSpan={6} className="td">
+                    <td colSpan={7} className="td">
                       <form action={updateTimeEntry} className="grid items-end gap-3 md:grid-cols-6">
                         <input type="hidden" name="id" value={e.id} />
                         <input type="hidden" name="back" value={viewHref} />
@@ -306,8 +314,16 @@ export default async function TimesheetPage({
                           <DatePicker name="date" required defaultValue={toInputDate(e.date)} />
                         </div>
                         <div>
-                          <label className="label">Hours *</label>
-                          <input name="hours" type="text" required defaultValue={fmtHours(e.hours)} className="input" />
+                          <label className="label">From</label>
+                          <input name="start" type="time" defaultValue={toInputTime(e.startedAt)} className="input" />
+                        </div>
+                        <div>
+                          <label className="label">To</label>
+                          <input name="end" type="time" defaultValue={toInputTime(e.endedAt)} className="input" />
+                        </div>
+                        <div>
+                          <label className="label">Hours</label>
+                          <input name="hours" type="text" defaultValue={fmtHours(e.hours)} className="input" />
                         </div>
                         <div>
                           <label className="label">Task</label>
@@ -353,6 +369,9 @@ export default async function TimesheetPage({
               return (
                 <tr key={e.id} className="hover:bg-slate-50">
                   <td className="td">{fmtDate(e.date)}</td>
+                  <td className="td text-slate-600 whitespace-nowrap">
+                    {e.startedAt && e.endedAt ? fmtTimeRange(e.startedAt, e.endedAt) : "—"}
+                  </td>
                   <td className="td font-medium">
                     <span className="inline-flex items-center gap-1.5">
                       {fmtHours(e.hours)}
