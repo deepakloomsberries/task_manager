@@ -112,6 +112,17 @@ async function commitTimer(timer: { id: number; userId: number; taskId: number; 
 }
 
 /**
+ * Stops every running timer on a task and banks the elapsed time. Called when a
+ * task is completed, so nobody keeps accruing time against finished work.
+ * Returns how many timers were stopped.
+ */
+export async function commitTimersForTask(taskId: number): Promise<number> {
+  const timers = await db.taskTimer.findMany({ where: { taskId } });
+  for (const t of timers) await commitTimer(t);
+  return timers.length;
+}
+
+/**
  * Starts the stopwatch on a task. A person can only time one task at a time, so
  * if they were already timing something else we bank that time first and then
  * switch — the same "what am I working on now" flow as Toggl or Harvest.

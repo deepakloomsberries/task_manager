@@ -7,6 +7,7 @@ import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import { notifyAssignment, notifyComment, notifyReminder, pushNotification, logActivity } from "@/lib/notify";
 import { findMentionedIds } from "@/lib/mentions";
 import { companyTimezone, zonedStartOfToday } from "@/lib/tz";
+import { commitTimersForTask } from "@/lib/actions/time";
 import { fmtDate, lookup, parseHours, TASK_STATUSES } from "@/lib/ui";
 
 const STATUSES = ["TODO", "IN_PROGRESS", "REVIEW", "DONE"];
@@ -238,6 +239,10 @@ async function changeStatus(
   }
 
   if (status === "DONE") {
+    // Stop any running timers on this task and bank their time — a completed
+    // task shouldn't keep accruing time for anyone.
+    await commitTimersForTask(taskId);
+
     // Tell the task creator when someone else completes their task.
     if (task.createdById !== user.id) {
       await pushNotification(
