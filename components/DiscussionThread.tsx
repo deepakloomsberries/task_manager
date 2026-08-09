@@ -190,6 +190,10 @@ export default function DiscussionThread({
   const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const items = e.clipboardData?.items;
     if (!items) return;
+    // Excel/Sheets cells carry both an image and text — if there's text, paste
+    // it as text rather than uploading the cell's bitmap.
+    const text = e.clipboardData?.getData("text/plain");
+    if (text && text.trim()) return;
     const files: File[] = [];
     for (const it of Array.from(items)) {
       if (it.kind === "file") {

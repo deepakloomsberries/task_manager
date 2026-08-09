@@ -44,6 +44,11 @@ export default function PasteAttachment({
     function onPaste(e: ClipboardEvent) {
       const items = e.clipboardData?.items;
       if (!items) return;
+      // Copying a cell from Excel/Sheets puts BOTH an image and the text on the
+      // clipboard. If there's any text, treat this as a text paste (let it land
+      // in the comment box) — only bare images (real screenshots) get attached.
+      const text = e.clipboardData?.getData("text/plain");
+      if (text && text.trim()) return;
       for (const item of Array.from(items)) {
         if (item.kind === "file" && item.type.startsWith("image/")) {
           const blob = item.getAsFile();
