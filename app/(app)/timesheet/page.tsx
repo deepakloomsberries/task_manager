@@ -12,6 +12,7 @@ import ActiveTimerBanner from "@/components/ActiveTimerBanner";
 import RangePicker from "@/components/RangePicker";
 import SearchSelect from "@/components/SearchSelect";
 import DatePicker from "@/components/DatePicker";
+import TimePicker from "@/components/TimePicker";
 import { fmtDate, toInputDate, fmtHours, toInputTime, fmtTimeRange } from "@/lib/ui";
 import { rangeBounds, weekStartOf } from "@/lib/timerange";
 
@@ -232,11 +233,11 @@ export default async function TimesheetPage({
           </div>
           <div>
             <label className="label">From</label>
-            <input name="start" type="time" className="input" />
+            <TimePicker name="start" placeholder="--:--" />
           </div>
           <div>
             <label className="label">To</label>
-            <input name="end" type="time" className="input" />
+            <TimePicker name="end" placeholder="--:--" />
           </div>
           <div>
             <label className="label">Hours</label>
@@ -315,11 +316,11 @@ export default async function TimesheetPage({
                         </div>
                         <div>
                           <label className="label">From</label>
-                          <input name="start" type="time" defaultValue={toInputTime(e.startedAt)} className="input" />
+                          <TimePicker name="start" defaultValue={toInputTime(e.startedAt)} placeholder="--:--" />
                         </div>
                         <div>
                           <label className="label">To</label>
-                          <input name="end" type="time" defaultValue={toInputTime(e.endedAt)} className="input" />
+                          <TimePicker name="end" defaultValue={toInputTime(e.endedAt)} placeholder="--:--" />
                         </div>
                         <div>
                           <label className="label">Hours</label>
