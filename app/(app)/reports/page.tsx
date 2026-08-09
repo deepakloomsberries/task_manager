@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import { TASK_STATUSES, fmtHours } from "@/lib/ui";
+import SearchSelect from "@/components/SearchSelect";
 
 export const dynamic = "force-dynamic";
 
@@ -150,14 +151,14 @@ export default async function ReportsPage({
         <form className="card flex flex-wrap items-end gap-3 p-4" method="GET">
           <div>
             <label className="label">Employee</label>
-            <select name="assignee" defaultValue={searchParams.assignee ?? ""} className="input">
-              <option value="">Everyone</option>
-              {allUsers.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                </option>
-              ))}
-            </select>
+            <SearchSelect
+              name="assignee"
+              defaultValue={searchParams.assignee ?? ""}
+              className="w-48"
+              placeholder="Everyone"
+              searchPlaceholder="Search people…"
+              options={[{ value: "", label: "Everyone" }, ...allUsers.map((u) => ({ value: String(u.id), label: u.name }))]}
+            />
           </div>
           <div>
             <label className="label">Company</label>

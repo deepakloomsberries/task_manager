@@ -8,6 +8,7 @@ import {
   unshareNote,
 } from "@/lib/actions/notes";
 import NoteEditor from "@/components/NoteEditor";
+import SearchSelect from "@/components/SearchSelect";
 import { NOTE_COLORS, noteCard, fmtDate, initials, avatarColor } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
@@ -159,16 +160,14 @@ function NoteCard({
           {shareOptions.length > 0 && (
             <form action={shareNote} className="flex gap-2">
               <input type="hidden" name="id" value={note.id} />
-              <select name="userId" required defaultValue="" className="input !py-1.5 text-xs">
-                <option value="" disabled>
-                  Share with…
-                </option>
-                {shareOptions.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
+              <SearchSelect
+                name="userId"
+                required
+                className="w-48"
+                placeholder="Share with…"
+                searchPlaceholder="Search people…"
+                options={shareOptions.map((u) => ({ value: String(u.id), label: u.name }))}
+              />
               <button type="submit" className="btn-secondary !py-1.5 text-xs">
                 Share
               </button>

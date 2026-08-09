@@ -10,6 +10,7 @@ import {
 } from "@/lib/actions/time";
 import ActiveTimerBanner from "@/components/ActiveTimerBanner";
 import RangePicker from "@/components/RangePicker";
+import SearchSelect from "@/components/SearchSelect";
 import DatePicker from "@/components/DatePicker";
 import { fmtDate, toInputDate, fmtHours } from "@/lib/ui";
 import { rangeBounds, weekStartOf } from "@/lib/timerange";
@@ -242,25 +243,21 @@ export default async function TimesheetPage({
           </div>
           <div>
             <label className="label">Task</label>
-            <select name="taskId" className="input">
-              <option value="">— None —</option>
-              {tasks.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.title}
-                </option>
-              ))}
-            </select>
+            <SearchSelect
+              name="taskId"
+              placeholder="— None —"
+              searchPlaceholder="Search tasks…"
+              options={[{ value: "", label: "— None —" }, ...tasks.map((t) => ({ value: String(t.id), label: t.title }))]}
+            />
           </div>
           <div>
             <label className="label">Project</label>
-            <select name="projectId" className="input">
-              <option value="">— None —</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            <SearchSelect
+              name="projectId"
+              placeholder="— None —"
+              searchPlaceholder="Search projects…"
+              options={[{ value: "", label: "— None —" }, ...projects.map((p) => ({ value: String(p.id), label: p.name }))]}
+            />
           </div>
           <div>
             <label className="label">Note</label>
@@ -314,28 +311,27 @@ export default async function TimesheetPage({
                         </div>
                         <div>
                           <label className="label">Task</label>
-                          <select name="taskId" defaultValue={e.taskId ?? ""} className="input">
-                            <option value="">— None —</option>
-                            {!hasTask && e.task && (
-                              <option value={e.task.id}>{e.task.title}</option>
-                            )}
-                            {tasks.map((t) => (
-                              <option key={t.id} value={t.id}>
-                                {t.title}
-                              </option>
-                            ))}
-                          </select>
+                          <SearchSelect
+                            name="taskId"
+                            defaultValue={e.taskId ? String(e.taskId) : ""}
+                            placeholder="— None —"
+                            searchPlaceholder="Search tasks…"
+                            options={[
+                              { value: "", label: "— None —" },
+                              ...(!hasTask && e.task ? [{ value: String(e.task.id), label: e.task.title }] : []),
+                              ...tasks.map((t) => ({ value: String(t.id), label: t.title })),
+                            ]}
+                          />
                         </div>
                         <div>
                           <label className="label">Project</label>
-                          <select name="projectId" defaultValue={e.projectId ?? ""} className="input">
-                            <option value="">— None —</option>
-                            {projects.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.name}
-                              </option>
-                            ))}
-                          </select>
+                          <SearchSelect
+                            name="projectId"
+                            defaultValue={e.projectId ? String(e.projectId) : ""}
+                            placeholder="— None —"
+                            searchPlaceholder="Search projects…"
+                            options={[{ value: "", label: "— None —" }, ...projects.map((p) => ({ value: String(p.id), label: p.name }))]}
+                          />
                         </div>
                         <div>
                           <label className="label">Note</label>

@@ -18,6 +18,7 @@ import { deleteAttachment } from "@/lib/actions/files";
 import PasteAttachment from "@/components/PasteAttachment";
 import MentionTextarea from "@/components/MentionTextarea";
 import { renderRich } from "@/components/RichText";
+import SearchSelect from "@/components/SearchSelect";
 import DatePicker from "@/components/DatePicker";
 import ShareTask from "@/components/ShareTask";
 import UserAvatar from "@/components/UserAvatar";
@@ -343,18 +344,16 @@ export default async function TaskDetailPage({
               {canManageCollab && (
                 <form action={addTaskCollaborator} className="mt-2 flex items-center gap-2">
                   <input type="hidden" name="taskId" value={task.id} />
-                  <select name="userId" required defaultValue="" className="input !py-1.5 max-w-xs text-sm">
-                    <option value="" disabled>
-                      + Add collaborator…
-                    </option>
-                    {users
+                  <SearchSelect
+                    name="userId"
+                    required
+                    className="w-60"
+                    placeholder="+ Add collaborator…"
+                    searchPlaceholder="Search people…"
+                    options={users
                       .filter((u) => u.id !== task.assigneeId && !task.collaborators.some((c) => c.userId === u.id))
-                      .map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name}
-                        </option>
-                      ))}
-                  </select>
+                      .map((u) => ({ value: String(u.id), label: u.name, hint: u.jobTitle ?? undefined }))}
+                  />
                   <button type="submit" className="btn-secondary !py-1.5 text-xs">
                     Add
                   </button>
@@ -432,25 +431,23 @@ export default async function TaskDetailPage({
             </div>
             <div>
               <label className="label">Project</label>
-              <select name="projectId" defaultValue={task.projectId ?? ""} className="input">
-                <option value="">— None —</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+              <SearchSelect
+                name="projectId"
+                defaultValue={task.projectId ? String(task.projectId) : ""}
+                placeholder="— None —"
+                searchPlaceholder="Search projects…"
+                options={[{ value: "", label: "— None —" }, ...projects.map((p) => ({ value: String(p.id), label: p.name }))]}
+              />
             </div>
             <div>
               <label className="label">Assignee</label>
-              <select name="assigneeId" defaultValue={task.assigneeId ?? ""} className="input">
-                <option value="">— Unassigned —</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
+              <SearchSelect
+                name="assigneeId"
+                defaultValue={task.assigneeId ? String(task.assigneeId) : ""}
+                placeholder="— Unassigned —"
+                searchPlaceholder="Search people…"
+                options={[{ value: "", label: "— Unassigned —" }, ...users.map((u) => ({ value: String(u.id), label: u.name, hint: u.jobTitle ?? undefined }))]}
+              />
             </div>
             <div>
               <label className="label">Priority</label>
@@ -606,16 +603,14 @@ export default async function TaskDetailPage({
           {canEdit && dependencyOptions.length > 0 && (
             <form action={addTaskDependency} className="mb-5 flex flex-col gap-2 sm:flex-row">
               <input type="hidden" name="taskId" value={task.id} />
-              <select name="blockerId" required defaultValue="" className="input flex-1">
-                <option value="" disabled>
-                  Add a task this one is blocked by…
-                </option>
-                {dependencyOptions.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.title}
-                  </option>
-                ))}
-              </select>
+              <SearchSelect
+                name="blockerId"
+                required
+                className="flex-1"
+                placeholder="Add a task this one is blocked by…"
+                searchPlaceholder="Search tasks…"
+                options={dependencyOptions.map((t) => ({ value: String(t.id), label: t.title }))}
+              />
               <button type="submit" className="btn-secondary">
                 Add blocker
               </button>
@@ -710,16 +705,14 @@ export default async function TaskDetailPage({
             >
               <input type="hidden" name="parentId" value={task.id} />
               <input name="title" required placeholder="Add a subtask…" className="input flex-1" />
-              <select name="assigneeId" required defaultValue="" className="input sm:w-44">
-                <option value="" disabled>
-                  Assign to…
-                </option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
+              <SearchSelect
+                name="assigneeId"
+                required
+                className="sm:w-44"
+                placeholder="Assign to…"
+                searchPlaceholder="Search people…"
+                options={users.map((u) => ({ value: String(u.id), label: u.name, hint: u.jobTitle ?? undefined }))}
+              />
               <button type="submit" className="btn-primary">
                 Add subtask
               </button>

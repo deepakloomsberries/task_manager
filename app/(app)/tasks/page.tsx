@@ -6,6 +6,7 @@ import { createTask, moveTask } from "@/lib/actions/tasks";
 import Board, { type BoardTask } from "@/components/Board";
 import BulkTaskTable, { type ListRow } from "@/components/BulkTaskTable";
 import DatePicker from "@/components/DatePicker";
+import SearchSelect from "@/components/SearchSelect";
 import RememberTaskView from "@/components/RememberTaskView";
 import {
   TASK_STATUSES,
@@ -232,25 +233,22 @@ export default async function TasksPage({
             </div>
             <div>
               <label className="label">Project</label>
-              <select name="projectId" className="input">
-                <option value="">— None —</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+              <SearchSelect
+                name="projectId"
+                placeholder="— None —"
+                searchPlaceholder="Search projects…"
+                options={[{ value: "", label: "— None —" }, ...projects.map((p) => ({ value: String(p.id), label: p.name }))]}
+              />
             </div>
             <div>
               <label className="label">Assignee</label>
-              <select name="assigneeId" className="input" defaultValue={user.id}>
-                <option value="">— Unassigned —</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
+              <SearchSelect
+                name="assigneeId"
+                defaultValue={String(user.id)}
+                placeholder="— Unassigned —"
+                searchPlaceholder="Search people…"
+                options={[{ value: "", label: "— Unassigned —" }, ...users.map((u) => ({ value: String(u.id), label: u.name }))]}
+              />
             </div>
             <div>
               <label className="label">Priority</label>
@@ -311,26 +309,29 @@ export default async function TasksPage({
         </div>
         <div>
           <label className="label">Assignee</label>
-          <select name="assignee" defaultValue={searchParams.assignee ?? ""} className="input">
-            <option value="">Everyone</option>
-            <option value="me">My tasks</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
-            ))}
-          </select>
+          <SearchSelect
+            name="assignee"
+            defaultValue={searchParams.assignee ?? ""}
+            className="w-44"
+            placeholder="Everyone"
+            searchPlaceholder="Search people…"
+            options={[
+              { value: "", label: "Everyone" },
+              { value: "me", label: "My tasks" },
+              ...users.map((u) => ({ value: String(u.id), label: u.name })),
+            ]}
+          />
         </div>
         <div>
           <label className="label">Project</label>
-          <select name="project" defaultValue={searchParams.project ?? ""} className="input">
-            <option value="">All</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          <SearchSelect
+            name="project"
+            defaultValue={searchParams.project ?? ""}
+            className="w-44"
+            placeholder="All"
+            searchPlaceholder="Search projects…"
+            options={[{ value: "", label: "All" }, ...projects.map((p) => ({ value: String(p.id), label: p.name }))]}
+          />
         </div>
         {allTags.length > 0 && (
           <div>

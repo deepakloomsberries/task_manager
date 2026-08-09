@@ -11,6 +11,7 @@ import {
 import { saveProjectAsTemplate } from "@/lib/actions/templates";
 import UserAvatar from "@/components/UserAvatar";
 import ProjectTimeline from "@/components/ProjectTimeline";
+import SearchSelect from "@/components/SearchSelect";
 import {
   PROJECT_STATUSES,
   TASK_STATUSES,
@@ -262,13 +263,14 @@ export default async function ProjectDetailPage({
           {canManage && nonMembers.length > 0 && (
             <form action={addProjectMember} className="flex gap-2 border-t border-slate-200 p-4">
               <input type="hidden" name="projectId" value={project.id} />
-              <select name="userId" className="input flex-1">
-                {nonMembers.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
+              <SearchSelect
+                name="userId"
+                className="flex-1"
+                defaultValue={nonMembers[0] ? String(nonMembers[0].id) : ""}
+                placeholder="Add a member…"
+                searchPlaceholder="Search people…"
+                options={nonMembers.map((u) => ({ value: String(u.id), label: u.name }))}
+              />
               <button type="submit" className="btn-secondary">
                 Add
               </button>

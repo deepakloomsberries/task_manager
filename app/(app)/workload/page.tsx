@@ -5,6 +5,7 @@ import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import UserAvatar from "@/components/UserAvatar";
 import { fmtHours } from "@/lib/ui";
 import { weekStartOf } from "@/lib/timerange";
+import SearchSelect from "@/components/SearchSelect";
 
 export const dynamic = "force-dynamic";
 
@@ -168,14 +169,14 @@ export default async function WorkloadPage({
         <input type="hidden" name="start" value={toDateParam(weekStart)} />
         <div>
           <label className="label">Employee</label>
-          <select name="assignee" defaultValue={searchParams.assignee ?? ""} className="input">
-            <option value="">Everyone</option>
-            {allUsers.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
-            ))}
-          </select>
+          <SearchSelect
+            name="assignee"
+            defaultValue={searchParams.assignee ?? ""}
+            className="w-48"
+            placeholder="Everyone"
+            searchPlaceholder="Search people…"
+            options={[{ value: "", label: "Everyone" }, ...allUsers.map((u) => ({ value: String(u.id), label: u.name }))]}
+          />
         </div>
         <div>
           <label className="label">Company</label>

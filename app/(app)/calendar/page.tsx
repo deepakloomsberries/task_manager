@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import { TASK_PRIORITIES, TASK_STATUSES, lookup } from "@/lib/ui";
 import CalendarGrid, { type CalTask } from "@/components/CalendarGrid";
+import SearchSelect from "@/components/SearchSelect";
 
 export const dynamic = "force-dynamic";
 
@@ -145,26 +146,26 @@ export default async function CalendarPage({
         {isManager && (
           <div>
             <label className="label">Assignee</label>
-            <select name="assignee" defaultValue={searchParams.assignee ?? ""} className="input">
-              <option value="">Everyone</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                </option>
-              ))}
-            </select>
+            <SearchSelect
+              name="assignee"
+              defaultValue={searchParams.assignee ?? ""}
+              className="w-44"
+              placeholder="Everyone"
+              searchPlaceholder="Search people…"
+              options={[{ value: "", label: "Everyone" }, ...users.map((u) => ({ value: String(u.id), label: u.name }))]}
+            />
           </div>
         )}
         <div>
           <label className="label">Project</label>
-          <select name="project" defaultValue={searchParams.project ?? ""} className="input">
-            <option value="">All projects</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          <SearchSelect
+            name="project"
+            defaultValue={searchParams.project ?? ""}
+            className="w-44"
+            placeholder="All projects"
+            searchPlaceholder="Search projects…"
+            options={[{ value: "", label: "All projects" }, ...projects.map((p) => ({ value: String(p.id), label: p.name }))]}
+          />
         </div>
         <div>
           <label className="label">Status</label>
