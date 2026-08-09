@@ -33,6 +33,7 @@ import {
   fmtDate,
   fmtDateTime,
   fmtHours,
+  fmtTimeRange,
   toInputDate,
 } from "@/lib/ui";
 
@@ -107,6 +108,11 @@ export default async function TaskDetailPage({
     timeByUser.set(e.userId, cur);
   }
   const timeRows = Array.from(timeByUser.values()).sort((a, b) => b.hours - a.hours);
+
+  // Individual entries, newest first — each with its from–to window.
+  const timeEntries = [...timeLogs].sort(
+    (a, b) => new Date(b.startedAt ?? b.date).getTime() - new Date(a.startedAt ?? a.date).getTime()
+  );
 
   const runningStartedAt =
     activeTimer && activeTimer.taskId === task.id ? activeTimer.startedAt.toISOString() : null;
@@ -561,6 +567,40 @@ export default async function TaskDetailPage({
               );
             })}
           </div>
+
+          {timeEntries.length > 0 && (
+            <div className="mt-5 border-t border-slate-100 pt-4">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Entries</div>
+              <div className="overflow-x-auto">
+                <div className="min-w-[520px] divide-y divide-slate-100">
+                  {timeEntries.slice(0, 10).map((e) => (
+                    <div key={e.id} className="flex items-center gap-3 py-2 text-sm">
+                      <span className="w-24 shrink-0 text-slate-500">{fmtDate(e.date)}</span>
+                      <span className="w-28 shrink-0 whitespace-nowrap text-slate-600">
+                        {e.startedAt && e.endedAt ? fmtTimeRange(e.startedAt, e.endedAt) : "—"}
+                      </span>
+                      <span className="w-16 shrink-0 font-medium">{fmtHours(e.hours)}</span>
+                      <span className="flex min-w-0 flex-1 items-center gap-1.5 text-slate-500">
+                        <UserAvatar user={e.user} size={20} />
+                        <span className="truncate">
+                          {e.user.name}
+                          {e.note ? ` · ${e.note}` : ""}
+                        </span>
+                      </span>
+                      {e.source === "timer" && (
+                        <span title="Tracked with the task timer" className="badge shrink-0 bg-sky-100 text-sky-700 !px-1.5 !py-0 text-[10px]">
+                          ⏱
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {timeEntries.length > 10 && (
+                <div className="mt-2 text-xs text-slate-400">Showing the latest 10 of {timeEntries.length} entries.</div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
