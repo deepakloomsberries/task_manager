@@ -13,6 +13,8 @@ import {
   removeTaskDependency,
   addTaskCollaborator,
   removeTaskCollaborator,
+  duplicateTask,
+  deleteComment,
 } from "@/lib/actions/tasks";
 import { deleteAttachment } from "@/lib/actions/files";
 import PasteAttachment from "@/components/PasteAttachment";
@@ -281,6 +283,14 @@ export default async function TaskDetailPage({
                   <Link href={`/tasks/${task.id}?edit=1`} className="btn-secondary">
                     Edit
                   </Link>
+                )}
+                {canEdit && (
+                  <form action={duplicateTask}>
+                    <input type="hidden" name="id" value={task.id} />
+                    <button type="submit" className="btn-secondary" title="Create a copy of this task">
+                      Duplicate
+                    </button>
+                  </form>
                 )}
                 {canDelete && (
                   <form action={deleteTask}>
@@ -865,7 +875,17 @@ export default async function TaskDetailPage({
               <div className="min-w-0 flex-1 rounded-lg bg-slate-50 px-4 py-3">
                 <div className="mb-1 flex items-baseline justify-between gap-2">
                   <span className="text-sm font-medium">{c.author.name}</span>
-                  <span className="text-xs text-slate-400">{fmtDateTime(c.createdAt)}</span>
+                  <span className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400">{fmtDateTime(c.createdAt)}</span>
+                    {(c.authorId === user.id || user.role === "ADMIN") && (
+                      <form action={deleteComment} className="inline">
+                        <input type="hidden" name="id" value={c.id} />
+                        <ConfirmButton message="Delete this comment?" className="text-xs text-slate-400 hover:text-red-600">
+                          ✕
+                        </ConfirmButton>
+                      </form>
+                    )}
+                  </span>
                 </div>
                 <p className="whitespace-pre-wrap text-sm text-slate-700">{renderRich(c.body, users)}</p>
               </div>

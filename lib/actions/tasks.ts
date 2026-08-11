@@ -159,6 +159,52 @@ export async function quickAddTask(formData: FormData) {
   revalidatePath("/tasks");
 }
 
+/** Creates a copy of a task (fields, tags and collaborators — not history). */
+export async function duplicateTask(formData: FormData) {
+  const user = await requireUser();
+  const id = Number(formData.get("id"));
+  const src = await db.task.findUnique({ where: { id }, include: { tags: true, collaborators: true } });
+  if (!src || src.deletedAt) redirect("/tasks");
+  if (!canEditTask(user, src)) redirect(`/tasks/${id}?error=forbidden`);
+
+  const copy = await db.task.create({
+    data: {
+      title: `${src.title} (copy)`,
+      description: src.description,
+      status: "TODO",
+      priority: src.priority,
+      projectId: src.projectId,
+      assigneeId: src.assigneeId,
+      startDate: src.startDate,
+      dueDate: src.dueDate,
+      recurrence: src.recurrence,
+      estimateHours: src.estimateHours,
+      createdById: user.id,
+      tags: { create: src.tags.map((t) => ({ tagId: t.tagId })) },
+      collaborators: { create: src.collaborators.map((c) => ({ userId: c.userId })) },
+    },
+  });
+  await logActivity(copy.id, user.id, "created");
+  if (copy.assigneeId && copy.assigneeId !== user.id) {
+    const assignee = await db.user.findUnique({ where: { id: copy.assigneeId } });
+    if (assignee) await notifyAssignment({ assignee, task: copy, actor: user });
+  }
+  await revalidateTaskViews(copy.id);
+  redirect(`/tasks/${copy.id}`);
+}
+
+/** Deletes a comment. The author can remove their own; admins can remove any. */
+export async function deleteComment(formData: FormData) {
+  const user = await requireUser();
+  const id = Number(formData.get("id"));
+  const comment = await db.taskComment.findUnique({ where: { id } });
+  if (!comment) redirect("/tasks");
+  if (comment.authorId !== user.id && user.role !== "ADMIN") redirect(`/tasks/${comment.taskId}`);
+  await db.taskComment.delete({ where: { id } });
+  revalidatePath(`/tasks/${comment.taskId}`);
+  redirect(`/tasks/${comment.taskId}`);
+}
+
 export async function addSubtask(formData: FormData) {
   const user = await requireUser();
   const parentId = Number(formData.get("parentId"));
