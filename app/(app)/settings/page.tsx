@@ -3,6 +3,7 @@ import { changeOwnPassword, updateOwnProfile, updateNotificationPrefs } from "@/
 import { removeAvatar } from "@/lib/actions/profile";
 import PasswordField from "@/components/PasswordField";
 import AvatarUpload from "@/components/AvatarUpload";
+import FlashToast from "@/components/FlashToast";
 import { PASSWORD_RULES } from "@/lib/password";
 
 export const dynamic = "force-dynamic";
@@ -36,17 +37,7 @@ export default async function SettingsPage({
         </div>
       )}
 
-      {msg && (
-        <div
-          className={`rounded-lg border px-4 py-3 text-sm ${
-            msg.error
-              ? "border-red-200 bg-red-50 text-red-700"
-              : "border-green-200 bg-green-50 text-green-700"
-          }`}
-        >
-          {msg.text}
-        </div>
-      )}
+      {msg && <FlashToast message={msg.text} error={msg.error} />}
 
       <div className="card p-6">
         <h2 className="mb-4 font-semibold">Profile picture</h2>
