@@ -5,6 +5,7 @@ import { postDiscussionMessage, deleteDiscussionMessage } from "@/lib/actions/di
 import { initials, avatarColor } from "@/lib/ui";
 import MentionTextarea, { type MentionPerson } from "@/components/MentionTextarea";
 import { renderRich } from "@/components/RichText";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 type Att = { id: number; name: string; mimeType: string; size: number };
 
@@ -90,6 +91,7 @@ export default function DiscussionThread({
   const [text, setText] = useState("");
   const [atts, setAtts] = useState<Att[]>([]);
   const [uploading, setUploading] = useState(0);
+  const [pendingDelete, setPendingDelete] = useState<number | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -248,7 +250,13 @@ export default function DiscussionThread({
   }
 
   function onDelete(id: number) {
-    if (!confirm("Delete this message for everyone?")) return;
+    setPendingDelete(id);
+  }
+
+  function confirmDelete() {
+    const id = pendingDelete;
+    setPendingDelete(null);
+    if (id == null) return;
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, deleted: true, body: "", attachments: [] } : m)));
     void deleteDiscussionMessage(id);
   }
@@ -392,6 +400,13 @@ export default function DiscussionThread({
           Send
         </button>
       </div>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        message="Delete this message for everyone?"
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={confirmDelete}
+      />
     </>
   );
 }

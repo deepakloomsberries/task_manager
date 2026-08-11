@@ -24,6 +24,7 @@ import DatePicker from "@/components/DatePicker";
 import ShareTask from "@/components/ShareTask";
 import UserAvatar from "@/components/UserAvatar";
 import TaskTimer from "@/components/TaskTimer";
+import LiveElapsed from "@/components/LiveElapsed";
 import { addTagToTask, removeTagFromTask } from "@/lib/actions/tags";
 import { fmtSize } from "@/lib/storage";
 import { TAG_COLORS, tagBadge } from "@/lib/ui";
@@ -51,7 +52,7 @@ export default async function TaskDetailPage({
   const id = Number(params.id);
   if (!id) notFound();
 
-  const [task, users, projects, activeTimer, loggedAgg, timeLogs, allTasks] = await Promise.all([
+  const [task, users, projects, activeTimer, loggedAgg, timeLogs, allTasks, taskTimers] = await Promise.all([
     db.task.findUnique({
       where: { id },
       include: {
@@ -90,6 +91,12 @@ export default async function TaskDetailPage({
       orderBy: { title: "asc" },
       take: 200,
     }),
+    // Everyone currently running a timer on THIS task (so the owner can see it).
+    db.taskTimer.findMany({
+      where: { taskId: id },
+      include: { user: { select: { id: true, name: true, avatarPath: true } } },
+      orderBy: { startedAt: "asc" },
+    }),
   ]);
   if (!task || task.deletedAt) notFound();
 
@@ -122,6 +129,10 @@ export default async function TaskDetailPage({
       ? { taskId: activeTimer.task.id, title: activeTimer.task.title }
       : null;
   const loggedHours = loggedAgg._sum.hours ?? 0;
+
+  // Other people currently running a timer on this task — shown live to the
+  // owner/anyone viewing, so you can see who's working on it right now.
+  const othersWorking = taskTimers.filter((t) => t.userId !== user.id);
 
   const status = lookup(TASK_STATUSES, task.status);
   const priority = lookup(TASK_PRIORITIES, task.priority);
@@ -521,6 +532,27 @@ export default async function TaskDetailPage({
           runningStartedAt={runningStartedAt}
           otherTimer={otherTimer}
         />
+      )}
+
+      {othersWorking.length > 0 && (
+        <div className="card p-4">
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+            </span>
+            Working on this now
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {othersWorking.map((t) => (
+              <div key={t.id} className="flex items-center gap-2 rounded-full bg-slate-50 py-1 pl-1 pr-3 dark:bg-slate-800">
+                <UserAvatar user={t.user} size={26} />
+                <span className="text-sm font-medium">{t.user.name}</span>
+                <LiveElapsed startedAt={t.startedAt.toISOString()} className="text-sm text-sky-600" />
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {(timeRows.length > 0 || task.estimateHours) && (

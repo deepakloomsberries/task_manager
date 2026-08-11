@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import UserAvatar from "@/components/UserAvatar";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { sendMessage, deleteMessage } from "@/lib/actions/messages";
 import { isOnline, lastSeenLabel } from "@/lib/ui";
 
@@ -118,6 +119,7 @@ export default function ChatThread({
   const [partnerLastSeen, setPartnerLastSeen] = useState<string | null>(initialPartnerLastSeenAt);
   const [text, setText] = useState("");
   const [atts, setAtts] = useState<Att[]>([]);
+  const [pendingDelete, setPendingDelete] = useState<number | null>(null);
   const [uploading, setUploading] = useState(0);
   const [partnerTyping, setPartnerTyping] = useState(false);
   const [, forceTick] = useState(0);
@@ -306,7 +308,13 @@ export default function ChatThread({
   }
 
   function onDelete(id: number) {
-    if (!confirm("Delete this message for everyone?")) return;
+    setPendingDelete(id);
+  }
+
+  function confirmDelete() {
+    const id = pendingDelete;
+    setPendingDelete(null);
+    if (id == null) return;
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, deleted: true, body: "", attachments: [] } : m)));
     void deleteMessage(id);
   }
@@ -552,6 +560,13 @@ export default function ChatThread({
           </button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        message="Delete this message for everyone?"
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }
