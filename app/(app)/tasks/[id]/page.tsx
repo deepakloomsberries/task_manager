@@ -43,6 +43,31 @@ import {
 
 export const dynamic = "force-dynamic";
 
+/** Colour-coded styling for each status pill in the "Move to" pipeline.
+ *  Full static class strings (dynamic Tailwind class names are not JIT-picked). */
+const STATUS_PILL: Record<string, { active: string; dot: string; hover: string }> = {
+  TODO: {
+    active: "bg-slate-600 text-white",
+    dot: "bg-slate-400",
+    hover: "hover:bg-slate-100 hover:text-slate-800 hover:ring-slate-300",
+  },
+  IN_PROGRESS: {
+    active: "bg-blue-600 text-white",
+    dot: "bg-blue-500",
+    hover: "hover:bg-blue-50 hover:text-blue-700 hover:ring-blue-300",
+  },
+  REVIEW: {
+    active: "bg-amber-500 text-white",
+    dot: "bg-amber-500",
+    hover: "hover:bg-amber-50 hover:text-amber-700 hover:ring-amber-300",
+  },
+  DONE: {
+    active: "bg-green-600 text-white",
+    dot: "bg-green-500",
+    hover: "hover:bg-green-50 hover:text-green-700 hover:ring-green-300",
+  },
+};
+
 export default async function TaskDetailPage({
   params,
   searchParams,
@@ -407,47 +432,53 @@ export default async function TaskDetailPage({
 
             {canProgress && (
               <div className="mt-6 border-t border-slate-100 pt-4">
-                <div className="mb-2 text-xs font-medium text-slate-500">Move to</div>
-                <div className="flex flex-wrap gap-2">
-                  {TASK_STATUSES.filter((s) => s.value !== task.status).map((s) => {
+                <div className="mb-2 text-xs font-medium text-slate-500">Status</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {TASK_STATUSES.map((s) => {
+                    const style = STATUS_PILL[s.value];
+                    const isCurrent = s.value === task.status;
                     const isDone = s.value === "DONE";
-                    if (isDone && !canCompleteDone) {
+                    const locked = isDone && (!canCompleteDone || isBlocked);
+                    const lockTitle = isDone && !canCompleteDone
+                      ? "Only the task owner can mark this Done — send it to Review for approval."
+                      : isBlocked
+                        ? `Blocked by ${openBlockers.length} unfinished task(s)`
+                        : "";
+                    const label = isDone && task.status === "REVIEW" && canEdit ? "Approve" : s.label;
+
+                    if (isCurrent) {
                       return (
-                        <button
+                        <span
                           key={s.value}
-                          type="button"
-                          disabled
-                          title="Only the task owner can mark this Done — send it to Review for approval."
-                          className="btn-secondary !py-1.5 text-xs cursor-not-allowed opacity-50"
+                          className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold shadow-sm ${style.active}`}
                         >
-                          🔒 Done — owner approves
-                        </button>
+                          <span className="h-1.5 w-1.5 rounded-full bg-white/90" />
+                          {s.label}
+                          <span className="opacity-70">· now</span>
+                        </span>
                       );
                     }
-                    if (isDone && isBlocked) {
+                    if (locked) {
                       return (
-                        <button
+                        <span
                           key={s.value}
-                          type="button"
-                          disabled
-                          title={`Blocked by ${openBlockers.length} unfinished task(s)`}
-                          className="btn-secondary !py-1.5 text-xs cursor-not-allowed opacity-50"
+                          title={lockTitle}
+                          className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium text-slate-400 ring-1 ring-slate-200"
                         >
-                          🔒 Done
-                        </button>
+                          <span className={`h-1.5 w-1.5 rounded-full ${style.dot} opacity-40`} />
+                          {label} 🔒
+                        </span>
                       );
                     }
-                    // When an owner is looking at a task in Review, frame Done as an approval.
-                    const label =
-                      isDone && task.status === "REVIEW" && canEdit ? "✓ Approve (Done)" : s.label;
                     return (
                       <form key={s.value} action={setTaskStatus}>
                         <input type="hidden" name="id" value={task.id} />
                         <input type="hidden" name="status" value={s.value} />
                         <button
                           type="submit"
-                          className={`!py-1.5 text-xs ${isDone && task.status === "REVIEW" && canEdit ? "btn-primary" : "btn-secondary"}`}
+                          className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200 transition ${style.hover}`}
                         >
+                          <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
                           {label}
                         </button>
                       </form>
