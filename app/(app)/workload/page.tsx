@@ -6,7 +6,7 @@ import UserAvatar from "@/components/UserAvatar";
 import { fmtHours } from "@/lib/ui";
 import { weekStartOf } from "@/lib/timerange";
 import SearchSelect from "@/components/SearchSelect";
-import RunningTimerBadge from "@/components/RunningTimerBadge";
+import { ActiveTimersProvider, WorkingCell } from "@/components/ActiveTimers";
 
 export const dynamic = "force-dynamic";
 
@@ -92,11 +92,26 @@ export default async function WorkloadPage({
     db.department.findMany({ include: { company: true }, orderBy: { name: "asc" } }),
     db.user.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     // Anyone with a timer running right now, to show live on their row.
-    db.taskTimer.findMany({ include: { task: { select: { id: true, title: true, estimateHours: true } } } }),
+    db.taskTimer.findMany({
+      include: {
+        user: { select: { id: true, name: true, avatarPath: true } },
+        task: { select: { id: true, title: true, estimateHours: true, deletedAt: true } },
+      },
+    }),
   ]);
 
-  const runningByUser = new Map<number, (typeof runningTimers)[number]>();
-  for (const t of runningTimers) runningByUser.set(t.userId, t);
+  const activeTimers = runningTimers
+    .filter((t) => t.task && !t.task.deletedAt)
+    .map((t) => ({
+      id: t.id,
+      userId: t.userId,
+      userName: t.user.name,
+      avatarPath: t.user.avatarPath,
+      taskId: t.task!.id,
+      taskTitle: t.task!.title,
+      estimateHours: t.task!.estimateHours,
+      startedAt: t.startedAt.toISOString(),
+    }));
 
   const hoursByUser = new Map<number, number>();
   for (const e of entries) hoursByUser.set(e.userId, (hoursByUser.get(e.userId) ?? 0) + e.hours);
@@ -230,6 +245,7 @@ export default async function WorkloadPage({
         </div>
       </div>
 
+      <ActiveTimersProvider initial={activeTimers}>
       <div className="card overflow-x-auto">
         <table className="w-full min-w-[900px]">
           <thead className="border-b border-slate-200 bg-slate-50">
@@ -272,16 +288,7 @@ export default async function WorkloadPage({
                       <span className="block text-xs text-slate-400">{r.user.department?.name ?? "—"}</span>
                     </span>
                   </Link>
-                  {runningByUser.get(r.user.id)?.task && (
-                    <div className="mt-1.5">
-                      <RunningTimerBadge
-                        taskId={runningByUser.get(r.user.id)!.task!.id}
-                        title={runningByUser.get(r.user.id)!.task!.title}
-                        startedAt={runningByUser.get(r.user.id)!.startedAt.toISOString()}
-                        estimateHours={runningByUser.get(r.user.id)!.task!.estimateHours}
-                      />
-                    </div>
-                  )}
+                  <WorkingCell userId={r.user.id} />
                 </td>
                 {r.perDayHours.map((h, i) => (
                   <td key={i} className="td text-center">
@@ -306,6 +313,7 @@ export default async function WorkloadPage({
           </tbody>
         </table>
       </div>
+      </ActiveTimersProvider>
 
       <div className="flex flex-wrap items-center gap-3 px-1 text-[11px] text-slate-500">
         <span>Estimated hours due per day:</span>

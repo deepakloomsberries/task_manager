@@ -24,7 +24,7 @@ import DatePicker from "@/components/DatePicker";
 import ShareTask from "@/components/ShareTask";
 import UserAvatar from "@/components/UserAvatar";
 import TaskTimer from "@/components/TaskTimer";
-import LiveElapsed from "@/components/LiveElapsed";
+import { LiveWorkingCard } from "@/components/ActiveTimers";
 import { addTagToTask, removeTagFromTask } from "@/lib/actions/tags";
 import { fmtSize } from "@/lib/storage";
 import { TAG_COLORS, tagBadge } from "@/lib/ui";
@@ -130,9 +130,18 @@ export default async function TaskDetailPage({
       : null;
   const loggedHours = loggedAgg._sum.hours ?? 0;
 
-  // Other people currently running a timer on this task — shown live to the
-  // owner/anyone viewing, so you can see who's working on it right now.
-  const othersWorking = taskTimers.filter((t) => t.userId !== user.id);
+  // People currently running a timer on this task — shown live (self-refreshing)
+  // so the owner can see who's working on it right now.
+  const activeTimersOnTask = taskTimers.map((t) => ({
+    id: t.id,
+    userId: t.userId,
+    userName: t.user.name,
+    avatarPath: t.user.avatarPath,
+    taskId: task.id,
+    taskTitle: task.title,
+    estimateHours: task.estimateHours,
+    startedAt: t.startedAt.toISOString(),
+  }));
 
   const status = lookup(TASK_STATUSES, task.status);
   const priority = lookup(TASK_PRIORITIES, task.priority);
@@ -534,26 +543,13 @@ export default async function TaskDetailPage({
         />
       )}
 
-      {othersWorking.length > 0 && (
-        <div className="card p-4">
-          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
-            </span>
-            Working on this now
-          </div>
-          <div className="flex flex-wrap gap-3">
-            {othersWorking.map((t) => (
-              <div key={t.id} className="flex items-center gap-2 rounded-full bg-slate-50 py-1 pl-1 pr-3 dark:bg-slate-800">
-                <UserAvatar user={t.user} size={26} />
-                <span className="text-sm font-medium">{t.user.name}</span>
-                <LiveElapsed startedAt={t.startedAt.toISOString()} className="text-sm text-sky-600" />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <LiveWorkingCard
+        title="Working on this now"
+        initial={activeTimersOnTask}
+        taskId={task.id}
+        excludeUserId={user.id}
+        showTask={false}
+      />
 
       {(timeRows.length > 0 || task.estimateHours) && (
         <div className="card p-6">
