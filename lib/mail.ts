@@ -77,6 +77,25 @@ export function notifyTaskAssigned(opts: {
   );
 }
 
+export function notifyCollaboratorAdded(opts: {
+  to: string;
+  name: string;
+  taskId: number;
+  taskTitle: string;
+  addedBy: string;
+}) {
+  const lines = [
+    `Hi ${esc(opts.name)},`,
+    `<b>${esc(opts.addedBy)}</b> added you as a collaborator on the task: <b>${esc(opts.taskTitle)}</b>`,
+    `You can work on it, log your time and help move it to done.`,
+  ];
+  sendMail(
+    opts.to,
+    `You're a collaborator on: ${opts.taskTitle}`,
+    emailShell("Added as a collaborator", lines, `${APP_URL}/tasks/${opts.taskId}`, "Open task")
+  );
+}
+
 export function notifyTaskReminder(opts: {
   to: string;
   recipientName: string;

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import { notifyAssignment, notifyComment, notifyReminder, pushNotification, logActivity } from "@/lib/notify";
+import { notifyCollaboratorAdded } from "@/lib/mail";
 import { findMentionedIds } from "@/lib/mentions";
 import { companyTimezone, zonedStartOfToday } from "@/lib/tz";
 import { commitTimersForTask } from "@/lib/actions/time";
@@ -86,8 +87,48 @@ export async function createTask(formData: FormData) {
     if (assignee) await notifyAssignment({ assignee, task, actor: user });
   }
 
+  // Collaborators chosen on the create form — link them and let them know.
+  const collabIds = Array.from(
+    new Set(
+      formData
+        .getAll("collaboratorIds")
+        .map((v) => Number(v))
+        .filter((n) => Number.isFinite(n) && n > 0 && n !== task.assigneeId)
+    )
+  );
+  for (const cid of collabIds) {
+    await addCollaborator(task.id, cid, task.title, user);
+  }
+
   await revalidateTaskViews(task.id);
   redirect(`/tasks/${task.id}`);
+}
+
+/**
+ * Links a collaborator to a task (if active and not already the assignee),
+ * then notifies them in-app + email. Shared by the create form and the task
+ * detail's "add collaborator".
+ */
+async function addCollaborator(
+  taskId: number,
+  userId: number,
+  taskTitle: string,
+  actor: { id: number; name: string }
+) {
+  const person = await db.user.findUnique({ where: { id: userId } });
+  if (!person || !person.active) return;
+  await db.taskCollaborator.upsert({
+    where: { taskId_userId: { taskId, userId } },
+    update: {},
+    create: { taskId, userId },
+  });
+  await logActivity(taskId, actor.id, "details", `added ${person.name} as a collaborator`);
+  if (userId !== actor.id) {
+    await pushNotification(userId, `${actor.name} added you as a collaborator on: ${taskTitle}`, `/tasks/${taskId}`);
+    if (person.emailNotifications) {
+      notifyCollaboratorAdded({ to: person.email, name: person.name, taskId, taskTitle, addedBy: actor.name });
+    }
+  }
 }
 
 /**
@@ -349,19 +390,9 @@ export async function addTaskCollaborator(formData: FormData) {
   if (!task || task.deletedAt) redirect("/tasks");
   if (!canManageCollaborators(user, task)) redirect(`/tasks/${taskId}?error=forbidden`);
 
-  const person = await db.user.findUnique({ where: { id: userId } });
-  // Skip if the person is inactive, is the assignee already, or is the creator.
-  if (!person || !person.active || userId === task.assigneeId) redirect(`/tasks/${taskId}`);
-
-  await db.taskCollaborator.upsert({
-    where: { taskId_userId: { taskId, userId } },
-    update: {},
-    create: { taskId, userId },
-  });
-  await logActivity(taskId, user.id, "details", `added ${person.name} as a collaborator`);
-  if (userId !== user.id) {
-    await pushNotification(userId, `${user.name} added you as a collaborator on: ${task.title}`, `/tasks/${taskId}`);
-  }
+  // Skip if it's the assignee already; addCollaborator handles inactive users.
+  if (userId === task.assigneeId) redirect(`/tasks/${taskId}`);
+  await addCollaborator(taskId, userId, task.title, user);
   await revalidateTaskViews(taskId);
   redirect(`/tasks/${taskId}`);
 }

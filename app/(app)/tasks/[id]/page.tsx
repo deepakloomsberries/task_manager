@@ -16,6 +16,7 @@ import {
 } from "@/lib/actions/tasks";
 import { deleteAttachment } from "@/lib/actions/files";
 import PasteAttachment from "@/components/PasteAttachment";
+import ConfirmButton from "@/components/ConfirmButton";
 import MentionTextarea from "@/components/MentionTextarea";
 import { renderRich } from "@/components/RichText";
 import SearchSelect from "@/components/SearchSelect";
@@ -801,9 +802,12 @@ export default async function TaskDetailPage({
               {(a.uploadedById === user.id || user.role === "ADMIN") && (
                 <form action={deleteAttachment}>
                   <input type="hidden" name="id" value={a.id} />
-                  <button type="submit" className="text-xs text-red-600 hover:underline">
+                  <ConfirmButton
+                    message={`Delete "${a.originalName}"? This can't be undone.`}
+                    className="text-xs text-red-600 hover:underline"
+                  >
                     Delete
-                  </button>
+                  </ConfirmButton>
                 </form>
               )}
             </div>

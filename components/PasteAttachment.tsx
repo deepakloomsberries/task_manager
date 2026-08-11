@@ -32,9 +32,9 @@ export default function PasteAttachment({
   }
 
   function onChoose(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) {
-      setPendingName(file.name);
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      setPendingName(files.length === 1 ? files[0].name : `${files.length} files`);
       formRef.current?.requestSubmit();
     }
   }
@@ -84,6 +84,7 @@ export default function PasteAttachment({
         ref={fileRef}
         type="file"
         name="file"
+        multiple
         required
         className="hidden"
         onChange={onChoose}

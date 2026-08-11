@@ -7,6 +7,7 @@ import Board, { type BoardTask } from "@/components/Board";
 import BulkTaskTable, { type ListRow } from "@/components/BulkTaskTable";
 import DatePicker from "@/components/DatePicker";
 import SearchSelect from "@/components/SearchSelect";
+import MultiSelect from "@/components/MultiSelect";
 import RememberTaskView from "@/components/RememberTaskView";
 import {
   TASK_STATUSES,
@@ -248,6 +249,15 @@ export default async function TasksPage({
                 placeholder="— Unassigned —"
                 searchPlaceholder="Search people…"
                 options={[{ value: "", label: "— Unassigned —" }, ...users.map((u) => ({ value: String(u.id), label: u.name }))]}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="label">Collaborators</label>
+              <MultiSelect
+                name="collaboratorIds"
+                placeholder="Add people to work on this together…"
+                searchPlaceholder="Search people…"
+                options={users.map((u) => ({ value: String(u.id), label: u.name, hint: u.jobTitle ?? undefined }))}
               />
             </div>
             <div>
