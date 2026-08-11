@@ -265,9 +265,12 @@ export default async function TaskDetailPage({
                 {canDelete && (
                   <form action={deleteTask}>
                     <input type="hidden" name="id" value={task.id} />
-                    <button type="submit" className="btn-danger">
+                    <ConfirmButton
+                      message="Delete this task? You can restore it from Trash."
+                      className="btn-danger"
+                    >
                       Delete
-                    </button>
+                    </ConfirmButton>
                   </form>
                 )}
               </div>
@@ -337,9 +340,13 @@ export default async function TaskDetailPage({
                       <form action={removeTaskCollaborator} className="inline">
                         <input type="hidden" name="taskId" value={task.id} />
                         <input type="hidden" name="userId" value={c.userId} />
-                        <button type="submit" title="Remove collaborator" className="ml-0.5 text-slate-400 hover:text-red-600">
+                        <ConfirmButton
+                          message={`Remove ${c.user.name} from this task?`}
+                          title="Remove collaborator"
+                          className="ml-0.5 text-slate-400 hover:text-red-600"
+                        >
                           ✕
-                        </button>
+                        </ConfirmButton>
                       </form>
                     )}
                   </span>

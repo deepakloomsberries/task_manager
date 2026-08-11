@@ -9,6 +9,7 @@ import {
 } from "@/lib/actions/notes";
 import NoteEditor from "@/components/NoteEditor";
 import SearchSelect from "@/components/SearchSelect";
+import ConfirmButton from "@/components/ConfirmButton";
 import { NOTE_COLORS, noteCard, fmtDate, initials, avatarColor } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
@@ -121,9 +122,9 @@ function NoteCard({
         <div className="flex justify-end px-4 pb-3">
           <form action={deleteNote}>
             <input type="hidden" name="id" value={note.id} />
-            <button type="submit" className="text-xs text-red-600 hover:underline">
+            <ConfirmButton message="Delete this note? You can restore it from Trash." className="text-xs text-red-600 hover:underline">
               Delete
-            </button>
+            </ConfirmButton>
           </form>
         </div>
       )}

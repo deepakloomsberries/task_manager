@@ -13,6 +13,7 @@ import RangePicker from "@/components/RangePicker";
 import SearchSelect from "@/components/SearchSelect";
 import DatePicker from "@/components/DatePicker";
 import TimePicker from "@/components/TimePicker";
+import ConfirmButton from "@/components/ConfirmButton";
 import { fmtDate, toInputDate, fmtHours, toInputTime, fmtTimeRange } from "@/lib/ui";
 import { rangeBounds, weekStartOf } from "@/lib/timerange";
 
@@ -400,9 +401,9 @@ export default async function TimesheetPage({
                         <form action={deleteTimeEntry}>
                           <input type="hidden" name="id" value={e.id} />
                           <input type="hidden" name="back" value={viewHref} />
-                          <button type="submit" className="text-slate-400 hover:text-red-600">
+                          <ConfirmButton message="Delete this time entry?" className="text-slate-400 hover:text-red-600">
                             Delete
-                          </button>
+                          </ConfirmButton>
                         </form>
                       </div>
                     )}
