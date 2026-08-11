@@ -102,6 +102,35 @@ export default async function ReportsPage({
     };
   });
 
+  // --- Analytics -------------------------------------------------------------
+  const doneScoped = scopedTasks.filter((t) => t.status === "DONE" && t.completedAt);
+  const doneInWindow = doneScoped.filter((t) => new Date(t.completedAt!) >= since);
+  const withDue = doneInWindow.filter((t) => t.dueDate);
+  const onTimeCount = withDue.filter((t) => new Date(t.completedAt!) <= new Date(t.dueDate!)).length;
+  const onTimePct = withDue.length ? Math.round((onTimeCount / withDue.length) * 100) : null;
+  const avgCycleDays = doneInWindow.length
+    ? doneInWindow.reduce((s, t) => s + (new Date(t.completedAt!).getTime() - new Date(t.createdAt).getTime()), 0) /
+        doneInWindow.length /
+        86400000
+    : null;
+
+  // Throughput — tasks completed per week over the last 8 weeks.
+  const nowD = new Date();
+  const curWeekStart = new Date(nowD);
+  curWeekStart.setDate(nowD.getDate() - nowD.getDay());
+  curWeekStart.setHours(0, 0, 0, 0);
+  const throughput = Array.from({ length: 8 }, (_, i) => {
+    const ws = new Date(curWeekStart.getTime() - (7 - i) * 7 * 86400000);
+    const we = new Date(ws.getTime() + 7 * 86400000);
+    const count = doneScoped.filter((t) => {
+      const c = new Date(t.completedAt!);
+      return c >= ws && c < we;
+    }).length;
+    return { ws, count, isThis: i === 7 };
+  });
+  const tpPeak = Math.max(...throughput.map((w) => w.count), 1);
+  const completedThisWeek = throughput[7].count;
+
   const maxStatus = Math.max(...statusCounts.map((s) => s.count), 1);
   const STATUS_BAR: Record<string, string> = {
     TODO: "bg-slate-400",
@@ -215,6 +244,53 @@ export default async function ReportsPage({
         <div className="card p-4">
           <div className="text-2xl font-bold text-red-600">{overdue}</div>
           <div className="text-xs text-slate-500">Overdue</div>
+        </div>
+      </div>
+
+      {/* Insights */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="card grid grid-cols-3 gap-3 p-5 lg:col-span-1">
+          <div>
+            <div className="text-2xl font-bold text-green-600">{onTimePct === null ? "—" : `${onTimePct}%`}</div>
+            <div className="mt-0.5 text-xs text-slate-500">On-time completion</div>
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-sky-600">{avgCycleDays === null ? "—" : `${avgCycleDays.toFixed(1)}d`}</div>
+            <div className="mt-0.5 text-xs text-slate-500">Avg cycle time</div>
+          </div>
+          <div>
+            <div className="text-2xl font-bold">{completedThisWeek}</div>
+            <div className="mt-0.5 text-xs text-slate-500">Done this week</div>
+          </div>
+          <p className="col-span-3 border-t border-slate-100 pt-3 text-[11px] text-slate-400">
+            On-time = completed on/before due date · cycle time = created → completed · window: {daysLabel.toLowerCase()}.
+          </p>
+        </div>
+
+        <div className="card p-5 lg:col-span-2">
+          <div className="mb-4 flex items-baseline justify-between">
+            <h2 className="font-semibold">Throughput</h2>
+            <span className="text-xs text-slate-400">Tasks completed per week · last 8 weeks</span>
+          </div>
+          <div className="flex h-32 items-end gap-2">
+            {throughput.map((w, i) => {
+              const pct = w.count > 0 ? Math.max(6, Math.round((w.count / tpPeak) * 100)) : 0;
+              return (
+                <div key={i} className="flex flex-1 flex-col items-center gap-1" title={`${w.count} completed`}>
+                  <span className="text-[10px] font-medium text-slate-500">{w.count || ""}</span>
+                  <div className="flex h-20 w-full items-end rounded bg-slate-100">
+                    <div
+                      className={`w-full rounded ${w.isThis ? "bg-green-500" : "bg-green-300"}`}
+                      style={{ height: `${pct}%` }}
+                    />
+                  </div>
+                  <span className={`text-[9px] ${w.isThis ? "font-semibold text-green-600" : "text-slate-400"}`}>
+                    {w.ws.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
