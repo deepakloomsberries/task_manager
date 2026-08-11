@@ -39,3 +39,25 @@ export async function deleteAttachment(formData: FormData) {
   revalidatePath(back);
   redirect(back);
 }
+
+/** Delete several documents at once (Documents page bulk select). Skips any the
+ *  current user isn't allowed to remove. */
+export async function deleteAttachments(formData: FormData) {
+  const user = await requireUser();
+  const ids = String(formData.get("ids") || "")
+    .split(",")
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  if (ids.length === 0) redirect("/documents");
+
+  const attachments = await db.attachment.findMany({ where: { id: { in: ids } } });
+  const deletable = attachments.filter(
+    (a) => a.uploadedById === user.id || user.role === "ADMIN",
+  );
+  if (deletable.length > 0) {
+    await db.attachment.deleteMany({ where: { id: { in: deletable.map((a) => a.id) } } });
+    for (const a of deletable) await deleteUpload(a.storedName);
+  }
+  revalidatePath("/documents");
+  redirect("/documents");
+}
