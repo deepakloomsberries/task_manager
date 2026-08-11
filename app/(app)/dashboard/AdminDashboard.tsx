@@ -2,6 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import UserAvatar from "@/components/UserAvatar";
 import LiveClock from "@/components/LiveClock";
+import RunningTimerBadge from "@/components/RunningTimerBadge";
 import OfficeClocks from "@/components/OfficeClocks";
 import { companyTimezone, zonedStartOfToday, zonedHour, zonedDateLine } from "@/lib/tz";
 import { fmtHours, fmtRelative, ONLINE_WINDOW_MS } from "@/lib/ui";
@@ -62,6 +63,7 @@ export default async function AdminDashboard({ user }: { user: AdminUser }) {
     activeProjects,
     weekEntries,
     activities,
+    runningTimers,
   ] = await Promise.all([
     db.task.count({ where: { status: { not: "DONE" }, deletedAt: null } }),
     db.task.count({ where: { status: { not: "DONE" }, deletedAt: null, dueDate: { lt: todayStart } } }),
@@ -85,6 +87,13 @@ export default async function AdminDashboard({ user }: { user: AdminUser }) {
       orderBy: { createdAt: "desc" },
       take: 9,
       include: { actor: { select: { id: true, name: true, avatarPath: true } }, task: { select: { id: true, title: true, deletedAt: true } } },
+    }),
+    db.taskTimer.findMany({
+      orderBy: { startedAt: "asc" },
+      include: {
+        user: { select: { id: true, name: true, avatarPath: true } },
+        task: { select: { id: true, title: true, estimateHours: true } },
+      },
     }),
   ]);
 
@@ -213,6 +222,36 @@ export default async function AdminDashboard({ user }: { user: AdminUser }) {
               </div>
             )}
           </div>
+
+          {/* Working right now */}
+          {runningTimers.length > 0 && (
+            <div className="card">
+              <div className="flex items-center gap-2 border-b border-slate-200 px-5 py-4">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+                </span>
+                <h2 className="font-semibold">Working right now</h2>
+                <span className="text-sm font-normal text-slate-400">({runningTimers.length})</span>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {runningTimers.map((t) => (
+                  <div key={t.id} className="flex items-center gap-3 px-5 py-3">
+                    <UserAvatar user={t.user} size={28} />
+                    <span className="w-32 shrink-0 truncate text-sm font-medium">{t.user.name}</span>
+                    {t.task && (
+                      <RunningTimerBadge
+                        taskId={t.task.id}
+                        title={t.task.title}
+                        startedAt={t.startedAt.toISOString()}
+                        estimateHours={t.task.estimateHours}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Projects health */}
           <div className="card">
