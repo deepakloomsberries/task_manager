@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 export type BoardTask = {
   id: number;
@@ -35,19 +36,35 @@ export default function Board({
   const [dragOver, setDragOver] = useState<string | null>(null);
   // Optimistic placement so the card lands instantly while the server confirms.
   const [moved, setMoved] = useState<Record<number, string>>({});
+  // A reopen (Done → earlier column) waits on a confirmation before applying.
+  const [pending, setPending] = useState<{ id: number; status: string; title: string } | null>(null);
 
   const statusOf = (t: BoardTask) => moved[t.id] ?? t.status;
+
+  function applyMove(id: number, status: string) {
+    setMoved((m) => ({ ...m, [id]: status }));
+    startTransition(() => moveAction(id, status));
+  }
 
   function onDrop(e: React.DragEvent, status: string) {
     e.preventDefault();
     setDragOver(null);
     const id = Number(e.dataTransfer.getData("text/task-id"));
     if (!id) return;
-    setMoved((m) => ({ ...m, [id]: status }));
-    startTransition(() => moveAction(id, status));
+    const task = tasks.find((t) => t.id === id);
+    if (!task || statusOf(task) === status) return;
+    // Reopening a completed card is a revert — confirm before moving it back.
+    if (task && statusOf(task) === "DONE" && status !== "DONE") {
+      setPending({ id, status, title: task.title });
+      return;
+    }
+    applyMove(id, status);
   }
 
+  const pendingLabel = pending ? columns.find((c) => c.value === pending.status)?.label ?? pending.status : "";
+
   return (
+    <>
     <div className={`grid gap-4 md:grid-cols-2 xl:grid-cols-4 ${isPending ? "opacity-90" : ""}`}>
       {columns.map((col) => {
         const colTasks = tasks.filter((t) => statusOf(t) === col.value);
@@ -153,5 +170,17 @@ export default function Board({
         );
       })}
     </div>
+    <ConfirmDialog
+      open={pending !== null}
+      tone="primary"
+      confirmLabel="Reopen"
+      message={pending ? `Reopen "${pending.title}"? It will move back to ${pendingLabel}.` : ""}
+      onCancel={() => setPending(null)}
+      onConfirm={() => {
+        if (pending) applyMove(pending.id, pending.status);
+        setPending(null);
+      }}
+    />
+    </>
   );
 }
