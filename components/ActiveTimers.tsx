@@ -72,17 +72,22 @@ export function LiveWorkingCard({
   title,
   taskId,
   excludeUserId,
+  onlyUserId,
   showTask = true,
 }: {
   initial: ActiveTimer[];
   title: string;
   taskId?: number;
   excludeUserId?: number;
+  onlyUserId?: number;
   showTask?: boolean;
 }) {
   const timers = usePolledTimers(initial);
   const filtered = timers.filter(
-    (t) => (taskId ? t.taskId === taskId : true) && (excludeUserId ? t.userId !== excludeUserId : true)
+    (t) =>
+      (taskId ? t.taskId === taskId : true) &&
+      (excludeUserId ? t.userId !== excludeUserId : true) &&
+      (onlyUserId ? t.userId === onlyUserId : true)
   );
   if (filtered.length === 0) return null;
 

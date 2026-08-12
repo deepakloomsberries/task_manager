@@ -276,7 +276,7 @@ export default async function WorkloadPage({
             {rows.map((r) => (
               <tr key={r.user.id} className="hover:bg-slate-50">
                 <td className="td">
-                  <Link href={`/tasks?assignee=${r.user.id}&open=1`} className="flex items-center gap-2 hover:text-sky-700">
+                  <Link href={`/people/${r.user.id}`} className="flex items-center gap-2 hover:text-sky-700" title="View profile">
                     <UserAvatar user={r.user} size={28} presence={r.user.lastSeenAt} />
                     <span>
                       <span className="font-medium">{r.user.name}</span>

@@ -353,7 +353,15 @@ export default async function TaskDetailPage({
               </div>
               <div>
                 <dt className="text-xs text-slate-500">Assignee</dt>
-                <dd className="mt-0.5 font-medium">{task.assignee?.name ?? "Unassigned"}</dd>
+                <dd className="mt-0.5 font-medium">
+                  {task.assignee ? (
+                    <Link href={`/people/${task.assignee.id}`} className="hover:text-sky-700 hover:underline">
+                      {task.assignee.name}
+                    </Link>
+                  ) : (
+                    "Unassigned"
+                  )}
+                </dd>
               </div>
               <div>
                 <dt className="text-xs text-slate-500">Start date</dt>
@@ -373,7 +381,11 @@ export default async function TaskDetailPage({
               </div>
               <div>
                 <dt className="text-xs text-slate-500">Created by</dt>
-                <dd className="mt-0.5 font-medium">{task.createdBy.name}</dd>
+                <dd className="mt-0.5 font-medium">
+                  <Link href={`/people/${task.createdBy.id}`} className="hover:text-sky-700 hover:underline">
+                    {task.createdBy.name}
+                  </Link>
+                </dd>
               </div>
             </dl>
 
@@ -385,15 +397,19 @@ export default async function TaskDetailPage({
               <div className="flex flex-wrap items-center gap-2">
                 {task.assignee && (
                   <span className="flex items-center gap-1.5 rounded-full bg-slate-100 px-2 py-1 text-xs">
-                    <UserAvatar user={task.assignee} size={20} presence={task.assignee.lastSeenAt} />
-                    {task.assignee.name}
+                    <Link href={`/people/${task.assignee.id}`} className="flex items-center gap-1.5 hover:underline">
+                      <UserAvatar user={task.assignee} size={20} presence={task.assignee.lastSeenAt} />
+                      {task.assignee.name}
+                    </Link>
                     <span className="text-slate-400">· assignee</span>
                   </span>
                 )}
                 {task.collaborators.map((c) => (
                   <span key={c.userId} className="flex items-center gap-1.5 rounded-full bg-sky-50 px-2 py-1 text-xs ring-1 ring-sky-100">
-                    <UserAvatar user={c.user} size={20} presence={c.user.lastSeenAt} />
-                    {c.user.name}
+                    <Link href={`/people/${c.userId}`} className="flex items-center gap-1.5 hover:underline">
+                      <UserAvatar user={c.user} size={20} presence={c.user.lastSeenAt} />
+                      {c.user.name}
+                    </Link>
                     {(canManageCollab || c.userId === user.id) && (
                       <form action={removeTaskCollaborator} className="inline">
                         <input type="hidden" name="taskId" value={task.id} />
