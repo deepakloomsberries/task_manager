@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import { rescheduleTask } from "@/lib/actions/tasks";
+import DatePicker from "@/components/DatePicker";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTHS = [
@@ -73,6 +74,15 @@ export default function CalendarGrid({
     startTransition(() => rescheduleTask(id, `${year}-${pad(month + 1)}-${pad(day)}`));
   };
 
+  // Reschedule from the day popover (drag isn't possible over the overlay).
+  const reschedule = (id: number, iso: string) => {
+    setOpenDay(null);
+    // Same-month moves update instantly; other months refresh on revalidation.
+    const m = iso.match(/^\d{4}-(\d{2})-(\d{2})$/);
+    if (m && Number(m[1]) === month + 1) setMoves((prev) => ({ ...prev, [id]: Number(m[2]) }));
+    startTransition(() => rescheduleTask(id, iso || null));
+  };
+
   return (
     <div className={`card overflow-x-auto ${isPending ? "opacity-90" : ""}`}>
       <div className="grid min-w-[840px] grid-cols-7 border-b border-slate-200 bg-slate-50">
@@ -140,14 +150,14 @@ export default function CalendarGrid({
 
       {openDay !== null && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4"
+          className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 py-[8vh]"
           onClick={() => setOpenDay(null)}
         >
           <div
             className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl dark:bg-slate-800"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-1 flex items-center justify-between">
               <h3 className="font-semibold">
                 {MONTHS[month]} {openDay}, {year}
                 <span className="ml-2 text-xs font-normal text-slate-400">
@@ -163,25 +173,40 @@ export default function CalendarGrid({
                 ✕
               </button>
             </div>
-            <div className="max-h-[60vh] space-y-1 overflow-y-auto">
+            <p className="mb-3 text-xs text-slate-400">
+              Tap a task to open it, or use 📅 to move it to another date.
+            </p>
+            <div className="space-y-1">
               {(byDay.get(openDay) ?? []).map((t) => (
-                <Link
+                <div
                   key={t.id}
-                  href={`/tasks/${t.id}`}
-                  onClick={() => setOpenDay(null)}
-                  title={t.assigneeName ? `${t.title} — ${t.assigneeName}` : t.title}
                   className={`flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm ${
                     t.status === "DONE"
-                      ? "bg-green-50 text-green-700 line-through dark:bg-green-950/40"
+                      ? "bg-green-50 text-green-700 dark:bg-green-950/40"
                       : "hover:bg-slate-50 dark:hover:bg-slate-700"
                   }`}
                 >
                   <span className={`h-2 w-2 shrink-0 rounded-full ${t.badge}`} />
-                  <span className="flex-1 truncate">{t.title}</span>
+                  <Link
+                    href={`/tasks/${t.id}`}
+                    onClick={() => setOpenDay(null)}
+                    title={t.assigneeName ? `${t.title} — ${t.assigneeName}` : t.title}
+                    className={`flex-1 truncate ${t.status === "DONE" ? "line-through" : ""}`}
+                  >
+                    {t.title}
+                  </Link>
                   {t.assigneeName && (
-                    <span className="shrink-0 text-xs text-slate-400">{t.assigneeName}</span>
+                    <span className="hidden shrink-0 text-xs text-slate-400 sm:inline">{t.assigneeName}</span>
                   )}
-                </Link>
+                  {t.editable && (
+                    <DatePicker
+                      compact
+                      title="Move to another date"
+                      defaultValue={`${year}-${pad(month + 1)}-${pad(openDay)}`}
+                      onPick={(v) => reschedule(t.id, v)}
+                    />
+                  )}
+                </div>
               ))}
             </div>
           </div>
