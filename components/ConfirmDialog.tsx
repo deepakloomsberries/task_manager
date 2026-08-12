@@ -7,12 +7,15 @@ export default function ConfirmDialog({
   open,
   message,
   confirmLabel = "Delete",
+  tone = "danger",
   onConfirm,
   onCancel,
 }: {
   open: boolean;
   message: string;
   confirmLabel?: string;
+  /** "danger" for destructive actions (red), "primary" for positive ones (green). */
+  tone?: "danger" | "primary";
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -24,12 +27,17 @@ export default function ConfirmDialog({
   }, [open, onCancel]);
 
   if (!open) return null;
+  const isPrimary = tone === "primary";
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4" onClick={onCancel}>
       <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl dark:bg-slate-800" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-100 text-xl dark:bg-red-950/50">
-            ⚠️
+          <span
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xl ${
+              isPrimary ? "bg-green-100 dark:bg-green-950/50" : "bg-red-100 dark:bg-red-950/50"
+            }`}
+          >
+            {isPrimary ? "✓" : "⚠️"}
           </span>
           <p className="pt-1.5 text-sm text-slate-700 dark:text-slate-200">{message}</p>
         </div>
@@ -37,7 +45,11 @@ export default function ConfirmDialog({
           <button type="button" onClick={onCancel} className="btn-secondary !py-1.5 text-sm">
             Cancel
           </button>
-          <button type="button" onClick={onConfirm} className="btn-danger !py-1.5 text-sm">
+          <button
+            type="button"
+            onClick={onConfirm}
+            className={`${isPrimary ? "btn-primary" : "btn-danger"} !py-1.5 text-sm`}
+          >
             {confirmLabel}
           </button>
         </div>

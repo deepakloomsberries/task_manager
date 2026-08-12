@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { setTaskStatus } from "@/lib/actions/tasks";
 import { TASK_PRIORITIES, lookup, fmtDate, tagBadge } from "@/lib/ui";
+import ConfirmButton from "@/components/ConfirmButton";
 
 export const dynamic = "force-dynamic";
 
@@ -44,13 +45,15 @@ function Section({ title, accent, tasks }: { title: string; accent: string; task
                 <input type="hidden" name="id" value={t.id} />
                 <input type="hidden" name="status" value="DONE" />
                 <input type="hidden" name="back" value="/my-tasks" />
-                <button
-                  type="submit"
+                <ConfirmButton
+                  tone="primary"
                   title="Mark as done"
+                  message={`Mark "${t.title}" as done?`}
+                  confirmLabel="Mark done"
                   className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-slate-300 text-transparent transition-colors hover:border-green-500 hover:bg-green-500 hover:text-white"
                 >
                   ✓
-                </button>
+                </ConfirmButton>
               </form>
               <div className="min-w-0 flex-1">
                 <Link href={`/tasks/${t.id}`} className="text-sm font-medium hover:text-sky-700">

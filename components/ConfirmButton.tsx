@@ -12,12 +12,14 @@ export default function ConfirmButton({
   children,
   message = "Are you sure?",
   confirmLabel = "Delete",
+  tone = "danger",
   className = "",
   title,
 }: {
   children: React.ReactNode;
   message?: string;
   confirmLabel?: string;
+  tone?: "danger" | "primary";
   className?: string;
   title?: string;
 }) {
@@ -33,6 +35,7 @@ export default function ConfirmButton({
         open={open}
         message={message}
         confirmLabel={confirmLabel}
+        tone={tone}
         onCancel={() => setOpen(false)}
         onConfirm={() => {
           const form = btnRef.current?.form;
