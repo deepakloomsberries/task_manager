@@ -45,31 +45,40 @@ export default async function PersonProfilePage({ params }: { params: { id: stri
     OR: [{ assigneeId: person.id }, { collaborators: { some: { userId: person.id } } }],
   };
 
-  const [openTasks, doneRecent, openCount, doneCount, doneAll, hoursAgg] = await Promise.all([
-    db.task.findMany({
-      where: { ...mineScope, status: { not: "DONE" } },
-      orderBy: [{ dueDate: "asc" }, { priority: "desc" }],
-      include: { project: true, blockedBy: { include: { blocker: { select: { status: true } } } } },
-      take: 12,
-    }),
-    db.task.findMany({
-      where: { ...mineScope, status: "DONE" },
-      orderBy: { completedAt: "desc" },
-      include: { project: true },
-      take: 8,
-    }),
-    db.task.count({ where: { ...mineScope, status: { not: "DONE" } } }),
-    db.task.count({ where: { ...mineScope, status: "DONE" } }),
-    // Completed tasks with dates, for on-time % and "done this week".
-    db.task.findMany({
-      where: { ...mineScope, status: "DONE", completedAt: { not: null } },
-      select: { completedAt: true, dueDate: true },
-    }),
-    db.timeEntry.aggregate({
-      _sum: { hours: true },
-      where: { userId: person.id, date: { gte: weekStart } },
-    }),
-  ]);
+  const [openTasks, doneRecent, openCount, doneCount, overdueCount, doneAll, hoursAgg, projectRows] =
+    await Promise.all([
+      db.task.findMany({
+        where: { ...mineScope, status: { not: "DONE" } },
+        orderBy: [{ dueDate: "asc" }, { priority: "desc" }],
+        include: { project: true, blockedBy: { include: { blocker: { select: { status: true } } } } },
+        take: 12,
+      }),
+      db.task.findMany({
+        where: { ...mineScope, status: "DONE" },
+        orderBy: { completedAt: "desc" },
+        include: { project: true },
+        take: 8,
+      }),
+      db.task.count({ where: { ...mineScope, status: { not: "DONE" } } }),
+      db.task.count({ where: { ...mineScope, status: "DONE" } }),
+      db.task.count({ where: { ...mineScope, status: { not: "DONE" }, dueDate: { lt: now } } }),
+      // Completed tasks with dates, for on-time %, cycle time, throughput.
+      db.task.findMany({
+        where: { ...mineScope, status: "DONE", completedAt: { not: null } },
+        select: { completedAt: true, dueDate: true, createdAt: true },
+      }),
+      db.timeEntry.aggregate({
+        _sum: { hours: true },
+        where: { userId: person.id, date: { gte: weekStart } },
+      }),
+      // Projects this person has tasks in.
+      db.task.findMany({
+        where: { ...mineScope, projectId: { not: null } },
+        select: { project: { select: { id: true, name: true } } },
+        distinct: ["projectId"],
+        take: 24,
+      }),
+    ]);
 
   const withDue = doneAll.filter((t) => t.dueDate);
   const onTimeCount = withDue.filter((t) => new Date(t.completedAt!) <= new Date(t.dueDate!)).length;
@@ -77,11 +86,45 @@ export default async function PersonProfilePage({ params }: { params: { id: stri
   const doneThisWeek = doneAll.filter((t) => t.completedAt && new Date(t.completedAt) >= weekStart).length;
   const hoursThisWeek = hoursAgg._sum.hours ?? 0;
 
-  const stats: { label: string; value: string; accent?: string }[] = [
-    { label: "Open tasks", value: String(openCount) },
+  // Average cycle time (created → completed), in days. Clamp per-task to ≥0 so
+  // any out-of-order timestamps can't produce a negative average.
+  const avgCycleDays = doneAll.length
+    ? doneAll.reduce(
+        (s, t) => s + Math.max(0, new Date(t.completedAt!).getTime() - new Date(t.createdAt).getTime()),
+        0
+      ) /
+      doneAll.length /
+      86_400_000
+    : null;
+
+  // Completed per week over the last 8 weeks (Sunday-based buckets).
+  const throughput = Array.from({ length: 8 }, (_, i) => {
+    const start = new Date(weekStart);
+    start.setDate(weekStart.getDate() - (7 - i) * 7);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 7);
+    const count = doneAll.filter(
+      (t) => t.completedAt && new Date(t.completedAt) >= start && new Date(t.completedAt) < end
+    ).length;
+    return { start, count };
+  });
+  const tpPeak = Math.max(...throughput.map((w) => w.count), 1);
+
+  const projects = projectRows.map((r) => r.project).filter((p): p is { id: number; name: string } => !!p);
+
+  const stats: { label: string; value: string; accent?: string; sub?: string }[] = [
+    {
+      label: "Open tasks",
+      value: String(openCount),
+      sub: overdueCount > 0 ? `${overdueCount} overdue` : undefined,
+    },
     { label: "Completed", value: String(doneCount) },
     { label: "Done this week", value: String(doneThisWeek), accent: "text-green-600" },
     { label: "On-time", value: onTimePct === null ? "—" : `${onTimePct}%`, accent: "text-sky-600" },
+    {
+      label: "Avg cycle",
+      value: avgCycleDays === null ? "—" : `${avgCycleDays < 10 ? avgCycleDays.toFixed(1) : Math.round(avgCycleDays)}d`,
+    },
     { label: "Logged this week", value: fmtHours(hoursThisWeek) },
   ];
 
@@ -129,14 +172,57 @@ export default async function PersonProfilePage({ params }: { params: { id: stri
       </div>
 
       {/* Stat tiles */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {stats.map((s) => (
           <div key={s.label} className="card p-4 text-center">
             <div className={`text-2xl font-bold ${s.accent ?? ""}`}>{s.value}</div>
             <div className="mt-0.5 text-xs text-slate-500">{s.label}</div>
+            {s.sub && <div className="mt-0.5 text-[11px] font-medium text-red-600">{s.sub}</div>}
           </div>
         ))}
       </div>
+
+      {/* Projects they work across */}
+      {projects.length > 0 && (
+        <div className="card p-4">
+          <div className="mb-2 text-xs font-medium text-slate-500">Projects</div>
+          <div className="flex flex-wrap gap-2">
+            {projects.map((p) => (
+              <Link
+                key={p.id}
+                href={`/projects/${p.id}`}
+                className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300"
+              >
+                {p.name}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Completed per week */}
+      {doneCount > 0 && (
+        <div className="card p-4">
+          <div className="mb-3 flex items-baseline justify-between">
+            <div className="text-xs font-medium text-slate-500">Completed — last 8 weeks</div>
+            <div className="text-xs text-slate-400">{doneAll.length} total</div>
+          </div>
+          <div className="flex h-24 items-end gap-1.5">
+            {throughput.map((w, i) => (
+              <div key={i} className="flex flex-1 flex-col items-center gap-1" title={`${w.count} completed`}>
+                <div className="text-[10px] font-medium text-slate-500">{w.count || ""}</div>
+                <div
+                  className={`w-full rounded-t ${i === 7 ? "bg-sky-500" : "bg-sky-200 dark:bg-sky-900"}`}
+                  style={{ height: `${Math.max(3, (w.count / tpPeak) * 72)}px` }}
+                />
+                <div className="text-[9px] text-slate-400">
+                  {w.start.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Working on now */}
       <LiveWorkingCard
