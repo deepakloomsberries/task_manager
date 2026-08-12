@@ -43,6 +43,9 @@ import {
 
 export const dynamic = "force-dynamic";
 
+/** Pipeline order — moving to a lower index is a "revert" (needs confirmation). */
+const STATUS_ORDER = ["TODO", "IN_PROGRESS", "REVIEW", "DONE"];
+
 /** Colour-coded styling for each status pill in the "Move to" pipeline.
  *  Full static class strings (dynamic Tailwind class names are not JIT-picked). */
 const STATUS_PILL: Record<string, { active: string; dot: string; hover: string }> = {
@@ -446,6 +449,13 @@ export default async function TaskDetailPage({
                         : "";
                     const label = isDone && task.status === "REVIEW" && canEdit ? "Approve" : s.label;
 
+                    // Moving to an earlier stage is a revert (e.g. reopening a
+                    // completed task) — confirm it. Forward moves stay one-click.
+                    const currentIdx = STATUS_ORDER.indexOf(task.status);
+                    const targetIdx = STATUS_ORDER.indexOf(s.value);
+                    const isRevert = currentIdx > -1 && targetIdx > -1 && targetIdx < currentIdx;
+                    const reopening = task.status === "DONE";
+
                     if (isCurrent) {
                       return (
                         <span
@@ -470,17 +480,31 @@ export default async function TaskDetailPage({
                         </span>
                       );
                     }
+                    const pillClass = `inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200 transition ${style.hover}`;
                     return (
                       <form key={s.value} action={setTaskStatus}>
                         <input type="hidden" name="id" value={task.id} />
                         <input type="hidden" name="status" value={s.value} />
-                        <button
-                          type="submit"
-                          className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200 transition ${style.hover}`}
-                        >
-                          <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
-                          {label}
-                        </button>
+                        {isRevert ? (
+                          <ConfirmButton
+                            tone="primary"
+                            className={pillClass}
+                            confirmLabel={reopening ? "Reopen" : "Move back"}
+                            message={
+                              reopening
+                                ? `Reopen "${task.title}"? It will move back to ${s.label}.`
+                                : `Move "${task.title}" back to ${s.label}?`
+                            }
+                          >
+                            <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
+                            {label}
+                          </ConfirmButton>
+                        ) : (
+                          <button type="submit" className={pillClass}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
+                            {label}
+                          </button>
+                        )}
                       </form>
                     );
                   })}

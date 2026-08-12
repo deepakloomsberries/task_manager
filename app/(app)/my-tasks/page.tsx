@@ -8,14 +8,23 @@ import ConfirmButton from "@/components/ConfirmButton";
 export const dynamic = "force-dynamic";
 
 type TaskRow = Awaited<ReturnType<typeof loadTasks>>[number];
+type MyFilter = "all" | "assigned" | "collab";
 
-function loadTasks(userId: number) {
+function loadTasks(userId: number, filter: MyFilter) {
+  // "assigned" → tasks I own; "collab" → tasks I'm a collaborator on;
+  // "all" → either.
+  const scope =
+    filter === "assigned"
+      ? { assigneeId: userId }
+      : filter === "collab"
+        ? { collaborators: { some: { userId } } }
+        : { OR: [{ assigneeId: userId }, { collaborators: { some: { userId } } }] };
+
   return db.task.findMany({
     where: {
       status: { not: "DONE" },
       deletedAt: null,
-      // Tasks assigned to me, or ones I'm a collaborator on.
-      OR: [{ assigneeId: userId }, { collaborators: { some: { userId } } }],
+      ...scope,
     },
     orderBy: [{ dueDate: "asc" }, { priority: "desc" }],
     include: {
@@ -26,7 +35,7 @@ function loadTasks(userId: number) {
   });
 }
 
-function Section({ title, accent, tasks }: { title: string; accent: string; tasks: TaskRow[] }) {
+function Section({ title, accent, tasks, back }: { title: string; accent: string; tasks: TaskRow[]; back: string }) {
   if (tasks.length === 0) return null;
   return (
     <div className="card">
@@ -44,7 +53,7 @@ function Section({ title, accent, tasks }: { title: string; accent: string; task
               <form action={setTaskStatus}>
                 <input type="hidden" name="id" value={t.id} />
                 <input type="hidden" name="status" value="DONE" />
-                <input type="hidden" name="back" value="/my-tasks" />
+                <input type="hidden" name="back" value={back} />
                 <ConfirmButton
                   tone="primary"
                   title="Mark as done"
@@ -86,9 +95,18 @@ function Section({ title, accent, tasks }: { title: string; accent: string; task
   );
 }
 
-export default async function MyTasksPage() {
+export default async function MyTasksPage({
+  searchParams,
+}: {
+  searchParams: { filter?: string };
+}) {
   const user = await requireUser();
-  const tasks = await loadTasks(user.id);
+  const filter: MyFilter =
+    searchParams.filter === "assigned" || searchParams.filter === "collab"
+      ? searchParams.filter
+      : "all";
+  const tasks = await loadTasks(user.id, filter);
+  const back = filter === "all" ? "/my-tasks" : `/my-tasks?filter=${filter}`;
 
   const now = new Date();
   const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
@@ -110,8 +128,8 @@ export default async function MyTasksPage() {
         <div>
           <h1 className="text-2xl font-bold">My Tasks</h1>
           <p className="text-sm text-slate-500">
-            {tasks.length} open task{tasks.length === 1 ? "" : "s"} assigned to you. Click the
-            circle to mark a task done.
+            {tasks.length} open task{tasks.length === 1 ? "" : "s"}. Click the circle to mark a
+            task done.
           </p>
         </div>
         <Link href="/tasks?new=1" className="btn-primary">
@@ -119,17 +137,43 @@ export default async function MyTasksPage() {
         </Link>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        {(
+          [
+            { key: "all", label: "All my tasks" },
+            { key: "assigned", label: "Assigned to me" },
+            { key: "collab", label: "Collaborating" },
+          ] as const
+        ).map((f) => (
+          <Link
+            key={f.key}
+            href={f.key === "all" ? "/my-tasks" : `/my-tasks?filter=${f.key}`}
+            className={`rounded-full px-3 py-1 text-xs font-medium ${
+              filter === f.key
+                ? "bg-sky-600 text-white"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300"
+            }`}
+          >
+            {f.label}
+          </Link>
+        ))}
+      </div>
+
       {tasks.length === 0 && (
         <div className="card py-16 text-center text-sm text-slate-400">
-          Nothing assigned to you right now.
+          {filter === "assigned"
+            ? "Nothing assigned to you right now."
+            : filter === "collab"
+              ? "You're not collaborating on any open tasks right now."
+              : "Nothing on your plate right now."}
         </div>
       )}
 
-      <Section title="Overdue" accent="bg-red-500" tasks={overdue} />
-      <Section title="Due today" accent="bg-amber-500" tasks={today} />
-      <Section title="This week" accent="bg-sky-500" tasks={thisWeek} />
-      <Section title="Later" accent="bg-slate-400" tasks={later} />
-      <Section title="No due date" accent="bg-slate-300" tasks={noDate} />
+      <Section title="Overdue" accent="bg-red-500" tasks={overdue} back={back} />
+      <Section title="Due today" accent="bg-amber-500" tasks={today} back={back} />
+      <Section title="This week" accent="bg-sky-500" tasks={thisWeek} back={back} />
+      <Section title="Later" accent="bg-slate-400" tasks={later} back={back} />
+      <Section title="No due date" accent="bg-slate-300" tasks={noDate} back={back} />
     </div>
   );
 }
