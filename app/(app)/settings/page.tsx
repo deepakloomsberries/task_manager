@@ -110,20 +110,28 @@ export default async function SettingsPage({
       </div>
 
       <div className="card p-6">
-        <h2 className="mb-1 font-semibold">Change password</h2>
-        <p className="mb-4 text-xs text-slate-500">{PASSWORD_RULES}</p>
+        <h2 className="mb-1 font-semibold">
+          {user.mustChangePassword ? "Set your password" : "Change password"}
+        </h2>
+        <p className="mb-4 text-xs text-slate-500">
+          {user.mustChangePassword
+            ? `Choose a new password to replace the one your administrator gave you. ${PASSWORD_RULES}`
+            : PASSWORD_RULES}
+        </p>
         <form action={changeOwnPassword} className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="label">Current password</label>
-            <PasswordField name="current" autoComplete="current-password" />
-          </div>
-          <div>
+          {!user.mustChangePassword && (
+            <div>
+              <label className="label">Current password</label>
+              <PasswordField name="current" autoComplete="current-password" />
+            </div>
+          )}
+          <div className={user.mustChangePassword ? "md:col-span-2" : ""}>
             <label className="label">New password</label>
             <PasswordField name="next" autoComplete="new-password" withGenerate showStrength />
           </div>
           <div className="md:col-span-2">
             <button type="submit" className="btn-primary">
-              Update password
+              {user.mustChangePassword ? "Set password" : "Update password"}
             </button>
           </div>
         </form>

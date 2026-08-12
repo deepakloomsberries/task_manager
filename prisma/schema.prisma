@@ -78,7 +78,8 @@ model PasswordReset {
   userId    Int      @unique
   codeHash  String
   expiresAt DateTime
-  attempts  Int      @default(0)
+  attempts  Int      @default(0) // wrong-code guesses on the current code
+  sends     Int      @default(1) // codes emailed in the current window (resend cap)
   createdAt DateTime @default(now())
 }
 

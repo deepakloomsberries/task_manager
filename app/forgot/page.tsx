@@ -9,6 +9,7 @@ const ERRORS: Record<string, string> = {
   expired: "Your code has expired. Request a new one below.",
   attempts: "Too many incorrect attempts. Request a new code below.",
   code: "Incorrect code. Please check your email and try again.",
+  throttled: "You've requested too many codes. Please wait 15 minutes before trying again.",
 };
 
 export default function ForgotPasswordPage({
