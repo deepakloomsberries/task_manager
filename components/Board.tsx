@@ -10,6 +10,7 @@ export type BoardTask = {
   status: string;
   priorityLabel: string;
   priorityBadge: string;
+  assigneeId: number | null;
   assigneeInitials: string | null;
   assigneeName: string | null;
   assigneeColor: string | null;
@@ -148,14 +149,25 @@ export default function Board({
                           {t.dueLabel}
                         </span>
                       )}
-                      {t.assigneeInitials && (
-                        <span
-                          title={t.assigneeName ?? undefined}
-                          className={`flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-semibold text-white ${t.assigneeColor ?? "bg-sky-600"}`}
-                        >
-                          {t.assigneeInitials}
-                        </span>
-                      )}
+                      {t.assigneeInitials &&
+                        (t.assigneeId ? (
+                          <Link
+                            href={`/people/${t.assigneeId}`}
+                            title={`View ${t.assigneeName ?? "assignee"}'s profile`}
+                            onClick={(e) => e.stopPropagation()}
+                            draggable={false}
+                            className={`flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-semibold text-white ${t.assigneeColor ?? "bg-sky-600"}`}
+                          >
+                            {t.assigneeInitials}
+                          </Link>
+                        ) : (
+                          <span
+                            title={t.assigneeName ?? undefined}
+                            className={`flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-semibold text-white ${t.assigneeColor ?? "bg-sky-600"}`}
+                          >
+                            {t.assigneeInitials}
+                          </span>
+                        ))}
                     </div>
                   </div>
                 </div>

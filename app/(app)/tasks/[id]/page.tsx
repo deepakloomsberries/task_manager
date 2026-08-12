@@ -942,10 +942,14 @@ export default async function TaskDetailPage({
         <div className="space-y-4">
           {task.comments.map((c) => (
             <div key={c.id} className="flex gap-3">
-              <UserAvatar user={c.author} size={32} />
+              <Link href={`/people/${c.authorId}`} title={`View ${c.author.name}'s profile`}>
+                <UserAvatar user={c.author} size={32} />
+              </Link>
               <div className="min-w-0 flex-1 rounded-lg bg-slate-50 px-4 py-3">
                 <div className="mb-1 flex items-baseline justify-between gap-2">
-                  <span className="text-sm font-medium">{c.author.name}</span>
+                  <Link href={`/people/${c.authorId}`} className="text-sm font-medium hover:underline">
+                    {c.author.name}
+                  </Link>
                   <span className="flex items-center gap-2">
                     <span className="text-xs text-slate-400">{fmtDateTime(c.createdAt)}</span>
                     {(c.authorId === user.id || user.role === "ADMIN") && (

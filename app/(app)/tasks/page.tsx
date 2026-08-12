@@ -99,6 +99,7 @@ export default async function TasksPage({
       status: t.status,
       priorityLabel: priority.label,
       priorityBadge: priority.badge,
+      assigneeId: t.assigneeId,
       assigneeInitials: t.assignee ? initials(t.assignee.name) : null,
       assigneeName: t.assignee?.name ?? null,
       assigneeColor: t.assignee ? avatarColor(t.assignee.name) : null,

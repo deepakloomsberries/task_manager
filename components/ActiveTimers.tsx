@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
+import Link from "next/link";
 import UserAvatar from "@/components/UserAvatar";
 import RunningTimerBadge from "@/components/RunningTimerBadge";
 import LiveElapsed from "@/components/LiveElapsed";
@@ -104,17 +105,20 @@ export function LiveWorkingCard({
       <div className="divide-y divide-slate-100">
         {filtered.map((t) => (
           <div key={t.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
-            <UserAvatar user={{ id: t.userId, name: t.userName, avatarPath: t.avatarPath }} size={28} />
+            <Link
+              href={`/people/${t.userId}`}
+              title={`View ${t.userName}'s profile`}
+              className="flex items-center gap-2 hover:underline"
+            >
+              <UserAvatar user={{ id: t.userId, name: t.userName, avatarPath: t.avatarPath }} size={28} />
+              <span className={`text-sm font-medium ${showTask ? "w-32 shrink-0 truncate" : ""}`}>
+                {t.userName}
+              </span>
+            </Link>
             {showTask ? (
-              <>
-                <span className="w-32 shrink-0 truncate text-sm font-medium">{t.userName}</span>
-                <RunningTimerBadge taskId={t.taskId} title={t.taskTitle} startedAt={t.startedAt} estimateHours={t.estimateHours} />
-              </>
+              <RunningTimerBadge taskId={t.taskId} title={t.taskTitle} startedAt={t.startedAt} estimateHours={t.estimateHours} />
             ) : (
-              <>
-                <span className="text-sm font-medium">{t.userName}</span>
-                <LiveElapsed startedAt={t.startedAt} className="text-sm text-sky-600" />
-              </>
+              <LiveElapsed startedAt={t.startedAt} className="text-sm text-sky-600" />
             )}
           </div>
         ))}
