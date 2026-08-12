@@ -9,6 +9,7 @@ import DatePicker from "@/components/DatePicker";
 import SearchSelect from "@/components/SearchSelect";
 import MultiSelect from "@/components/MultiSelect";
 import RememberTaskView from "@/components/RememberTaskView";
+import { buildTaskListQuery, TASK_FILTER_KEYS } from "@/lib/taskFilters";
 import {
   TASK_STATUSES,
   TASK_PRIORITIES,
@@ -42,42 +43,7 @@ export default async function TasksPage({
 }) {
   const user = await requireUser();
 
-  const where: Record<string, unknown> = { deletedAt: null };
-  if (searchParams.status) where.status = searchParams.status;
-  if (searchParams.assignee === "me") where.assigneeId = user.id;
-  else if (searchParams.assignee) where.assigneeId = Number(searchParams.assignee);
-  if (searchParams.project) where.projectId = Number(searchParams.project);
-  // Dashboard deep-links: open (not done), overdue, and due-this-week.
-  if (searchParams.open) where.status = { not: "DONE" };
-  if (searchParams.overdue) {
-    where.status = { not: "DONE" };
-    where.dueDate = { lt: new Date() };
-  }
-  if (searchParams.due === "week") {
-    where.status = { not: "DONE" };
-    where.dueDate = { gte: new Date(), lt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) };
-  }
-  // Only tasks with at least one unfinished blocker.
-  if (searchParams.blocked) {
-    where.blockedBy = { some: { blocker: { status: { not: "DONE" }, deletedAt: null } } };
-  }
-  if (searchParams.q) {
-    const q = searchParams.q.trim();
-    // Support searching by task ID, e.g. "TM-42", "#42" or plain "42".
-    const idMatch = q.match(/^(?:tm-?|#)?(\d+)$/i);
-    if (idMatch) where.id = Number(idMatch[1]);
-    else where.title = { contains: q };
-  }
-  if (searchParams.tag) where.tags = { some: { tag: { name: searchParams.tag } } };
-
-  const orderBy =
-    searchParams.sort === "updated"
-      ? [{ updatedAt: "desc" as const }]
-      : searchParams.sort === "created"
-        ? [{ createdAt: "desc" as const }]
-        : searchParams.sort === "title"
-          ? [{ title: "asc" as const }]
-          : [{ status: "asc" as const }, { dueDate: "asc" as const }, { createdAt: "desc" as const }];
+  const { where, orderBy } = buildTaskListQuery(searchParams, user.id);
 
   const [tasks, users, projects, allTags] = await Promise.all([
     db.task.findMany({
@@ -116,6 +82,14 @@ export default async function TasksPage({
   const withView = (view: string) => `/tasks?${baseQuery ? `${baseQuery}&` : ""}view=${view}`;
   const listHref = withView("list");
   const boardHref = withView("board");
+
+  // Export the currently-applied filter view (managers/admins only).
+  const filterQuery = new URLSearchParams();
+  for (const k of TASK_FILTER_KEYS) {
+    const v = searchParams[k];
+    if (v) filterQuery.set(k, v);
+  }
+  const exportHref = `/api/export/tasks${filterQuery.toString() ? `?${filterQuery}` : ""}`;
 
   const boardTasks: BoardTask[] = tasks.map((t) => {
     const priority = lookup(TASK_PRIORITIES, t.priority);
@@ -383,6 +357,15 @@ export default async function TasksPage({
         >
           <span aria-hidden>✕</span> Clear
         </Link>
+        {canManage && (
+          <a
+            href={exportHref}
+            className="btn-secondary gap-1.5"
+            title="Download the tasks matching these filters as a spreadsheet (CSV)"
+          >
+            <span aria-hidden>⬇</span> Export
+          </a>
+        )}
       </form>
 
       {boardView ? (

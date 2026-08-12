@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, isManagerOrAdmin } from "@/lib/auth";
+import { buildTaskListQuery, TASK_FILTER_KEYS, type TaskListParams } from "@/lib/taskFilters";
+import { TASK_STATUSES, TASK_PRIORITIES, lookup } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +14,7 @@ function csvCell(value: string | number | null | undefined) {
   return `"${safe.replace(/"/g, '""')}"`;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await getSession();
   if (!session) return new NextResponse("Unauthorized", { status: 401 });
   const user = await db.user.findUnique({ where: { id: session.userId } });
@@ -20,29 +22,49 @@ export async function GET() {
     return new NextResponse("Forbidden", { status: 403 });
   }
 
+  // Mirror the Tasks page filters so the export matches what the manager sees.
+  const url = new URL(request.url);
+  const params: TaskListParams = {};
+  for (const k of TASK_FILTER_KEYS) {
+    const v = url.searchParams.get(k);
+    if (v) params[k] = v;
+  }
+  const { where, orderBy } = buildTaskListQuery(params, user.id);
+
   const tasks = await db.task.findMany({
-    where: { deletedAt: null },
-    include: { project: true, assignee: true, createdBy: true, tags: { include: { tag: true } } },
-    orderBy: { createdAt: "desc" },
+    where,
+    orderBy,
+    include: {
+      project: true,
+      assignee: true,
+      createdBy: true,
+      tags: { include: { tag: true } },
+      blockedBy: { include: { blocker: { select: { status: true } } } },
+    },
   });
+
+  const iso = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : "");
 
   const header = [
     "ID", "Title", "Status", "Priority", "Project", "Assignee", "Created by",
-    "Tags", "Due date", "Created", "Completed",
+    "Tags", "Start date", "Due date", "Estimate (h)", "Blocked", "Created", "Completed",
   ];
   const rows = tasks.map((t) =>
     [
-      t.id,
+      `TM-${t.id}`,
       t.title,
-      t.status,
-      t.priority,
+      lookup(TASK_STATUSES, t.status).label,
+      lookup(TASK_PRIORITIES, t.priority).label,
       t.project?.name ?? "",
       t.assignee?.name ?? "",
       t.createdBy.name,
       t.tags.map(({ tag }) => tag.name).join(", "),
-      t.dueDate ? t.dueDate.toISOString().slice(0, 10) : "",
-      t.createdAt.toISOString().slice(0, 10),
-      t.completedAt ? t.completedAt.toISOString().slice(0, 10) : "",
+      iso(t.startDate),
+      iso(t.dueDate),
+      t.estimateHours ?? "",
+      t.blockedBy.some((d) => d.blocker.status !== "DONE") ? "Yes" : "",
+      iso(t.createdAt),
+      iso(t.completedAt),
     ]
       .map(csvCell)
       .join(",")
