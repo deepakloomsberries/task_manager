@@ -150,6 +150,22 @@ export async function commitTimersForTask(taskId: number): Promise<number> {
 }
 
 /**
+ * Starts (or switches to) a user's stopwatch on a task. A person can only time
+ * one task at a time, so if they were already timing something else we bank that
+ * time first and then switch — the "what am I working on now" flow of Toggl or
+ * Harvest. No-ops if they're already timing this task. Shared by the Start-timer
+ * button and the auto-start when a task is moved to In Progress.
+ */
+export async function startTimerFor(userId: number, taskId: number) {
+  const existing = await db.taskTimer.findUnique({ where: { userId } });
+  if (existing) {
+    if (existing.taskId === taskId) return; // already timing this task
+    await commitTimer(existing);
+  }
+  await db.taskTimer.create({ data: { userId, taskId } });
+}
+
+/**
  * Starts the stopwatch on a task. A person can only time one task at a time, so
  * if they were already timing something else we bank that time first and then
  * switch — the same "what am I working on now" flow as Toggl or Harvest.
@@ -164,12 +180,8 @@ export async function startTaskTimer(formData: FormData) {
   if (!task) redirect("/tasks");
 
   const existing = await db.taskTimer.findUnique({ where: { userId: user.id } });
-  if (existing) {
-    if (existing.taskId === taskId) redirect(back); // already timing this task
-    await commitTimer(existing);
-  }
-
-  await db.taskTimer.create({ data: { userId: user.id, taskId } });
+  if (existing && existing.taskId === taskId) redirect(back); // already timing this task
+  await startTimerFor(user.id, taskId);
 
   // Starting the clock means work has begun, so nudge a fresh task out of the
   // backlog into "In Progress" automatically (only from To-Do — never override

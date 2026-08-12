@@ -8,7 +8,7 @@ import { notifyAssignment, notifyComment, notifyReminder, pushNotification, logA
 import { notifyCollaboratorAdded } from "@/lib/mail";
 import { findMentionedIds } from "@/lib/mentions";
 import { companyTimezone, zonedStartOfToday } from "@/lib/tz";
-import { commitTimersForTask } from "@/lib/actions/time";
+import { commitTimersForTask, startTimerFor } from "@/lib/actions/time";
 import { fmtDate, lookup, parseHours, TASK_STATUSES } from "@/lib/ui";
 
 const STATUSES = ["TODO", "IN_PROGRESS", "REVIEW", "DONE"];
@@ -289,7 +289,8 @@ async function hasOpenBlockers(taskId: number) {
 async function changeStatus(
   user: { id: number; name: string; role: string; requiresApproval?: boolean },
   taskId: number,
-  status: string
+  status: string,
+  autoTimer = false
 ): Promise<"ok" | "noop" | "blocked" | "needs-approval"> {
   if (!STATUSES.includes(status)) return "noop";
   const task = await db.task.findUnique({
@@ -298,6 +299,10 @@ async function changeStatus(
   });
   if (!task || task.deletedAt || !canChangeStatus(user, task)) return "noop";
   if (task.status === status) return "noop";
+
+  // Whether the acting user is the one who actually logs time on this task.
+  const isWorker =
+    task.assigneeId === user.id || task.collaborators.some((c) => c.userId === user.id);
 
   if (status === "DONE") {
     // Approval-required users (e.g. designers) can't complete their own work —
@@ -315,6 +320,16 @@ async function changeStatus(
   const from = lookup(TASK_STATUSES, task.status).label;
   const to = lookup(TASK_STATUSES, status).label;
   await logActivity(taskId, user.id, "status", `${from} → ${to}`);
+
+  // Moving your own task to In Progress starts the stopwatch — the mirror of
+  // completing it, which stops the timer. Only for the assignee/collaborator
+  // actually doing the work (never a manager moving someone else's task), and
+  // only from a direct status change (not a bulk move).
+  if (status === "IN_PROGRESS" && autoTimer && isWorker) {
+    await startTimerFor(user.id, taskId);
+    await revalidateTaskViews(taskId);
+    revalidatePath("/timesheet");
+  }
 
   // Sent for review → ping the task owner so they can approve completion.
   if (status === "REVIEW" && task.createdById !== user.id) {
@@ -389,7 +404,7 @@ export async function setTaskStatus(formData: FormData) {
   const status = String(formData.get("status") ?? "");
   const back = String(formData.get("back") ?? `/tasks/${id}`);
 
-  const result = await changeStatus(user, id, status);
+  const result = await changeStatus(user, id, status, true);
   await revalidateTaskViews(id);
   if (result === "blocked" || result === "needs-approval") {
     redirect(`${back}${back.includes("?") ? "&" : "?"}error=${result}`);
@@ -412,7 +427,7 @@ export async function moveTask(taskId: number, status: string) {
   if (!canChangeStatus(user, task)) return;
   if (task.status === status) return;
 
-  await changeStatus(user, taskId, status);
+  await changeStatus(user, taskId, status, true);
   await revalidateTaskViews(taskId);
 }
 
