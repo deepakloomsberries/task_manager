@@ -15,18 +15,33 @@ export async function createNote(formData: FormData) {
   const user = await requireUser();
   const title = String(formData.get("title") ?? "").trim();
   const body = String(formData.get("body") ?? "").trim();
+  const type = String(formData.get("type") ?? "text") === "checklist" ? "checklist" : "text";
   if (!title && !body) redirect("/notes");
 
   await db.note.create({
     data: {
       title: title || "Untitled",
       body,
+      type,
       color: parseColor(formData),
       userId: user.id,
     },
   });
   revalidatePath("/notes");
   redirect("/notes");
+}
+
+/** Persist a manual drag order for the current user's notes. */
+export async function reorderNotes(ids: number[]) {
+  const user = await requireUser();
+  const clean = ids.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+  if (clean.length === 0) return;
+  await db.$transaction(
+    clean.map((id, i) =>
+      db.note.updateMany({ where: { id, userId: user.id }, data: { sortOrder: i } })
+    )
+  );
+  revalidatePath("/notes");
 }
 
 export async function updateNote(formData: FormData) {

@@ -10,15 +10,18 @@ import {
   unshareNote,
 } from "@/lib/actions/notes";
 import NoteEditor from "@/components/NoteEditor";
+import ChecklistNoteEditor from "@/components/ChecklistNoteEditor";
 import SearchSelect from "@/components/SearchSelect";
 import ConfirmButton from "@/components/ConfirmButton";
 import { NOTE_COLORS, noteCard, fmtDate, initials, avatarColor } from "@/lib/ui";
+import { parseChecklist, serializeChecklist, type ChecklistItem } from "@/lib/checklist";
 
 export type NoteCardData = {
   id: number;
   title: string;
   body: string;
   color: string;
+  type: string;
   pinned: boolean;
   updatedAt: string;
   shares: { userId: number; name: string }[];
@@ -57,6 +60,26 @@ export default function NoteCard({
   const [editing, setEditing] = useState(false);
   const [colorOpen, setColorOpen] = useState(false);
   const colorRef = useRef<HTMLDivElement>(null);
+  const isChecklist = note.type === "checklist";
+  const [checkItems, setCheckItems] = useState<ChecklistItem[]>(() =>
+    isChecklist ? parseChecklist(note.body) : []
+  );
+
+  useEffect(() => {
+    if (isChecklist) setCheckItems(parseChecklist(note.body));
+  }, [note.body, isChecklist]);
+
+  async function toggleItem(i: number) {
+    const next = checkItems.map((it, idx) => (idx === i ? { ...it, done: !it.done } : it));
+    setCheckItems(next); // optimistic
+    await fetch(`/api/notes/${note.id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: note.title, body: serializeChecklist(next), color: note.color }),
+    }).catch(() => setCheckItems(checkItems));
+  }
+
+  const doneCount = checkItems.filter((it) => it.done).length;
 
   useEffect(() => {
     if (!colorOpen) return;
@@ -87,7 +110,7 @@ export default function NoteCard({
   return (
     <>
       <div
-        className={`group relative mb-4 break-inside-avoid rounded-lg border shadow-sm transition-shadow hover:shadow-md ${noteCard(note.color)}`}
+        className={`group relative rounded-lg border shadow-sm transition-shadow hover:shadow-md ${noteCard(note.color)}`}
       >
         {isOwner && (
           <form action={toggleNotePin} className="absolute right-1.5 top-1.5 z-10">
@@ -104,23 +127,56 @@ export default function NoteCard({
           </form>
         )}
 
-        {/* Click the body to open the editor. */}
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="block w-full cursor-default px-4 pb-2 pt-4 text-left"
-        >
-          {note.title && <div className="pr-7 font-semibold text-slate-800">{note.title}</div>}
-          {note.body && (
-            <p className="mt-1 line-clamp-[15] whitespace-pre-wrap text-sm text-slate-700">
-              {note.body}
-            </p>
-          )}
-          {!note.title && !note.body && <div className="text-sm text-slate-400">Empty note</div>}
-        </button>
+        {isChecklist ? (
+          <div className="px-4 pb-2 pt-4">
+            <button type="button" onClick={() => setEditing(true)} className="block w-full text-left">
+              {note.title && <div className="pr-7 font-semibold text-slate-800">{note.title}</div>}
+            </button>
+            <ul className="mt-1 space-y-0.5">
+              {checkItems.slice(0, 10).map((it, i) => (
+                <li key={i} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={it.done}
+                    onChange={() => toggleItem(i)}
+                    className="h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setEditing(true)}
+                    className={`flex-1 truncate text-left ${it.done ? "text-slate-400 line-through" : "text-slate-700"}`}
+                  >
+                    {it.text}
+                  </button>
+                </li>
+              ))}
+              {checkItems.length > 10 && (
+                <li className="pl-6 text-xs text-slate-400">+{checkItems.length - 10} more</li>
+              )}
+              {checkItems.length === 0 && <li className="text-sm text-slate-400">Empty checklist</li>}
+            </ul>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="block w-full cursor-default px-4 pb-2 pt-4 text-left"
+          >
+            {note.title && <div className="pr-7 font-semibold text-slate-800">{note.title}</div>}
+            {note.body && (
+              <p className="mt-1 line-clamp-[15] whitespace-pre-wrap text-sm text-slate-700">{note.body}</p>
+            )}
+            {!note.title && !note.body && <div className="text-sm text-slate-400">Empty note</div>}
+          </button>
+        )}
 
         <div className="flex items-center gap-2 px-4 pb-1 text-[11px] text-slate-400">
           <span>{note.ownerName ? `shared by ${note.ownerName}` : fmtDate(note.updatedAt)}</span>
+          {isChecklist && checkItems.length > 0 && (
+            <span className="rounded-full bg-black/5 px-1.5 py-0.5 font-medium">
+              {doneCount}/{checkItems.length}
+            </span>
+          )}
           {note.shares.length > 0 && (
             <div className="flex -space-x-1.5">
               {note.shares.slice(0, 3).map((s) => (
@@ -197,7 +253,11 @@ export default function NoteCard({
             className={`w-full max-w-xl rounded-xl border shadow-2xl ${noteCard(note.color)}`}
             onClick={(e) => e.stopPropagation()}
           >
-            <NoteEditor id={note.id} initialTitle={note.title} initialBody={note.body} initialColor={note.color} />
+            {isChecklist ? (
+              <ChecklistNoteEditor id={note.id} initialTitle={note.title} initialBody={note.body} initialColor={note.color} />
+            ) : (
+              <NoteEditor id={note.id} initialTitle={note.title} initialBody={note.body} initialColor={note.color} />
+            )}
 
             {isOwner && (
               <div className="border-t border-black/10 px-4 py-3">

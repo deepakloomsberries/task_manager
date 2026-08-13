@@ -1,7 +1,8 @@
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import NoteComposer from "@/components/NoteComposer";
-import NoteCard, { type NoteCardData } from "@/components/NoteCard";
+import NotesGrid from "@/components/NotesGrid";
+import { type NoteCardData } from "@/components/NoteCard";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,7 @@ export default async function NotesPage() {
     db.note.findMany({
       where: { userId: user.id, deletedAt: null },
       include: { shares: { include: { user: true } } },
-      orderBy: [{ pinned: "desc" }, { updatedAt: "desc" }],
+      orderBy: [{ pinned: "desc" }, { sortOrder: "asc" }, { updatedAt: "desc" }],
     }),
     db.note.findMany({
       where: { shares: { some: { userId: user.id } }, deletedAt: null },
@@ -30,6 +31,7 @@ export default async function NotesPage() {
     title: n.title,
     body: n.body,
     color: n.color,
+    type: n.type,
     pinned: n.pinned,
     updatedAt: n.updatedAt.toISOString(),
     shares: n.shares.map((s) => ({ userId: s.userId, name: s.user.name })),
@@ -41,7 +43,11 @@ export default async function NotesPage() {
     return users.filter((u) => u.id !== user.id && !already.has(u.id));
   };
 
-  const columns = "columns-1 gap-4 sm:columns-2 lg:columns-3 xl:columns-4";
+  const toItem = (n: (typeof owned)[number] & { user?: { name: string } }) => ({
+    note: toCard(n),
+    shareOptions: optionsFor(n),
+  });
+
   const sectionLabel = "mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400";
 
   return (
@@ -65,33 +71,24 @@ export default async function NotesPage() {
       {pinned.length > 0 && (
         <div>
           <div className={sectionLabel}>Pinned</div>
-          <div className={columns}>
-            {pinned.map((n) => (
-              <NoteCard key={n.id} note={toCard(n)} isOwner shareOptions={optionsFor(n)} />
-            ))}
-          </div>
+          <NotesGrid items={pinned.map(toItem)} isOwner reorderable />
         </div>
       )}
 
       {others.length > 0 && (
         <div>
           {pinned.length > 0 && <div className={sectionLabel}>Others</div>}
-          <div className={columns}>
-            {others.map((n) => (
-              <NoteCard key={n.id} note={toCard(n)} isOwner shareOptions={optionsFor(n)} />
-            ))}
-          </div>
+          <NotesGrid items={others.map(toItem)} isOwner reorderable />
         </div>
       )}
 
       {shared.length > 0 && (
         <div>
           <div className={sectionLabel}>Shared with me</div>
-          <div className={columns}>
-            {shared.map((n) => (
-              <NoteCard key={n.id} note={toCard(n)} isOwner={false} shareOptions={[]} />
-            ))}
-          </div>
+          <NotesGrid
+            items={shared.map((n) => ({ note: toCard({ ...n }), shareOptions: [] }))}
+            isOwner={false}
+          />
         </div>
       )}
     </div>

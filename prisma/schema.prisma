@@ -247,7 +247,9 @@ model Note {
   title     String
   body      String      @default("")
   color     String      @default("default")
+  type      String      @default("text") // text | checklist
   pinned    Boolean     @default(false)
+  sortOrder Int         @default(0) // manual drag order (lower = earlier)
   user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    Int
   updatedAt DateTime    @updatedAt
