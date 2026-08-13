@@ -21,8 +21,9 @@ export default function NotesGrid({
   const [dragId, setDragId] = useState<number | null>(null);
   const [, startTransition] = useTransition();
 
-  // Resync when the server sends a different set/order (add, delete, edit).
-  const sig = items.map((i) => i.note.id).join(",");
+  // Resync when the server sends new data — including edits, which change
+  // updatedAt/pinned even though the id set stays the same.
+  const sig = items.map((i) => `${i.note.id}:${i.note.updatedAt}:${i.note.pinned}`).join(",");
   useEffect(() => {
     setOrder(items);
     // eslint-disable-next-line react-hooks/exhaustive-deps
