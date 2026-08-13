@@ -89,6 +89,25 @@ export async function unshareNote(formData: FormData) {
   redirect("/notes");
 }
 
+/** Quick colour change from a note card (Google Keep-style palette). */
+export async function setNoteColor(formData: FormData) {
+  const user = await requireUser();
+  const id = Number(formData.get("id"));
+  const color = parseColor(formData);
+  // Owner or a collaborator may recolour.
+  const note = await db.note.findFirst({
+    where: {
+      id,
+      deletedAt: null,
+      OR: [{ userId: user.id }, { shares: { some: { userId: user.id } } }],
+    },
+    select: { id: true },
+  });
+  if (note) await db.note.update({ where: { id }, data: { color } });
+  revalidatePath("/notes");
+  redirect("/notes");
+}
+
 export async function toggleNotePin(formData: FormData) {
   const user = await requireUser();
   const id = Number(formData.get("id"));
