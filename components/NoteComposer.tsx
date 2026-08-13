@@ -18,8 +18,8 @@ export default function NoteComposer() {
   const [body, setBody] = useState("");
   const [items, setItems] = useState<ChecklistItem[]>([]);
   const [color, setColor] = useState("default");
-  const formRef = useRef<HTMLFormElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const submitting = useRef(false);
 
   const checklistBody = serializeChecklist(items);
   const hasContent = !!(title.trim() || (mode === "text" ? body.trim() : checklistBody));
@@ -33,17 +33,35 @@ export default function NoteComposer() {
     setColor("default");
   }
 
+  // Save exactly once, then collapse — guards against the outside-click handler
+  // firing on every subsequent click and creating duplicate notes.
+  function submit() {
+    if (submitting.current) return;
+    if (!hasContent) {
+      reset();
+      return;
+    }
+    submitting.current = true;
+    const fd = new FormData();
+    fd.set("title", title);
+    fd.set("body", mode === "text" ? body : checklistBody);
+    fd.set("color", color);
+    fd.set("type", mode);
+    void Promise.resolve(createNote(fd)).finally(() => {
+      submitting.current = false;
+    });
+    reset();
+  }
+
   useEffect(() => {
     if (!expanded) return;
     const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        if (hasContent) formRef.current?.requestSubmit();
-        else setExpanded(false);
-      }
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) submit();
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
-  }, [expanded, hasContent]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded, hasContent, title, body, checklistBody, mode, color]);
 
   return (
     <div ref={rootRef} className="mx-auto max-w-xl">
@@ -72,12 +90,8 @@ export default function NoteComposer() {
           </button>
         </div>
       ) : (
-        <form ref={formRef} action={createNote} className={`rounded-lg border p-3 shadow-md ${noteCard(color)}`}>
-          <input type="hidden" name="color" value={color} />
-          <input type="hidden" name="type" value={mode} />
-          {mode === "checklist" && <input type="hidden" name="body" value={checklistBody} />}
+        <div className={`rounded-lg border p-3 shadow-md ${noteCard(color)}`}>
           <input
-            name="title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Title"
@@ -85,7 +99,6 @@ export default function NoteComposer() {
           />
           {mode === "text" ? (
             <textarea
-              name="body"
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={3}
@@ -126,12 +139,12 @@ export default function NoteComposer() {
               <button type="button" onClick={reset} className="rounded-md px-3 py-1.5 text-sm font-medium text-slate-500 hover:bg-black/5">
                 Close
               </button>
-              <button type="submit" disabled={!hasContent} className="btn-primary !py-1.5 text-xs disabled:opacity-50">
+              <button type="button" onClick={submit} disabled={!hasContent} className="btn-primary !py-1.5 text-xs disabled:opacity-50">
                 Add note
               </button>
             </div>
           </div>
-        </form>
+        </div>
       )}
     </div>
   );
