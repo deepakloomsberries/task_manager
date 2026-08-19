@@ -9,6 +9,8 @@ import DatePicker from "@/components/DatePicker";
 import SearchSelect from "@/components/SearchSelect";
 import MultiSelect from "@/components/MultiSelect";
 import RememberTaskView from "@/components/RememberTaskView";
+import SaveViewButton from "@/components/SaveViewButton";
+import { deleteSavedView } from "@/lib/actions/savedViews";
 import { buildTaskListQuery, TASK_FILTER_KEYS } from "@/lib/taskFilters";
 import {
   TASK_STATUSES,
@@ -45,7 +47,7 @@ export default async function TasksPage({
 
   const { where, orderBy } = buildTaskListQuery(searchParams, user.id);
 
-  const [tasks, users, projects, allTags] = await Promise.all([
+  const [tasks, users, projects, allTags, savedViews] = await Promise.all([
     db.task.findMany({
       where,
       orderBy,
@@ -64,6 +66,7 @@ export default async function TasksPage({
       orderBy: { name: "asc" },
     }),
     db.tag.findMany({ orderBy: { name: "asc" } }),
+    db.savedView.findMany({ where: { userId: user.id }, orderBy: { createdAt: "asc" } }),
   ]);
 
   const showNew = searchParams.new === "1";
@@ -90,6 +93,13 @@ export default async function TasksPage({
     if (v) filterQuery.set(k, v);
   }
   const exportHref = `/api/export/tasks${filterQuery.toString() ? `?${filterQuery}` : ""}`;
+
+  // Saved views (personal quick views): the current filters as a string, the URL
+  // to return to, and whether the current filters are already saved.
+  const currentFilterStr = filterQuery.toString();
+  const currentHref = withView(viewParam);
+  const savedViewHref = (q: string) => `/tasks?${q ? `${q}&` : ""}view=${viewParam}`;
+  const alreadySaved = savedViews.some((v) => v.query === currentFilterStr);
 
   const boardTasks: BoardTask[] = tasks.map((t) => {
     const priority = lookup(TASK_PRIORITIES, t.priority);
@@ -193,6 +203,39 @@ export default async function TasksPage({
         >
           ⛔ Blocked
         </Link>
+
+        {/* Saved views — personal quick filters */}
+        {savedViews.map((v) => {
+          const active = v.query === currentFilterStr;
+          return (
+            <span
+              key={v.id}
+              className={`group inline-flex items-center gap-1 rounded-full py-1 pl-3 pr-1.5 text-xs font-medium ${
+                active ? "bg-sky-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300"
+              }`}
+            >
+              <Link href={savedViewHref(v.query)} title={`Apply "${v.name}"`}>
+                ★ {v.name}
+              </Link>
+              <form action={deleteSavedView} className="flex">
+                <input type="hidden" name="id" value={v.id} />
+                <input type="hidden" name="back" value={currentHref} />
+                <button
+                  type="submit"
+                  title="Delete this saved view"
+                  className={`rounded-full px-1 leading-none ${active ? "text-white/70 hover:text-white" : "text-slate-400 hover:text-red-600"}`}
+                >
+                  ✕
+                </button>
+              </form>
+            </span>
+          );
+        })}
+
+        {/* Offer to save when filters are applied and not already saved */}
+        {currentFilterStr && !alreadySaved && (
+          <SaveViewButton query={currentFilterStr} back={currentHref} />
+        )}
       </div>
 
       {showNew && (

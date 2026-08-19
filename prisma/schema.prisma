@@ -65,6 +65,7 @@ model User {
   timesheetSubmissions TimesheetSubmission[] @relation("tsSubmitter")
   timesheetReviews     TimesheetSubmission[] @relation("tsReviewer")
   passwordReset        PasswordReset?
+  savedViews           SavedView[]
 }
 
 /**
@@ -190,6 +191,18 @@ model Tag {
   name  String    @unique
   color String    @default("slate")
   tasks TaskTag[]
+}
+
+/** A named, saved combination of Tasks filters — a personal quick view. */
+model SavedView {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  name      String
+  query     String   @default("") // the tasks filter query string, e.g. "status=DONE&assignee=2"
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model TaskTag {
