@@ -323,6 +323,11 @@ async function changeStatus(
   const to = lookup(TASK_STATUSES, status).label;
   await logActivity(taskId, user.id, "status", `${from} → ${to}`);
 
+  // Ping anyone following this task about the status change.
+  for (const wid of await watcherIds(taskId, user.id)) {
+    await pushNotification(wid, `${task.title}: ${from} → ${to}`, `/tasks/${taskId}`);
+  }
+
   // Moving your own task to In Progress starts the stopwatch — the mirror of
   // completing it, which stops the timer. Only for the assignee/collaborator
   // actually doing the work (never a manager moving someone else's task), and
@@ -553,6 +558,38 @@ export async function sendTaskReminder(formData: FormData) {
   redirect(`/tasks/${id}?ok=reminder`);
 }
 
+/** Follow a task to get notified of status changes and new comments. */
+export async function watchTask(formData: FormData) {
+  const user = await requireUser();
+  const taskId = Number(formData.get("taskId"));
+  if (!taskId) redirect("/tasks");
+  const task = await db.task.findFirst({ where: { id: taskId, deletedAt: null }, select: { id: true } });
+  if (task) {
+    await db.taskWatcher.upsert({
+      where: { taskId_userId: { taskId, userId: user.id } },
+      create: { taskId, userId: user.id },
+      update: {},
+    });
+  }
+  revalidatePath(`/tasks/${taskId}`);
+  redirect(`/tasks/${taskId}`);
+}
+
+export async function unwatchTask(formData: FormData) {
+  const user = await requireUser();
+  const taskId = Number(formData.get("taskId"));
+  if (!taskId) redirect("/tasks");
+  await db.taskWatcher.deleteMany({ where: { taskId, userId: user.id } });
+  revalidatePath(`/tasks/${taskId}`);
+  redirect(`/tasks/${taskId}`);
+}
+
+/** The user ids watching a task, excluding one actor (who triggered the event). */
+async function watcherIds(taskId: number, exclude: number): Promise<number[]> {
+  const rows = await db.taskWatcher.findMany({ where: { taskId, userId: { not: exclude } }, select: { userId: true } });
+  return rows.map((r) => r.userId);
+}
+
 export async function addComment(formData: FormData) {
   const user = await requireUser();
   const taskId = Number(formData.get("taskId"));
@@ -577,11 +614,16 @@ export async function addComment(formData: FormData) {
     await pushNotification(id, `${user.name} mentioned you on: ${task.title}`, `/tasks/${taskId}`);
   }
 
-  // Notify the assignee and the task creator, except whoever wrote the comment
-  // and anyone already pinged by name above.
+  // Notify the assignee, the task creator, and anyone watching the task, except
+  // whoever wrote the comment and anyone already pinged by name above.
   const recipients = new Map<number, { id: number; email: string; name: string }>();
   if (task.assignee?.active) recipients.set(task.assignee.id, task.assignee);
   if (task.createdBy.active) recipients.set(task.createdBy.id, task.createdBy);
+  const watchers = await db.taskWatcher.findMany({
+    where: { taskId, user: { active: true } },
+    select: { user: { select: { id: true, email: true, name: true } } },
+  });
+  for (const w of watchers) recipients.set(w.user.id, w.user);
   recipients.delete(user.id);
   for (const id of Array.from(mentionedIds)) recipients.delete(id);
 

@@ -15,6 +15,8 @@ import {
   removeTaskCollaborator,
   duplicateTask,
   deleteComment,
+  watchTask,
+  unwatchTask,
 } from "@/lib/actions/tasks";
 import { deleteAttachment } from "@/lib/actions/files";
 import PasteAttachment from "@/components/PasteAttachment";
@@ -108,6 +110,7 @@ export default async function TaskDetailPage({
         activities: { include: { actor: true }, orderBy: { createdAt: "desc" }, take: 30 },
         blockedBy: { include: { blocker: { select: { id: true, title: true, status: true } } } },
         blocking: { include: { task: { select: { id: true, title: true, status: true } } } },
+        watchers: { select: { userId: true } },
       },
     }),
     db.user.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
@@ -301,6 +304,23 @@ export default async function TaskDetailPage({
                 </div>
               </div>
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                {(() => {
+                  const isWatching = task.watchers.some((w) => w.userId === user.id);
+                  const count = task.watchers.length;
+                  return (
+                    <form action={isWatching ? unwatchTask : watchTask}>
+                      <input type="hidden" name="taskId" value={task.id} />
+                      <button
+                        type="submit"
+                        title={isWatching ? "Stop following this task" : "Get notified of status changes and comments"}
+                        className={isWatching ? "btn-primary gap-1.5" : "btn-secondary gap-1.5"}
+                      >
+                        {isWatching ? "✓ Watching" : "👁 Watch"}
+                        {count > 0 && <span className="opacity-70">{count}</span>}
+                      </button>
+                    </form>
+                  );
+                })()}
                 <ShareTask code={taskCode} title={task.title} taskId={task.id} />
                 {task.createdById === user.id && task.assignee && (
                   <form action={sendTaskReminder}>

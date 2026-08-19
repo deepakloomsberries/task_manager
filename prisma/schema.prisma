@@ -66,6 +66,7 @@ model User {
   timesheetReviews     TimesheetSubmission[] @relation("tsReviewer")
   passwordReset        PasswordReset?
   savedViews           SavedView[]
+  taskWatches          TaskWatcher[]
 }
 
 /**
@@ -145,6 +146,7 @@ model Task {
   // `blocking` are tasks that are waiting on this one.
   blockedBy TaskDependency[] @relation("blockedTask")
   blocking  TaskDependency[] @relation("blockerTask")
+  watchers  TaskWatcher[]
 
   @@index([deletedAt, status])
   @@index([assigneeId])
@@ -212,6 +214,19 @@ model TaskTag {
   tagId  Int
 
   @@id([taskId, tagId])
+}
+
+/** People following a task who aren't its assignee — they get notified of
+ *  status changes and new comments without owning the work. */
+model TaskWatcher {
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  createdAt DateTime @default(now())
+
+  @@id([taskId, userId])
+  @@index([userId])
 }
 
 model TaskActivity {
