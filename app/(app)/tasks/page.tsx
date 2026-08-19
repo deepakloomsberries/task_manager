@@ -370,7 +370,7 @@ export default async function TasksPage({
       </form>
 
       {boardView ? (
-        <Board columns={TASK_STATUSES} tasks={boardTasks} moveAction={moveTask} />
+        <Board columns={TASK_STATUSES} tasks={boardTasks} moveAction={moveTask} backHref={boardHref} />
       ) : (
         <BulkTaskTable rows={listRows} users={users} projects={projects} back={listHref} />
       )}

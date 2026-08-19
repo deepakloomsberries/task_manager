@@ -76,11 +76,16 @@ export default async function TaskDetailPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { edit?: string; ok?: string; error?: string };
+  searchParams: { edit?: string; ok?: string; error?: string; back?: string };
 }) {
   const user = await requireUser();
   const id = Number(params.id);
   if (!id) notFound();
+
+  // Where "Back to tasks" returns to — the filtered list/board the user came
+  // from, when passed along; otherwise the plain tasks page. Only accept
+  // internal /tasks URLs so `back` can't be used to redirect off-site.
+  const backTo = searchParams.back && searchParams.back.startsWith("/tasks") ? searchParams.back : "/tasks";
 
   const [task, users, projects, activeTimer, loggedAgg, timeLogs, allTasks, taskTimers] = await Promise.all([
     db.task.findUnique({
@@ -212,7 +217,7 @@ export default async function TaskDetailPage({
   return (
     <div className="mx-auto max-w-4xl space-y-4">
       <Link
-        href={task.parent ? `/tasks/${task.parent.id}` : "/tasks"}
+        href={task.parent ? `/tasks/${task.parent.id}` : backTo}
         className="text-sm text-slate-500 hover:underline"
       >
         ← {task.parent ? `Back to "${task.parent.title}"` : "Back to tasks"}

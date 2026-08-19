@@ -186,7 +186,7 @@ export default function BulkTaskTable({
                   </form>
                 </td>
                 <td className="td">
-                  <Link href={`/tasks/${t.id}`} className="font-medium text-sky-700 hover:underline">
+                  <Link href={`/tasks/${t.id}?back=${encodeURIComponent(back)}`} className="font-medium text-sky-700 hover:underline">
                     {t.title}
                   </Link>
                   <div className="flex flex-wrap items-center gap-1.5">

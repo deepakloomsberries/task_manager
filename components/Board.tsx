@@ -28,10 +28,12 @@ export default function Board({
   columns,
   tasks,
   moveAction,
+  backHref,
 }: {
   columns: Column[];
   tasks: BoardTask[];
   moveAction: (taskId: number, status: string) => Promise<void>;
+  backHref?: string;
 }) {
   const [isPending, startTransition] = useTransition();
   const [dragOver, setDragOver] = useState<string | null>(null);
@@ -113,7 +115,7 @@ export default function Board({
                     )}
                   </div>
                   <Link
-                    href={`/tasks/${t.id}`}
+                    href={backHref ? `/tasks/${t.id}?back=${encodeURIComponent(backHref)}` : `/tasks/${t.id}`}
                     className="block text-sm font-medium text-slate-800 hover:text-sky-700"
                   >
                     {t.title}
