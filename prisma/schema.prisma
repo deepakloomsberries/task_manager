@@ -127,6 +127,7 @@ model Task {
   updatedAt   DateTime      @updatedAt
   completedAt DateTime?
   deletedAt   DateTime?
+  acknowledgedAt DateTime?   // when the assignee first opened/viewed the task
   comments    TaskComment[]
   timeEntries TimeEntry[]
   attachments Attachment[]

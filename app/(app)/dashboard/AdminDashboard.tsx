@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ReviewTasksBanner from "@/components/ReviewTasksBanner";
 import { db } from "@/lib/db";
 import UserAvatar from "@/components/UserAvatar";
 import LiveClock from "@/components/LiveClock";
@@ -178,6 +179,7 @@ export default async function AdminDashboard({ user }: { user: AdminUser }) {
 
   return (
     <div className="space-y-6">
+      <ReviewTasksBanner />
       {/* Hero */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800 to-sky-800 p-6 text-white shadow-sm sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">

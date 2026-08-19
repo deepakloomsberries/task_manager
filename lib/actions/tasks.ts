@@ -255,6 +255,8 @@ export async function updateTask(formData: FormData) {
   const updated = await db.task.update({ where: { id }, data });
 
   if (updated.assigneeId !== task.assigneeId) {
+    // New owner hasn't seen it yet — reset the acknowledgement.
+    await db.task.update({ where: { id }, data: { acknowledgedAt: null } });
     const name = updated.assigneeId
       ? (await db.user.findUnique({ where: { id: updated.assigneeId } }))?.name
       : "unassigned";

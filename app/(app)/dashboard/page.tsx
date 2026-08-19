@@ -8,6 +8,7 @@ import LiveElapsed from "@/components/LiveElapsed";
 import LiveClock from "@/components/LiveClock";
 import OfficeClocks from "@/components/OfficeClocks";
 import QuickAdd from "@/components/QuickAdd";
+import ReviewTasksBanner from "@/components/ReviewTasksBanner";
 import AdminDashboard from "./AdminDashboard";
 import { companyTimezone, zonedStartOfToday, zonedHour, zonedDateLine } from "@/lib/tz";
 import {
@@ -124,6 +125,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      <ReviewTasksBanner />
       {/* Hero */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-sky-600 to-sky-500 p-6 text-white shadow-sm sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">

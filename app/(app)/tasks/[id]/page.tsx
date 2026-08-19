@@ -25,6 +25,7 @@ import SearchSelect from "@/components/SearchSelect";
 import DatePicker from "@/components/DatePicker";
 import ShareTask from "@/components/ShareTask";
 import UserAvatar from "@/components/UserAvatar";
+import AckOnView from "@/components/AckOnView";
 import TaskTimer from "@/components/TaskTimer";
 import { LiveWorkingCard } from "@/components/ActiveTimers";
 import { addTagToTask, removeTagFromTask } from "@/lib/actions/tags";
@@ -216,6 +217,7 @@ export default async function TaskDetailPage({
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
+      {task.assigneeId === user.id && !task.acknowledgedAt && <AckOnView taskId={task.id} />}
       <Link
         href={task.parent ? `/tasks/${task.parent.id}` : backTo}
         className="text-sm text-slate-500 hover:underline"
