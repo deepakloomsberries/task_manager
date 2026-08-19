@@ -40,6 +40,7 @@ export default async function TasksPage({
     overdue?: string;
     due?: string;
     blocked?: string;
+    watching?: string;
     sort?: string;
   };
 }) {
@@ -202,6 +203,16 @@ export default async function TasksPage({
           }`}
         >
           ⛔ Blocked
+        </Link>
+        <Link
+          href={`/tasks?watching=1&view=${viewParam}`}
+          className={`rounded-full px-3 py-1 text-xs font-medium ${
+            searchParams.watching
+              ? "bg-sky-600 text-white"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+          }`}
+        >
+          👁 Watching
         </Link>
 
         {/* Saved views — personal quick filters */}

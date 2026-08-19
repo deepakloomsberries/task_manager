@@ -13,12 +13,13 @@ export type TaskListParams = {
   overdue?: string;
   due?: string;
   blocked?: string;
+  watching?: string;
   sort?: string;
 };
 
 /** The query param keys that affect which tasks are shown (i.e. not view/UI state). */
 export const TASK_FILTER_KEYS: (keyof TaskListParams)[] = [
-  "status", "assignee", "project", "tag", "q", "open", "overdue", "due", "blocked", "sort",
+  "status", "assignee", "project", "tag", "q", "open", "overdue", "due", "blocked", "watching", "sort",
 ];
 
 export function buildTaskListQuery(sp: TaskListParams, userId: number) {
@@ -40,6 +41,10 @@ export function buildTaskListQuery(sp: TaskListParams, userId: number) {
   // Only tasks with at least one unfinished blocker.
   if (sp.blocked) {
     where.blockedBy = { some: { blocker: { status: { not: "DONE" }, deletedAt: null } } };
+  }
+  // Only tasks the current user is watching.
+  if (sp.watching) {
+    where.watchers = { some: { userId } };
   }
   if (sp.q) {
     const q = sp.q.trim();
