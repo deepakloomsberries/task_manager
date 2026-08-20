@@ -195,7 +195,9 @@ export default async function TaskDetailPage({
   const canDelete = canEdit;
   // Approval-required users (e.g. designers) can move up to Review only; the
   // task owner/manager approves completion (Review → Done).
-  const canCompleteDone = canEdit || !user.requiresApproval;
+  // The assignee can't self-complete when they need approval, or when this task
+  // is flagged review-required — they must send it to Review for the owner.
+  const canCompleteDone = canEdit || (!user.requiresApproval && !task.reviewRequired);
   const editing = searchParams.edit === "1" && canEdit;
   const taskCode = `TM-${task.id}`;
 
@@ -250,6 +252,14 @@ export default async function TaskDetailPage({
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <span className={`badge ${status.badge}`}>{status.label}</span>
                   <span className={`badge ${priority.badge}`}>{priority.label}</span>
+                  {task.reviewRequired && (
+                    <span
+                      className="badge bg-amber-100 text-amber-800"
+                      title="The assignee must send this to Review — the owner approves completion"
+                    >
+                      🔎 Review required
+                    </span>
+                  )}
                   {isBlocked && (
                     <span
                       className="badge bg-red-100 text-red-700"
@@ -486,7 +496,9 @@ export default async function TaskDetailPage({
                     const isDone = s.value === "DONE";
                     const locked = isDone && (!canCompleteDone || isBlocked);
                     const lockTitle = isDone && !canCompleteDone
-                      ? "Only the task owner can mark this Done — send it to Review for approval."
+                      ? task.reviewRequired
+                        ? "This task needs the owner's review — send it to In Review and they'll approve it."
+                        : "Only the task owner can mark this Done — send it to Review for approval."
                       : isBlocked
                         ? `Blocked by ${openBlockers.length} unfinished task(s)`
                         : "";
@@ -630,6 +642,20 @@ export default async function TaskDetailPage({
                 placeholder="e.g. 3h or 1h 30m"
               />
             </div>
+            <label className="flex items-start gap-2 md:col-span-2">
+              <input
+                type="checkbox"
+                name="reviewRequired"
+                defaultChecked={task.reviewRequired}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+              />
+              <span className="text-sm">
+                <span className="font-medium">Review required</span>
+                <span className="block text-xs text-slate-500">
+                  The assignee can&apos;t mark this Done — they send it to Review and you approve it (you&apos;ll get an email).
+                </span>
+              </span>
+            </label>
             <div className="flex gap-2 md:col-span-2">
               <button type="submit" className="btn-primary">
                 Save changes

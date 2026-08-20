@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { notifyTaskAssigned, notifyTaskComment, notifyTaskReminder } from "./mail";
+import { notifyTaskAssigned, notifyTaskComment, notifyTaskReminder, notifyReviewRequested } from "./mail";
 import { sendPushToUser } from "./push";
 
 /** Creates an in-app notification and fires a matching Web Push (if enabled). */
@@ -48,6 +48,29 @@ export async function notifyAssignment(opts: {
       assignedBy: opts.actor.name,
       dueDate: opts.task.dueDate,
       priority: opts.task.priority,
+    });
+  }
+}
+
+/** In-app notification + email to the task owner when work is sent for review. */
+export async function notifyReviewNeeded(opts: {
+  owner: { id: number; email: string; name: string; active: boolean; emailNotifications?: boolean };
+  task: { id: number; title: string };
+  actor: { id: number; name: string };
+}) {
+  if (!opts.owner.active || opts.owner.id === opts.actor.id) return;
+  await pushNotification(
+    opts.owner.id,
+    `${opts.actor.name} sent "${opts.task.title}" for your review`,
+    `/tasks/${opts.task.id}`
+  );
+  if (await wantsEmail(opts.owner)) {
+    notifyReviewRequested({
+      to: opts.owner.email,
+      ownerName: opts.owner.name,
+      taskId: opts.task.id,
+      taskTitle: opts.task.title,
+      sentBy: opts.actor.name,
     });
   }
 }

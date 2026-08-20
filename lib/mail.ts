@@ -77,6 +77,25 @@ export function notifyTaskAssigned(opts: {
   );
 }
 
+export function notifyReviewRequested(opts: {
+  to: string;
+  ownerName: string;
+  taskId: number;
+  taskTitle: string;
+  sentBy: string;
+}) {
+  const lines = [
+    `Hi ${esc(opts.ownerName)},`,
+    `<b>${esc(opts.sentBy)}</b> has sent the task <b>${esc(opts.taskTitle)}</b> for your review.`,
+    `Please review it and approve completion (or send it back) in the app.`,
+  ];
+  sendMail(
+    opts.to,
+    `Review needed: ${opts.taskTitle}`,
+    emailShell("A task needs your review", lines, `${APP_URL}/tasks/${opts.taskId}`, "Review task")
+  );
+}
+
 export function notifyCollaboratorAdded(opts: {
   to: string;
   name: string;

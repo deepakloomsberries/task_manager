@@ -323,6 +323,15 @@ export default async function TasksPage({
               <label className="label">Estimate</label>
               <input name="estimate" className="input" placeholder="e.g. 3h or 1h 30m" />
             </div>
+            <label className="flex items-start gap-2 md:col-span-2">
+              <input type="checkbox" name="reviewRequired" className="mt-0.5 h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500" />
+              <span className="text-sm">
+                <span className="font-medium">Review required</span>
+                <span className="block text-xs text-slate-500">
+                  The assignee can&apos;t mark this Done — they send it to Review and you approve it (you&apos;ll get an email).
+                </span>
+              </span>
+            </label>
             <div className="md:col-span-2">
               <button type="submit" className="btn-primary">
                 Create task

@@ -130,6 +130,7 @@ model Task {
   completedAt    DateTime?
   deletedAt      DateTime?
   acknowledgedAt DateTime? // when the assignee first opened/viewed the task
+  reviewRequired Boolean       @default(false) // assignee must send to Review, not self-complete
   comments       TaskComment[]
   timeEntries    TimeEntry[]
   attachments    Attachment[]

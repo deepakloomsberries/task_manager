@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
-import { notifyAssignment, notifyComment, notifyReminder, pushNotification, logActivity } from "@/lib/notify";
+import { notifyAssignment, notifyComment, notifyReminder, notifyReviewNeeded, pushNotification, logActivity } from "@/lib/notify";
 import { notifyCollaboratorAdded } from "@/lib/mail";
 import { findMentionedIds } from "@/lib/mentions";
 import { companyTimezone, zonedStartOfToday } from "@/lib/tz";
@@ -27,6 +27,7 @@ function parseTaskForm(formData: FormData) {
     dueDate: formData.get("dueDate") ? new Date(String(formData.get("dueDate"))) : null,
     recurrence: RECURRENCES.includes(recurrenceRaw) ? recurrenceRaw : null,
     estimateHours: parseHours(String(formData.get("estimate") ?? "")),
+    reviewRequired: formData.get("reviewRequired") === "on",
   };
 }
 
@@ -307,10 +308,10 @@ async function changeStatus(
     task.assigneeId === user.id || task.collaborators.some((c) => c.userId === user.id);
 
   if (status === "DONE") {
-    // Approval-required users (e.g. designers) can't complete their own work —
-    // they send it to Review and the task owner/manager approves.
+    // Can't self-complete when the person needs approval or the task itself is
+    // flagged review-required — they send it to Review and the owner approves.
     const isOwnerOrManager = isManagerOrAdmin(user.role) || task.createdById === user.id;
-    if (!isOwnerOrManager && user.requiresApproval) return "needs-approval";
+    if (!isOwnerOrManager && (user.requiresApproval || task.reviewRequired)) return "needs-approval";
     // Can't complete a task while something it depends on is still open.
     if (await hasOpenBlockers(taskId)) return "blocked";
   }
@@ -338,13 +339,10 @@ async function changeStatus(
     revalidatePath("/timesheet");
   }
 
-  // Sent for review → ping the task owner so they can approve completion.
+  // Sent for review → notify the task owner (in-app + email) to approve it.
   if (status === "REVIEW" && task.createdById !== user.id) {
-    await pushNotification(
-      task.createdById,
-      `${user.name} sent "${task.title}" for your review`,
-      `/tasks/${taskId}`
-    );
+    const owner = await db.user.findUnique({ where: { id: task.createdById } });
+    if (owner) await notifyReviewNeeded({ owner, task, actor: user });
   }
 
   if (status === "DONE") {
