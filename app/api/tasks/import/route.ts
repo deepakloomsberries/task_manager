@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 const STATUSES = ["TODO", "IN_PROGRESS", "REVIEW", "DONE"];
+const RECURRENCES = ["DAILY", "WEEKLY", "MONTHLY"];
 const MAX_ROWS = 500;
 
 function norm(s: string) {
@@ -25,31 +26,56 @@ function field(row: Record<string, unknown>, keys: string[]): string {
 function truthy(s: string) {
   return ["yes", "y", "true", "1", "x"].includes(s.toLowerCase());
 }
-/** Map free-text status ("To Do", "in progress"…) to a canonical status. */
 function parseStatus(s: string): string | null {
   if (!s) return "TODO";
-  const n = norm(s);
   const map: Record<string, string> = {
-    todo: "TODO", open: "TODO",
-    inprogress: "IN_PROGRESS", progress: "IN_PROGRESS", doing: "IN_PROGRESS",
+    todo: "TODO", open: "TODO", new: "TODO",
+    inprogress: "IN_PROGRESS", progress: "IN_PROGRESS", doing: "IN_PROGRESS", wip: "IN_PROGRESS",
     inreview: "REVIEW", review: "REVIEW",
-    done: "DONE", complete: "DONE", completed: "DONE",
+    done: "DONE", complete: "DONE", completed: "DONE", closed: "DONE",
   };
-  return map[n] ?? (STATUSES.includes(s.toUpperCase()) ? s.toUpperCase() : null);
+  return map[norm(s)] ?? (STATUSES.includes(s.toUpperCase()) ? s.toUpperCase() : null);
 }
-/** Parse an Excel date cell (Date object, serial number, or string). */
+function parseRecurrence(s: string): string | null | "invalid" {
+  if (!s) return null;
+  const n = norm(s);
+  if (["daily", "day"].includes(n)) return "DAILY";
+  if (["weekly", "week"].includes(n)) return "WEEKLY";
+  if (["monthly", "month"].includes(n)) return "MONTHLY";
+  if (RECURRENCES.includes(s.toUpperCase())) return s.toUpperCase();
+  if (["", "none", "no", "never"].includes(n)) return null;
+  return "invalid";
+}
 function parseDate(v: unknown): Date | null {
   if (v == null || v === "") return null;
   if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
   if (typeof v === "number") {
-    const d = XLSX.SSF ? new Date(Math.round((v - 25569) * 86400 * 1000)) : new Date(v);
+    const d = new Date(Math.round((v - 25569) * 86400 * 1000));
     return isNaN(d.getTime()) ? null : d;
   }
   const d = new Date(String(v));
   return isNaN(d.getTime()) ? null : d;
 }
+/** "TM-42" / "#42" / "42" → 42, else null. */
+function parseTaskRef(s: string): number | null {
+  const m = String(s).match(/^\s*(?:tm-?|#)?(\d+)\s*$/i);
+  return m ? Number(m[1]) : null;
+}
 
-type RowResult = { row: number; title: string; status: "created" | "skipped" | "error"; reason?: string };
+type Action = "create" | "update" | "error" | "skip";
+type Plan = {
+  rowNo: number;
+  title: string;
+  action: Action;
+  reason?: string;
+  updateId?: number;
+  data?: Record<string, unknown>;
+  tagNames?: string[];
+  collaboratorIds?: number[];
+  /** Normalised title of a parent that is being created in this same import,
+   *  resolved to a real id only after all rows are created. */
+  parentRefTitle?: string;
+};
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -58,6 +84,7 @@ export async function POST(req: NextRequest) {
   if (!me || !isManagerOrAdmin(me.role)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const form = await req.formData();
+  const commit = String(form.get("mode") ?? "") === "commit";
   const file = form.get("file");
   if (!(file instanceof File) || file.size === 0) {
     return NextResponse.json({ error: "Please choose a file to import." }, { status: 400 });
@@ -73,126 +100,276 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "Could not read that file. Use the .xlsx or .csv template." }, { status: 400 });
   }
-
   if (rows.length === 0) return NextResponse.json({ error: "No data rows found." }, { status: 400 });
   if (rows.length > MAX_ROWS) {
     return NextResponse.json({ error: `Too many rows (${rows.length}). Import up to ${MAX_ROWS} at a time.` }, { status: 400 });
   }
 
-  const [users, projects, tags] = await Promise.all([
+  const [users, projects, tags, existingTasks] = await Promise.all([
     db.user.findMany({ where: { active: true }, select: { id: true, name: true, email: true } }),
     db.project.findMany({ select: { id: true, name: true } }),
     db.tag.findMany({ select: { id: true, name: true } }),
+    db.task.findMany({ where: { deletedAt: null }, select: { id: true, title: true } }),
   ]);
-  const userBy = (s: string) =>
-    users.find((u) => norm(u.email) === norm(s) || norm(u.name) === norm(s)) ?? null;
+  const userBy = (s: string) => users.find((u) => norm(u.email) === norm(s) || norm(u.name) === norm(s)) ?? null;
   const projectBy = (s: string) => projects.find((p) => norm(p.name) === norm(s)) ?? null;
+  const taskById = new Map(existingTasks.map((t) => [t.id, t]));
+  /** Resolve a task reference by TM-id or exact title (must be unambiguous). */
+  const taskRefBy = (s: string): { id: number } | "none" | "many" => {
+    const id = parseTaskRef(s);
+    if (id) return taskById.has(id) ? { id } : "none";
+    const matches = existingTasks.filter((t) => norm(t.title) === norm(s));
+    return matches.length === 1 ? { id: matches[0].id } : matches.length === 0 ? "none" : "many";
+  };
 
-  const results: RowResult[] = [];
+  // Pre-scan the create rows' titles so a child can name a parent that is
+  // being created in the same file (by exact title). Counts catch ambiguity.
+  const batchTitleCount = new Map<string, number>();
+  for (const r of rows) {
+    const t = field(r, ["title", "task", "taskname", "name"]);
+    const hasId = field(r, ["tmid", "tm id", "id", "taskid"]);
+    if (t && !hasId) batchTitleCount.set(norm(t), (batchTitleCount.get(norm(t)) ?? 0) + 1);
+  }
 
+  // --- Phase 1: validate every row into a plan (no writes) -------------------
+  const plans: Plan[] = [];
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     const rowNo = i + 2;
     const title = field(r, ["title", "task", "taskname", "name"]);
-    const push = (status: RowResult["status"], reason?: string) => results.push({ row: rowNo, title, status, reason });
+    const idStr = field(r, ["tmid", "tm id", "id", "taskid"]);
+    const updateId = idStr ? parseTaskRef(idStr) : null;
+    const err = (reason: string): Plan => ({ rowNo, title, action: "error", reason });
 
-    if (!title) {
-      // Skip a fully blank row silently; flag a row that has data but no title.
-      if (Object.values(r).every((v) => String(v ?? "").trim() === "")) continue;
-      push("error", "Missing Title.");
+    // Skip fully-blank rows silently.
+    if (Object.values(r).every((v) => String(v ?? "").trim() === "")) continue;
+
+    if (idStr && (!updateId || !taskById.has(updateId))) {
+      plans.push(err(`No task with ID "${idStr}".`));
+      continue;
+    }
+    if (!updateId && !title) {
+      plans.push(err("Missing Title."));
       continue;
     }
 
-    const priorityRaw = field(r, ["priority"]).toUpperCase();
-    const priority = PRIORITIES.includes(priorityRaw) ? priorityRaw : "MEDIUM";
+    const data: Record<string, unknown> = {};
+    const present = (v: string) => v !== "";
 
-    const status = parseStatus(field(r, ["status"]));
-    if (status === null) {
-      push("error", `Unknown status "${field(r, ["status"])}".`);
-      continue;
+    if (title) data.title = title;
+
+    const priorityStr = field(r, ["priority"]);
+    if (present(priorityStr)) {
+      const pr = priorityStr.toUpperCase();
+      if (!PRIORITIES.includes(pr)) {
+        plans.push(err(`Unknown priority "${priorityStr}".`));
+        continue;
+      }
+      data.priority = pr;
+    } else if (!updateId) data.priority = "MEDIUM";
+
+    const statusStr = field(r, ["status"]);
+    if (present(statusStr) || !updateId) {
+      const st = parseStatus(statusStr);
+      if (st === null) {
+        plans.push(err(`Unknown status "${statusStr}".`));
+        continue;
+      }
+      data.status = st;
+      data.completedAt = st === "DONE" ? new Date() : null;
     }
 
     const assigneeStr = field(r, ["assignee", "assignedto", "owner"]);
-    let assigneeId: number | null = null;
-    if (assigneeStr) {
+    if (present(assigneeStr)) {
       const u = userBy(assigneeStr);
       if (!u) {
-        push("error", `Unknown assignee "${assigneeStr}".`);
+        plans.push(err(`Unknown assignee "${assigneeStr}".`));
         continue;
       }
-      assigneeId = u.id;
+      data.assigneeId = u.id;
     }
 
     const projectStr = field(r, ["project"]);
-    let projectId: number | null = null;
-    if (projectStr) {
+    if (present(projectStr)) {
       const p = projectBy(projectStr);
       if (!p) {
-        push("error", `Unknown project "${projectStr}".`);
+        plans.push(err(`Unknown project "${projectStr}".`));
         continue;
       }
-      projectId = p.id;
+      data.projectId = p.id;
     }
 
-    const description = field(r, ["description", "details", "notes"]) || null;
-    const startDate = parseDate(r["Start date"] ?? r["start date"] ?? r["startdate"] ?? field(r, ["startdate", "start date", "start"]));
-    const dueDate = parseDate(r["Due date"] ?? r["due date"] ?? r["duedate"] ?? field(r, ["duedate", "due date", "due"]));
-    const estimateHours = parseHours(field(r, ["estimate", "estimatehours", "estimate hours", "hours"]));
-    const reviewRequired = truthy(field(r, ["reviewrequired", "review required", "review"]));
-    const tagsStr = field(r, ["tags", "tag", "labels"]);
+    const parentStr = field(r, ["parent", "parenttask", "parent task"]);
+    let parentRefTitle: string | undefined;
+    if (present(parentStr)) {
+      const ref = taskRefBy(parentStr);
+      if (ref === "many") {
+        plans.push(err(`Parent "${parentStr}" matches multiple tasks — use its TM-id.`));
+        continue;
+      }
+      if (ref === "none") {
+        // Not an existing task — maybe one created earlier/later in this file.
+        if (title && norm(parentStr) === norm(title)) {
+          plans.push(err("A task can't be its own parent."));
+          continue;
+        }
+        const inBatch = batchTitleCount.get(norm(parentStr)) ?? 0;
+        if (inBatch === 0) {
+          plans.push(err(`Unknown parent task "${parentStr}".`));
+          continue;
+        }
+        if (inBatch > 1) {
+          plans.push(err(`Parent "${parentStr}" matches multiple new rows — give it a unique title.`));
+          continue;
+        }
+        parentRefTitle = norm(parentStr);
+      } else {
+        if (updateId && ref.id === updateId) {
+          plans.push(err("A task can't be its own parent."));
+          continue;
+        }
+        data.parentId = ref.id;
+      }
+    }
 
-    try {
-      const task = await db.task.create({
-        data: {
-          title,
-          description,
-          priority,
-          status,
-          assigneeId,
-          projectId,
-          startDate,
-          dueDate,
-          estimateHours,
-          reviewRequired,
-          completedAt: status === "DONE" ? new Date() : null,
-          createdById: me.id,
-        },
-      });
+    const desc = field(r, ["description", "details", "notes"]);
+    if (present(desc)) data.description = desc;
 
-      // Tags: match existing (case-insensitive) or create, then link.
-      if (tagsStr) {
-        for (const raw of tagsStr.split(",").map((t) => t.trim()).filter(Boolean)) {
-          let tag = tags.find((t) => norm(t.name) === norm(raw));
-          if (!tag) {
-            try {
-              tag = await db.tag.create({ data: { name: raw }, select: { id: true, name: true } });
-              tags.push(tag);
-            } catch {
-              tag = tags.find((t) => norm(t.name) === norm(raw));
-            }
-          }
-          if (tag) {
-            await db.taskTag.upsert({
-              where: { taskId_tagId: { taskId: task.id, tagId: tag.id } },
-              create: { taskId: task.id, tagId: tag.id },
-              update: {},
-            }).catch(() => {});
-          }
+    const startRaw = r["Start date"] ?? r["start date"] ?? r["startdate"] ?? field(r, ["startdate", "start date", "start"]);
+    const sd = parseDate(startRaw);
+    if (present(String(startRaw ?? "")) ) data.startDate = sd;
+    const dueRaw = r["Due date"] ?? r["due date"] ?? r["duedate"] ?? field(r, ["duedate", "due date", "due"]);
+    const dd = parseDate(dueRaw);
+    if (present(String(dueRaw ?? ""))) data.dueDate = dd;
+
+    const estStr = field(r, ["estimate", "estimatehours", "estimate hours", "hours"]);
+    if (present(estStr)) data.estimateHours = parseHours(estStr);
+
+    const recStr = field(r, ["recurrence", "repeat"]);
+    const rec = parseRecurrence(recStr);
+    if (rec === "invalid") {
+      plans.push(err(`Unknown recurrence "${recStr}" (use Daily/Weekly/Monthly).`));
+      continue;
+    }
+    if (present(recStr)) data.recurrence = rec;
+
+    if (present(field(r, ["reviewrequired", "review required", "review"]))) {
+      data.reviewRequired = truthy(field(r, ["reviewrequired", "review required", "review"]));
+    }
+
+    const tagNames = field(r, ["tags", "tag", "labels"]).split(",").map((t) => t.trim()).filter(Boolean);
+
+    const collaboratorIds: number[] = [];
+    const collabStr = field(r, ["collaborators", "collaborator", "team"]);
+    let collabBad: string | null = null;
+    if (present(collabStr)) {
+      for (const c of collabStr.split(",").map((x) => x.trim()).filter(Boolean)) {
+        const u = userBy(c);
+        if (!u) {
+          collabBad = c;
+          break;
+        }
+        collaboratorIds.push(u.id);
+      }
+    }
+    if (collabBad) {
+      plans.push(err(`Unknown collaborator "${collabBad}".`));
+      continue;
+    }
+
+    plans.push({
+      rowNo,
+      title: title || taskById.get(updateId!)?.title || "",
+      action: updateId ? "update" : "create",
+      updateId: updateId ?? undefined,
+      data,
+      tagNames,
+      collaboratorIds,
+      parentRefTitle,
+    });
+  }
+
+  // --- Phase 2 (preview): report the plan without writing --------------------
+  if (!commit) {
+    const willCreate = plans.filter((p) => p.action === "create").length;
+    const willUpdate = plans.filter((p) => p.action === "update").length;
+    const failed = plans.filter((p) => p.action === "error").length;
+    return NextResponse.json({
+      preview: true,
+      willCreate,
+      willUpdate,
+      failed,
+      results: plans.map((p) => ({ row: p.rowNo, title: p.title, status: p.action, reason: p.reason })),
+    });
+  }
+
+  // --- Phase 2 (commit): execute the plans -----------------------------------
+  async function linkTags(taskId: number, names: string[]) {
+    for (const raw of names) {
+      let tag = tags.find((t) => norm(t.name) === norm(raw));
+      if (!tag) {
+        try {
+          tag = await db.tag.create({ data: { name: raw }, select: { id: true, name: true } });
+          tags.push(tag);
+        } catch {
+          tag = tags.find((t) => norm(t.name) === norm(raw));
         }
       }
+      if (tag) await db.taskTag.upsert({ where: { taskId_tagId: { taskId, tagId: tag.id } }, create: { taskId, tagId: tag.id }, update: {} }).catch(() => {});
+    }
+  }
+  async function addCollaborators(taskId: number, ids: number[]) {
+    for (const uid of ids) {
+      await db.taskCollaborator.upsert({ where: { taskId_userId: { taskId, userId: uid } }, create: { taskId, userId: uid }, update: {} }).catch(() => {});
+    }
+  }
 
-      // In-app heads-up to the assignee (no email flood on bulk imports).
-      if (assigneeId && assigneeId !== me.id) {
-        await pushNotification(assigneeId, `You were assigned: ${title}`, `/tasks/${task.id}`);
+  const results: { row: number; title: string; status: "created" | "updated" | "error"; reason?: string }[] = [];
+  const idByPlan = new Map<Plan, number>();
+  const newIdByTitle = new Map<string, number>();
+  for (const plan of plans) {
+    if (plan.action === "error" || plan.action === "skip") {
+      results.push({ row: plan.rowNo, title: plan.title, status: "error", reason: plan.reason });
+      continue;
+    }
+    try {
+      if (plan.action === "create") {
+        const task = await db.task.create({
+          data: { ...(plan.data as { title: string }), createdById: me.id },
+        });
+        idByPlan.set(plan, task.id);
+        newIdByTitle.set(norm(task.title), task.id);
+        await linkTags(task.id, plan.tagNames ?? []);
+        await addCollaborators(task.id, plan.collaboratorIds ?? []);
+        if (typeof plan.data?.assigneeId === "number" && plan.data.assigneeId !== me.id) {
+          await pushNotification(plan.data.assigneeId as number, `You were assigned: ${task.title}`, `/tasks/${task.id}`);
+        }
+        results.push({ row: plan.rowNo, title: task.title, status: "created" });
+      } else {
+        const id = plan.updateId!;
+        await db.task.update({ where: { id }, data: plan.data as object });
+        idByPlan.set(plan, id);
+        await linkTags(id, plan.tagNames ?? []);
+        await addCollaborators(id, plan.collaboratorIds ?? []);
+        results.push({ row: plan.rowNo, title: plan.title, status: "updated" });
       }
-      push("created");
     } catch {
-      push("error", "Could not create this task.");
+      results.push({ row: plan.rowNo, title: plan.title, status: "error", reason: "Could not save this row." });
+    }
+  }
+
+  // Second pass: link children to parents that were created in this same import.
+  for (const plan of plans) {
+    if (!plan.parentRefTitle) continue;
+    const childId = idByPlan.get(plan);
+    const parentId = newIdByTitle.get(plan.parentRefTitle);
+    if (childId && parentId && childId !== parentId) {
+      await db.task.update({ where: { id: childId }, data: { parentId } }).catch(() => {});
     }
   }
 
   const created = results.filter((r) => r.status === "created").length;
-  const skipped = results.filter((r) => r.status === "skipped").length;
+  const updated = results.filter((r) => r.status === "updated").length;
   const failed = results.filter((r) => r.status === "error").length;
-  return NextResponse.json({ created, skipped, failed, results });
+  return NextResponse.json({ created, updated, failed, results });
 }

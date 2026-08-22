@@ -22,37 +22,63 @@ export async function GET() {
 
   const rows = [
     {
+      "TM-ID": "",
       Title: "Provide invoice — Home Centre",
       Description: "PO for the period 1–31 Jul",
       Assignee: who,
+      Collaborators: "",
       Project: proj,
+      Parent: "",
       Priority: "HIGH",
       Status: "To Do",
       "Start date": "",
       "Due date": "2026-08-25",
       Estimate: "2h",
+      Recurrence: "",
       Tags: "invoice, KSA",
       "Review required": "yes",
     },
     {
+      "TM-ID": "",
       Title: "Reconcile GRN vs PO",
-      Description: "",
+      Description: "Subtask of the invoice task above",
       Assignee: "",
+      Collaborators: who,
       Project: proj,
+      Parent: "Provide invoice — Home Centre",
       Priority: "MEDIUM",
       Status: "To Do",
       "Start date": "",
       "Due date": "",
       Estimate: "1h 30m",
+      Recurrence: "Weekly",
       Tags: "",
       "Review required": "no",
+    },
+    {
+      "TM-ID": "",
+      Title: "",
+      Description: "↑ Fill TM-ID to UPDATE an existing task; blank cells are left unchanged.",
+      Assignee: "",
+      Collaborators: "",
+      Project: "",
+      Parent: "",
+      Priority: "",
+      Status: "",
+      "Start date": "",
+      "Due date": "",
+      Estimate: "",
+      Recurrence: "",
+      Tags: "",
+      "Review required": "",
     },
   ];
 
   const ws = XLSX.utils.json_to_sheet(rows);
   ws["!cols"] = [
-    { wch: 34 }, { wch: 28 }, { wch: 26 }, { wch: 20 }, { wch: 10 },
-    { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 18 }, { wch: 14 },
+    { wch: 8 }, { wch: 34 }, { wch: 40 }, { wch: 26 }, { wch: 26 }, { wch: 20 },
+    { wch: 24 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
+    { wch: 12 }, { wch: 18 }, { wch: 14 },
   ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Tasks");
