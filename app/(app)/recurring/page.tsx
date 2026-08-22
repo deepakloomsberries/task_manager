@@ -20,6 +20,16 @@ export default async function RecurringPage({
   const viewer = await requireUser();
   const canSeeAll = isManagerOrAdmin(viewer.role);
 
+  // Per-person filter (managers/admins only — others are scoped to themselves).
+  const assigneeOptions = canSeeAll
+    ? await db.user.findMany({
+        where: { active: true, tasksAssigned: { some: { seriesId: { not: null }, recurrence: { not: null } } } },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      })
+    : [];
+  const selectedAssignee = canSeeAll && searchParams.assignee ? Number(searchParams.assignee) : null;
+
   const now = new Date();
   const m = /^(\d{4})-(\d{2})$/.exec(searchParams.month ?? "");
   const year = m ? Number(m[1]) : now.getFullYear();
@@ -38,7 +48,9 @@ export default async function RecurringPage({
       recurrence: { not: null },
       dueDate: { gte: monthStart, lt: monthEnd },
       ...(canSeeAll
-        ? {}
+        ? selectedAssignee
+          ? { assigneeId: selectedAssignee }
+          : {}
         : { OR: [{ assigneeId: viewer.id }, { collaborators: { some: { userId: viewer.id } } }] }),
     },
     select: {
@@ -101,6 +113,14 @@ export default async function RecurringPage({
   const prev = new Date(year, month0 - 1, 1);
   const next = new Date(year, month0 + 1, 1);
   const mkMonth = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  // Build a /recurring URL keeping the month + assignee filter in sync.
+  const href = (opts: { month?: string; assignee?: number | null }) => {
+    const p = new URLSearchParams();
+    p.set("month", opts.month ?? mkMonth(monthStart));
+    const a = opts.assignee === undefined ? selectedAssignee : opts.assignee;
+    if (a) p.set("assignee", String(a));
+    return `/recurring?${p.toString()}`;
+  };
 
   const CELL: Record<Cell["state"], string> = {
     done: "bg-green-500 text-white",
@@ -120,11 +140,36 @@ export default async function RecurringPage({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Link href={`/recurring?month=${mkMonth(prev)}`} className="btn-secondary !py-1.5 text-sm">←</Link>
+          <Link href={href({ month: mkMonth(prev) })} className="btn-secondary !py-1.5 text-sm">←</Link>
           <span className="min-w-36 text-center text-sm font-medium">{monthLabel}</span>
-          <Link href={`/recurring?month=${mkMonth(next)}`} className="btn-secondary !py-1.5 text-sm">→</Link>
+          <Link href={href({ month: mkMonth(next) })} className="btn-secondary !py-1.5 text-sm">→</Link>
         </div>
       </div>
+
+      {canSeeAll && assigneeOptions.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-xs font-medium text-slate-500">Person:</span>
+          <Link
+            href={href({ assignee: null })}
+            className={`rounded-full px-3 py-1 text-xs font-medium ${
+              !selectedAssignee ? "bg-sky-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200"
+            }`}
+          >
+            Everyone
+          </Link>
+          {assigneeOptions.map((u) => (
+            <Link
+              key={u.id}
+              href={href({ assignee: u.id })}
+              className={`rounded-full px-3 py-1 text-xs font-medium ${
+                selectedAssignee === u.id ? "bg-sky-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200"
+              }`}
+            >
+              {u.name}
+            </Link>
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2 text-sm">
         <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-200">
