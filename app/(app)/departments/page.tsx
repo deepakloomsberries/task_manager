@@ -1,6 +1,8 @@
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { createDepartment, deleteDepartment } from "@/lib/actions/departments";
+import SearchSelect from "@/components/SearchSelect";
+import ConfirmButton from "@/components/ConfirmButton";
 
 export const dynamic = "force-dynamic";
 
@@ -48,13 +50,13 @@ export default async function DepartmentsPage({
           </div>
           <div>
             <label className="label">Company *</label>
-            <select name="companyId" required className="input">
-              {companies.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <SearchSelect
+              name="companyId"
+              required
+              defaultValue={companies[0] ? String(companies[0].id) : ""}
+              placeholder="Select company…"
+              options={companies.map((c) => ({ value: String(c.id), label: c.name }))}
+            />
           </div>
           <button type="submit" className="btn-primary">
             Add
@@ -88,9 +90,9 @@ export default async function DepartmentsPage({
                 <td className="td text-right">
                   <form action={deleteDepartment}>
                     <input type="hidden" name="id" value={d.id} />
-                    <button type="submit" className="text-xs text-red-600 hover:underline">
+                    <ConfirmButton message={`Delete the "${d.name}" department?`} className="text-xs text-red-600 hover:underline">
                       Delete
-                    </button>
+                    </ConfirmButton>
                   </form>
                 </td>
               </tr>

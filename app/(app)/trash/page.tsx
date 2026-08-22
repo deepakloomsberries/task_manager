@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/auth";
 import { restoreTask, purgeTask } from "@/lib/actions/tasks";
 import { restoreNote, purgeNote } from "@/lib/actions/notes";
 import { TASK_STATUSES, TASK_PRIORITIES, lookup, fmtDateTime } from "@/lib/ui";
+import ConfirmButton from "@/components/ConfirmButton";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,9 @@ export default async function TrashPage({
     db.task.findMany({
       where: {
         deletedAt: { not: null },
+        // Recurring occurrences are auto-archived by the nightly roll-over; they
+        // belong in the Recurring grid, not the Recycle bin.
+        seriesId: null,
         OR: [{ parentId: null }, { parent: { deletedAt: null } }],
         ...taskSearch,
       },
@@ -129,9 +133,9 @@ export default async function TrashPage({
                       </form>
                       <form action={purgeTask}>
                         <input type="hidden" name="id" value={t.id} />
-                        <button type="submit" className="btn-danger !py-1.5 text-xs">
+                        <ConfirmButton message="Permanently delete this task? This cannot be undone." className="btn-danger !py-1.5 text-xs">
                           Delete forever
-                        </button>
+                        </ConfirmButton>
                       </form>
                     </div>
                   </td>
@@ -183,9 +187,9 @@ export default async function TrashPage({
                     </form>
                     <form action={purgeNote}>
                       <input type="hidden" name="id" value={n.id} />
-                      <button type="submit" className="btn-danger !py-1.5 text-xs">
+                      <ConfirmButton message="Permanently delete this note? This cannot be undone." className="btn-danger !py-1.5 text-xs">
                         Delete forever
-                      </button>
+                      </ConfirmButton>
                     </form>
                   </div>
                 </td>

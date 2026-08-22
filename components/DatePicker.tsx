@@ -33,12 +33,20 @@ export default function DatePicker({
   required = false,
   className = "",
   placeholder = "Select date",
+  compact = false,
+  title,
+  onPick,
 }: {
-  name: string;
+  name?: string;
   defaultValue?: string;
   required?: boolean;
   className?: string;
   placeholder?: string;
+  /** Icon-only trigger, for inline use (e.g. a reschedule control in a list). */
+  compact?: boolean;
+  title?: string;
+  /** Called with the chosen YYYY-MM-DD (or "" when cleared). Enables callback use. */
+  onPick?: (value: string) => void;
 }) {
   const [value, setValue] = useState(defaultValue || "");
   const [open, setOpen] = useState(false);
@@ -61,8 +69,10 @@ export default function DatePicker({
   }, [open]);
 
   const pick = (d: Date) => {
-    setValue(toISO(d));
+    const v = toISO(d);
+    setValue(v);
     setOpen(false);
+    onPick?.(v);
   };
 
   const year = view.getFullYear();
@@ -73,22 +83,36 @@ export default function DatePicker({
 
   return (
     <div className="relative" ref={ref}>
-      <input type="hidden" name={name} value={value} />
-      <button
-        type="button"
-        data-required={required || undefined}
-        onClick={() => setOpen((o) => !o)}
-        className={`input flex items-center justify-between gap-2 text-left ${className}`}
-      >
-        <span className={value ? "" : "text-slate-400"}>{selected ? label(selected) : placeholder}</span>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-slate-400">
-          <rect x="3" y="4" width="18" height="18" rx="2" />
-          <path d="M16 2v4M8 2v4M3 10h18" />
-        </svg>
-      </button>
+      {name && <input type="hidden" name={name} value={value} />}
+      {compact ? (
+        <button
+          type="button"
+          title={title ?? "Reschedule"}
+          onClick={() => setOpen((o) => !o)}
+          className={`flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-sky-600 dark:hover:bg-slate-700 ${className}`}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
+            <rect x="3" y="4" width="18" height="18" rx="2" />
+            <path d="M16 2v4M8 2v4M3 10h18" />
+          </svg>
+        </button>
+      ) : (
+        <button
+          type="button"
+          data-required={required || undefined}
+          onClick={() => setOpen((o) => !o)}
+          className={`input flex items-center justify-between gap-2 text-left ${className}`}
+        >
+          <span className={value ? "" : "text-slate-400"}>{selected ? label(selected) : placeholder}</span>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0 text-slate-400">
+            <rect x="3" y="4" width="18" height="18" rx="2" />
+            <path d="M16 2v4M8 2v4M3 10h18" />
+          </svg>
+        </button>
+      )}
 
       {open && (
-        <div className="absolute z-50 mt-1 w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+        <div className={`absolute z-50 mt-1 w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-800 ${compact ? "right-0" : ""}`}>
           <div className="mb-2 flex items-center justify-between">
             <button type="button" onClick={() => setView(new Date(year, month - 1, 1))} className="rounded px-2 py-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">‹</button>
             <span className="text-sm font-semibold">{MONTHS[month]} {year}</span>
@@ -122,7 +146,7 @@ export default function DatePicker({
             })}
           </div>
           <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2 text-xs dark:border-slate-700">
-            <button type="button" onClick={() => { setValue(""); setOpen(false); }} className="text-slate-400 hover:text-red-600">
+            <button type="button" onClick={() => { setValue(""); setOpen(false); onPick?.(""); }} className="text-slate-400 hover:text-red-600">
               Clear
             </button>
             <button type="button" onClick={() => pick(new Date())} className="font-medium text-sky-600 hover:underline">

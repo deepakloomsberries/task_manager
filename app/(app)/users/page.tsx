@@ -9,7 +9,11 @@ import {
 } from "@/lib/actions/users";
 import { ROLES, lookup, fmtDate, isOnline, lastSeenLabel } from "@/lib/ui";
 import PasswordField from "@/components/PasswordField";
+import BulkUserImport from "@/components/BulkUserImport";
+import DeleteUserButton from "@/components/DeleteUserButton";
+import SearchSelect from "@/components/SearchSelect";
 import { PASSWORD_RULES } from "@/lib/password";
+import { USER_DATA_COUNT_SELECT, userHasData } from "@/lib/userData";
 
 export const dynamic = "force-dynamic";
 
@@ -17,10 +21,12 @@ const MESSAGES: Record<string, { text: string; error?: boolean }> = {
   created: { text: "User created. They have been emailed their login details and must change the password on first login." },
   updated: { text: "User updated." },
   reset: { text: "Password reset. The user has been emailed the new temporary password." },
+  deleted: { text: "User permanently deleted." },
   invalid: { text: "Invalid input. Please check the fields and try again.", error: true },
   exists: { text: "A user with that email already exists.", error: true },
   weak: { text: `Password is too weak. ${PASSWORD_RULES}`, error: true },
-  self: { text: "You cannot deactivate or demote your own admin account.", error: true },
+  self: { text: "You cannot deactivate, delete or demote your own admin account.", error: true },
+  notempty: { text: "That account can't be deleted — it has logged in or already has data. Deactivate it instead.", error: true },
 };
 
 export default async function UsersPage({
@@ -32,14 +38,14 @@ export default async function UsersPage({
 
   const [users, companies, departments] = await Promise.all([
     db.user.findMany({
-      include: { company: true, department: true },
+      include: { company: true, department: true, _count: { select: USER_DATA_COUNT_SELECT } },
       orderBy: [{ active: "desc" }, { name: "asc" }],
     }),
     db.company.findMany({ orderBy: { name: "asc" } }),
     db.department.findMany({ include: { company: true }, orderBy: { name: "asc" } }),
   ]);
 
-  const msgKey = ["created", "updated", "reset", "error"].find((k) => searchParams[k]);
+  const msgKey = ["created", "updated", "reset", "deleted", "error"].find((k) => searchParams[k]);
   const msg = searchParams.error
     ? MESSAGES[searchParams.error]
     : msgKey
@@ -47,6 +53,7 @@ export default async function UsersPage({
       : null;
 
   const showNew = searchParams.new === "1";
+  const showImport = searchParams.import === "1";
   const editId = searchParams.edit ? Number(searchParams.edit) : null;
 
   return (
@@ -58,10 +65,17 @@ export default async function UsersPage({
             {users.filter((u) => u.active).length} active of {users.length} total
           </p>
         </div>
-        <Link href={showNew ? "/users" : "/users?new=1"} className="btn-primary">
-          {showNew ? "Close" : "+ Add User"}
-        </Link>
+        <div className="flex gap-2">
+          <Link href={showImport ? "/users" : "/users?import=1"} className="btn-secondary">
+            {showImport ? "Close" : "⇪ Bulk import"}
+          </Link>
+          <Link href={showNew ? "/users" : "/users?new=1"} className="btn-primary">
+            {showNew ? "Close" : "+ Add User"}
+          </Link>
+        </div>
       </div>
+
+      {showImport && <BulkUserImport />}
 
       {msg && (
         <div
@@ -93,34 +107,26 @@ export default async function UsersPage({
             </div>
             <div>
               <label className="label">Role *</label>
-              <select name="role" className="input" defaultValue="EMPLOYEE">
-                {ROLES.map((r) => (
-                  <option key={r.value} value={r.value}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
+              <SearchSelect name="role" defaultValue="EMPLOYEE" options={ROLES.map((r) => ({ value: r.value, label: r.label }))} />
             </div>
             <div>
               <label className="label">Company *</label>
-              <select name="companyId" required className="input">
-                {companies.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <SearchSelect
+                name="companyId"
+                required
+                defaultValue={companies[0] ? String(companies[0].id) : ""}
+                placeholder="Select company…"
+                options={companies.map((c) => ({ value: String(c.id), label: c.name }))}
+              />
             </div>
             <div>
               <label className="label">Department</label>
-              <select name="departmentId" className="input">
-                <option value="">— None —</option>
-                {departments.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name} ({d.company.code})
-                  </option>
-                ))}
-              </select>
+              <SearchSelect
+                name="departmentId"
+                placeholder="— None —"
+                searchPlaceholder="Search departments…"
+                options={[{ value: "", label: "— None —" }, ...departments.map((d) => ({ value: String(d.id), label: `${d.name} (${d.company.code})` }))]}
+              />
             </div>
             <div>
               <label className="label">Job title</label>
@@ -160,6 +166,8 @@ export default async function UsersPage({
             {users.map((u) => {
               const role = lookup(ROLES, u.role);
               const isEditing = editId === u.id;
+              // A mistakenly-created account: never logged in, owns no data, not self.
+              const deletable = u.id !== admin.id && !u.lastSeenAt && !userHasData(u._count);
               return (
                 <tr key={u.id} className={u.active ? "hover:bg-slate-50" : "bg-slate-50 opacity-60"}>
                   {isEditing ? (
@@ -171,35 +179,26 @@ export default async function UsersPage({
                           <input name="name" defaultValue={u.name} required className="input" />
                         </div>
                         <div>
+                          <label className="label">Email</label>
+                          <input name="email" type="email" defaultValue={u.email} required className="input" />
+                        </div>
+                        <div>
                           <label className="label">Role</label>
-                          <select name="role" defaultValue={u.role} className="input">
-                            {ROLES.map((r) => (
-                              <option key={r.value} value={r.value}>
-                                {r.label}
-                              </option>
-                            ))}
-                          </select>
+                          <SearchSelect name="role" defaultValue={u.role} options={ROLES.map((r) => ({ value: r.value, label: r.label }))} />
                         </div>
                         <div>
                           <label className="label">Company</label>
-                          <select name="companyId" defaultValue={u.companyId} className="input">
-                            {companies.map((c) => (
-                              <option key={c.id} value={c.id}>
-                                {c.name}
-                              </option>
-                            ))}
-                          </select>
+                          <SearchSelect name="companyId" defaultValue={String(u.companyId)} options={companies.map((c) => ({ value: String(c.id), label: c.name }))} />
                         </div>
                         <div>
                           <label className="label">Department</label>
-                          <select name="departmentId" defaultValue={u.departmentId ?? ""} className="input">
-                            <option value="">— None —</option>
-                            {departments.map((d) => (
-                              <option key={d.id} value={d.id}>
-                                {d.name} ({d.company.code})
-                              </option>
-                            ))}
-                          </select>
+                          <SearchSelect
+                            name="departmentId"
+                            defaultValue={u.departmentId ? String(u.departmentId) : ""}
+                            placeholder="— None —"
+                            searchPlaceholder="Search departments…"
+                            options={[{ value: "", label: "— None —" }, ...departments.map((d) => ({ value: String(d.id), label: `${d.name} (${d.company.code})` }))]}
+                          />
                         </div>
                         <div>
                           <label className="label">Job title</label>
@@ -240,7 +239,9 @@ export default async function UsersPage({
                     <>
                       <td className="td font-medium">
                         <span className="flex items-center gap-1.5">
-                          {u.name}
+                          <Link href={`/people/${u.id}`} className="hover:text-sky-600 hover:underline">
+                            {u.name}
+                          </Link>
                           {u.requiresApproval && (
                             <span
                               title="Requires completion approval"
@@ -290,6 +291,7 @@ export default async function UsersPage({
                               </button>
                             </form>
                           )}
+                          {deletable && <DeleteUserButton id={u.id} name={u.name} />}
                         </div>
                       </td>
                     </>

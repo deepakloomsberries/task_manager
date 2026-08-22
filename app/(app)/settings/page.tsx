@@ -1,8 +1,9 @@
 import { requireUser } from "@/lib/auth";
 import { changeOwnPassword, updateOwnProfile, updateNotificationPrefs } from "@/lib/actions/auth";
-import { updateAvatar, removeAvatar } from "@/lib/actions/profile";
+import { removeAvatar } from "@/lib/actions/profile";
 import PasswordField from "@/components/PasswordField";
-import UserAvatar from "@/components/UserAvatar";
+import AvatarUpload from "@/components/AvatarUpload";
+import FlashToast from "@/components/FlashToast";
 import { PASSWORD_RULES } from "@/lib/password";
 
 export const dynamic = "force-dynamic";
@@ -36,45 +37,18 @@ export default async function SettingsPage({
         </div>
       )}
 
-      {msg && (
-        <div
-          className={`rounded-lg border px-4 py-3 text-sm ${
-            msg.error
-              ? "border-red-200 bg-red-50 text-red-700"
-              : "border-green-200 bg-green-50 text-green-700"
-          }`}
-        >
-          {msg.text}
-        </div>
-      )}
+      {msg && <FlashToast message={msg.text} error={msg.error} />}
 
       <div className="card p-6">
         <h2 className="mb-4 font-semibold">Profile picture</h2>
-        <div className="flex flex-wrap items-center gap-5">
-          <UserAvatar user={user} size={72} />
-          <div className="space-y-2">
-            <form action={updateAvatar} className="flex flex-wrap items-center gap-2">
-              <input
-                type="file"
-                name="avatar"
-                accept="image/*"
-                required
-                className="input max-w-xs text-sm"
-              />
-              <button type="submit" className="btn-secondary">
-                Upload
-              </button>
-            </form>
-            {user.avatarPath && (
-              <form action={removeAvatar}>
-                <button type="submit" className="text-xs text-red-600 hover:underline">
-                  Remove photo
-                </button>
-              </form>
-            )}
-            <p className="text-xs text-slate-400">JPG, PNG or GIF · up to 5 MB.</p>
-          </div>
-        </div>
+        <AvatarUpload user={user} />
+        {user.avatarPath && (
+          <form action={removeAvatar} className="mt-3">
+            <button type="submit" className="text-xs text-red-600 hover:underline">
+              Remove photo
+            </button>
+          </form>
+        )}
       </div>
 
       <div className="card p-6">
@@ -136,20 +110,28 @@ export default async function SettingsPage({
       </div>
 
       <div className="card p-6">
-        <h2 className="mb-1 font-semibold">Change password</h2>
-        <p className="mb-4 text-xs text-slate-500">{PASSWORD_RULES}</p>
+        <h2 className="mb-1 font-semibold">
+          {user.mustChangePassword ? "Set your password" : "Change password"}
+        </h2>
+        <p className="mb-4 text-xs text-slate-500">
+          {user.mustChangePassword
+            ? `Choose a new password to replace the one your administrator gave you. ${PASSWORD_RULES}`
+            : PASSWORD_RULES}
+        </p>
         <form action={changeOwnPassword} className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="label">Current password</label>
-            <PasswordField name="current" autoComplete="current-password" />
-          </div>
-          <div>
+          {!user.mustChangePassword && (
+            <div>
+              <label className="label">Current password</label>
+              <PasswordField name="current" autoComplete="current-password" />
+            </div>
+          )}
+          <div className={user.mustChangePassword ? "md:col-span-2" : ""}>
             <label className="label">New password</label>
             <PasswordField name="next" autoComplete="new-password" withGenerate showStrength />
           </div>
           <div className="md:col-span-2">
             <button type="submit" className="btn-primary">
-              Update password
+              {user.mustChangePassword ? "Set password" : "Update password"}
             </button>
           </div>
         </form>

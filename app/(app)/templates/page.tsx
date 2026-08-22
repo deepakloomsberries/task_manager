@@ -9,6 +9,7 @@ import {
   deleteTemplateItem,
 } from "@/lib/actions/templates";
 import { TASK_PRIORITIES, lookup } from "@/lib/ui";
+import SearchSelect from "@/components/SearchSelect";
 
 export const dynamic = "force-dynamic";
 
@@ -151,13 +152,7 @@ export default async function TemplatesPage({
                   </div>
                   <div>
                     <label className="label">Priority</label>
-                    <select name="priority" defaultValue="MEDIUM" className="input">
-                      {TASK_PRIORITIES.map((p) => (
-                        <option key={p.value} value={p.value}>
-                          {p.label}
-                        </option>
-                      ))}
-                    </select>
+                    <SearchSelect name="priority" defaultValue="MEDIUM" options={TASK_PRIORITIES.map((p) => ({ value: p.value, label: p.label }))} />
                   </div>
                   <div className="w-36">
                     <label className="label">Due (days after start)</label>

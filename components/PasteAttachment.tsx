@@ -32,9 +32,9 @@ export default function PasteAttachment({
   }
 
   function onChoose(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) {
-      setPendingName(file.name);
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      setPendingName(files.length === 1 ? files[0].name : `${files.length} files`);
       formRef.current?.requestSubmit();
     }
   }
@@ -44,6 +44,11 @@ export default function PasteAttachment({
     function onPaste(e: ClipboardEvent) {
       const items = e.clipboardData?.items;
       if (!items) return;
+      // Copying a cell from Excel/Sheets puts BOTH an image and the text on the
+      // clipboard. If there's any text, treat this as a text paste (let it land
+      // in the comment box) — only bare images (real screenshots) get attached.
+      const text = e.clipboardData?.getData("text/plain");
+      if (text && text.trim()) return;
       for (const item of Array.from(items)) {
         if (item.kind === "file" && item.type.startsWith("image/")) {
           const blob = item.getAsFile();
@@ -79,6 +84,7 @@ export default function PasteAttachment({
         ref={fileRef}
         type="file"
         name="file"
+        multiple
         required
         className="hidden"
         onChange={onChoose}

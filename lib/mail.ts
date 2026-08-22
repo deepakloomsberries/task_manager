@@ -77,6 +77,44 @@ export function notifyTaskAssigned(opts: {
   );
 }
 
+export function notifyReviewRequested(opts: {
+  to: string;
+  ownerName: string;
+  taskId: number;
+  taskTitle: string;
+  sentBy: string;
+}) {
+  const lines = [
+    `Hi ${esc(opts.ownerName)},`,
+    `<b>${esc(opts.sentBy)}</b> has sent the task <b>${esc(opts.taskTitle)}</b> for your review.`,
+    `Please review it and approve completion (or send it back) in the app.`,
+  ];
+  sendMail(
+    opts.to,
+    `Review needed: ${opts.taskTitle}`,
+    emailShell("A task needs your review", lines, `${APP_URL}/tasks/${opts.taskId}`, "Review task")
+  );
+}
+
+export function notifyCollaboratorAdded(opts: {
+  to: string;
+  name: string;
+  taskId: number;
+  taskTitle: string;
+  addedBy: string;
+}) {
+  const lines = [
+    `Hi ${esc(opts.name)},`,
+    `<b>${esc(opts.addedBy)}</b> added you as a collaborator on the task: <b>${esc(opts.taskTitle)}</b>`,
+    `You can work on it, log your time and help move it to done.`,
+  ];
+  sendMail(
+    opts.to,
+    `You're a collaborator on: ${opts.taskTitle}`,
+    emailShell("Added as a collaborator", lines, `${APP_URL}/tasks/${opts.taskId}`, "Open task")
+  );
+}
+
 export function notifyTaskReminder(opts: {
   to: string;
   recipientName: string;
@@ -170,5 +208,74 @@ export function notifyTaskComment(opts: {
     opts.to,
     `New comment on: ${opts.taskTitle}`,
     emailShell("New comment on your task", lines, `${APP_URL}/tasks/${opts.taskId}`, "View discussion")
+  );
+}
+
+/** To the task owner when someone else completes their task. */
+export function notifyTaskCompleted(opts: {
+  to: string;
+  ownerName: string;
+  taskId: number;
+  taskTitle: string;
+  completedBy: string;
+}) {
+  const lines = [
+    `Hi ${esc(opts.ownerName)},`,
+    `<b>${esc(opts.completedBy)}</b> marked the task <b>${esc(opts.taskTitle)}</b> as done.`,
+    `Open it to review the work or its logged time.`,
+  ];
+  sendMail(
+    opts.to,
+    `Task completed: ${opts.taskTitle}`,
+    emailShell("A task was completed", lines, `${APP_URL}/tasks/${opts.taskId}`, "Open task")
+  );
+}
+
+/** To the assignee when the owner approves their submitted (in-review) work. */
+export function notifyTaskApproved(opts: {
+  to: string;
+  assigneeName: string;
+  taskId: number;
+  taskTitle: string;
+  approvedBy: string;
+}) {
+  const lines = [
+    `Hi ${esc(opts.assigneeName)},`,
+    `<b>${esc(opts.approvedBy)}</b> approved and completed your task <b>${esc(opts.taskTitle)}</b>.`,
+    `Nice work — no further action is needed.`,
+  ];
+  sendMail(
+    opts.to,
+    `Approved & done: ${opts.taskTitle}`,
+    emailShell("Your task was approved", lines, `${APP_URL}/tasks/${opts.taskId}`, "Open task")
+  );
+}
+
+/** To the assignee when the owner sends work back for changes or reopens a done task. */
+export function notifyTaskReopened(opts: {
+  to: string;
+  assigneeName: string;
+  taskId: number;
+  taskTitle: string;
+  reopenedBy: string;
+  newStatus: string;
+  sentBack: boolean;
+}) {
+  const lines = [
+    `Hi ${esc(opts.assigneeName)},`,
+    opts.sentBack
+      ? `<b>${esc(opts.reopenedBy)}</b> sent the task <b>${esc(opts.taskTitle)}</b> back for changes.`
+      : `<b>${esc(opts.reopenedBy)}</b> reopened the task <b>${esc(opts.taskTitle)}</b>.`,
+    `It's now <b>${esc(opts.newStatus)}</b> — please pick it back up.`,
+  ];
+  sendMail(
+    opts.to,
+    opts.sentBack ? `Changes requested: ${opts.taskTitle}` : `Task reopened: ${opts.taskTitle}`,
+    emailShell(
+      opts.sentBack ? "A task needs changes" : "A task was reopened",
+      lines,
+      `${APP_URL}/tasks/${opts.taskId}`,
+      "Open task"
+    )
   );
 }

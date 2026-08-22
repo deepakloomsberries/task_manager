@@ -10,8 +10,11 @@ import {
 } from "@/lib/actions/time";
 import ActiveTimerBanner from "@/components/ActiveTimerBanner";
 import RangePicker from "@/components/RangePicker";
+import SearchSelect from "@/components/SearchSelect";
 import DatePicker from "@/components/DatePicker";
-import { fmtDate, toInputDate, fmtHours } from "@/lib/ui";
+import TimePicker from "@/components/TimePicker";
+import ConfirmButton from "@/components/ConfirmButton";
+import { fmtDate, toInputDate, fmtHours, toInputTime, fmtTimeRange } from "@/lib/ui";
 import { rangeBounds, weekStartOf } from "@/lib/timerange";
 
 export const dynamic = "force-dynamic";
@@ -230,37 +233,40 @@ export default async function TimesheetPage({
             <DatePicker name="date" required defaultValue={toInputDate(new Date())} />
           </div>
           <div>
-            <label className="label">Hours *</label>
+            <label className="label">From</label>
+            <TimePicker name="start" placeholder="--:--" />
+          </div>
+          <div>
+            <label className="label">To</label>
+            <TimePicker name="end" placeholder="--:--" />
+          </div>
+          <div>
+            <label className="label">Hours</label>
             <input
               name="hours"
               type="text"
-              required
               className="input"
-              placeholder="2h 30m, 0:45 or 2.5"
-              title="Enter time as 2h 30m, 0:45, 45m or a decimal like 2.5"
+              placeholder="or 2h 30m"
+              title="Enter a From/To time range, or type hours like 2h 30m, 0:45 or 2.5"
             />
           </div>
           <div>
             <label className="label">Task</label>
-            <select name="taskId" className="input">
-              <option value="">— None —</option>
-              {tasks.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.title}
-                </option>
-              ))}
-            </select>
+            <SearchSelect
+              name="taskId"
+              placeholder="— None —"
+              searchPlaceholder="Search tasks…"
+              options={[{ value: "", label: "— None —" }, ...tasks.map((t) => ({ value: String(t.id), label: t.title }))]}
+            />
           </div>
           <div>
             <label className="label">Project</label>
-            <select name="projectId" className="input">
-              <option value="">— None —</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            <SearchSelect
+              name="projectId"
+              placeholder="— None —"
+              searchPlaceholder="Search projects…"
+              options={[{ value: "", label: "— None —" }, ...projects.map((p) => ({ value: String(p.id), label: p.name }))]}
+            />
           </div>
           <div>
             <label className="label">Note</label>
@@ -278,6 +284,7 @@ export default async function TimesheetPage({
           <thead className="border-b border-slate-200 bg-slate-50">
             <tr>
               <th className="th">Date</th>
+              <th className="th">Time</th>
               <th className="th">Hours</th>
               <th className="th">Task</th>
               <th className="th">Project</th>
@@ -288,7 +295,7 @@ export default async function TimesheetPage({
           <tbody className="divide-y divide-slate-100">
             {entries.length === 0 && (
               <tr>
-                <td colSpan={6} className="td py-10 text-center text-slate-400">
+                <td colSpan={7} className="td py-10 text-center text-slate-400">
                   No time logged for {label.toLowerCase()}.
                 </td>
               </tr>
@@ -300,7 +307,7 @@ export default async function TimesheetPage({
                 const hasTask = e.taskId && tasks.some((t) => t.id === e.taskId);
                 return (
                   <tr key={e.id} className="bg-sky-50/50 dark:bg-sky-950/20">
-                    <td colSpan={6} className="td">
+                    <td colSpan={7} className="td">
                       <form action={updateTimeEntry} className="grid items-end gap-3 md:grid-cols-6">
                         <input type="hidden" name="id" value={e.id} />
                         <input type="hidden" name="back" value={viewHref} />
@@ -309,33 +316,40 @@ export default async function TimesheetPage({
                           <DatePicker name="date" required defaultValue={toInputDate(e.date)} />
                         </div>
                         <div>
-                          <label className="label">Hours *</label>
-                          <input name="hours" type="text" required defaultValue={fmtHours(e.hours)} className="input" />
+                          <label className="label">From</label>
+                          <TimePicker name="start" defaultValue={toInputTime(e.startedAt)} placeholder="--:--" />
+                        </div>
+                        <div>
+                          <label className="label">To</label>
+                          <TimePicker name="end" defaultValue={toInputTime(e.endedAt)} placeholder="--:--" />
+                        </div>
+                        <div>
+                          <label className="label">Hours</label>
+                          <input name="hours" type="text" defaultValue={fmtHours(e.hours)} className="input" />
                         </div>
                         <div>
                           <label className="label">Task</label>
-                          <select name="taskId" defaultValue={e.taskId ?? ""} className="input">
-                            <option value="">— None —</option>
-                            {!hasTask && e.task && (
-                              <option value={e.task.id}>{e.task.title}</option>
-                            )}
-                            {tasks.map((t) => (
-                              <option key={t.id} value={t.id}>
-                                {t.title}
-                              </option>
-                            ))}
-                          </select>
+                          <SearchSelect
+                            name="taskId"
+                            defaultValue={e.taskId ? String(e.taskId) : ""}
+                            placeholder="— None —"
+                            searchPlaceholder="Search tasks…"
+                            options={[
+                              { value: "", label: "— None —" },
+                              ...(!hasTask && e.task ? [{ value: String(e.task.id), label: e.task.title }] : []),
+                              ...tasks.map((t) => ({ value: String(t.id), label: t.title })),
+                            ]}
+                          />
                         </div>
                         <div>
                           <label className="label">Project</label>
-                          <select name="projectId" defaultValue={e.projectId ?? ""} className="input">
-                            <option value="">— None —</option>
-                            {projects.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.name}
-                              </option>
-                            ))}
-                          </select>
+                          <SearchSelect
+                            name="projectId"
+                            defaultValue={e.projectId ? String(e.projectId) : ""}
+                            placeholder="— None —"
+                            searchPlaceholder="Search projects…"
+                            options={[{ value: "", label: "— None —" }, ...projects.map((p) => ({ value: String(p.id), label: p.name }))]}
+                          />
                         </div>
                         <div>
                           <label className="label">Note</label>
@@ -357,6 +371,9 @@ export default async function TimesheetPage({
               return (
                 <tr key={e.id} className="hover:bg-slate-50">
                   <td className="td">{fmtDate(e.date)}</td>
+                  <td className="td text-slate-600 whitespace-nowrap">
+                    {e.startedAt && e.endedAt ? fmtTimeRange(e.startedAt, e.endedAt) : "—"}
+                  </td>
                   <td className="td font-medium">
                     <span className="inline-flex items-center gap-1.5">
                       {fmtHours(e.hours)}
@@ -384,9 +401,9 @@ export default async function TimesheetPage({
                         <form action={deleteTimeEntry}>
                           <input type="hidden" name="id" value={e.id} />
                           <input type="hidden" name="back" value={viewHref} />
-                          <button type="submit" className="text-slate-400 hover:text-red-600">
+                          <ConfirmButton message="Delete this time entry?" className="text-slate-400 hover:text-red-600">
                             Delete
-                          </button>
+                          </ConfirmButton>
                         </form>
                       </div>
                     )}

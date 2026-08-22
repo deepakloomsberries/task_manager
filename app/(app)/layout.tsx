@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { headers } from "next/headers";
+import { headers, cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import Sidebar from "@/components/Sidebar";
+import { SidebarProvider, DesktopSidebar, SidebarToggle } from "@/components/SidebarState";
 import MobileSidebar from "@/components/MobileSidebar";
 import ThemeToggle from "@/components/ThemeToggle";
 import UserAvatar from "@/components/UserAvatar";
@@ -37,10 +37,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       }),
       db.task.count({
         where: {
-          assigneeId: user.id,
           deletedAt: null,
           status: { not: "DONE" },
           dueDate: { not: null, lte: endOfToday },
+          OR: [{ assigneeId: user.id }, { collaborators: { some: { userId: user.id } } }],
         },
       }),
       db.user.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
@@ -59,15 +59,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const isAdmin = user.role === "ADMIN";
   const isManager = user.role === "ADMIN" || user.role === "MANAGER";
+  const sidebarCollapsed = cookies().get("sidebar")?.value === "collapsed";
 
   return (
+    <SidebarProvider initialCollapsed={sidebarCollapsed}>
     <div className="flex h-screen">
       <Heartbeat />
       <PushSetup />
       <CommandPalette users={paletteUsers} projects={paletteProjects} />
-      <Sidebar isAdmin={isAdmin} isManager={isManager} badges={navBadges} />
+      <DesktopSidebar isAdmin={isAdmin} isManager={isManager} badges={navBadges} />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 sm:gap-4 sm:px-6 dark:border-slate-700 dark:bg-slate-800">
+          <SidebarToggle />
           <MobileSidebar isAdmin={isAdmin} isManager={isManager} badges={navBadges} />
           <CommandButton />
           <div className="hidden flex-1 sm:block" />
@@ -122,5 +125,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
       </div>
     </div>
+    </SidebarProvider>
   );
 }

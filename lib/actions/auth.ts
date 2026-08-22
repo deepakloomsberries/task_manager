@@ -8,7 +8,8 @@ import { isStrongPassword } from "@/lib/password";
 import { notifyPasswordOtp } from "@/lib/mail";
 
 const OTP_TTL_MIN = 15;
-const OTP_MAX_ATTEMPTS = 5;
+const OTP_MAX_ATTEMPTS = 5; // wrong-code guesses before the code is invalidated
+const OTP_MAX_SENDS = 5; // codes we'll email within one active window (resend cap)
 
 export async function login(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -39,14 +40,33 @@ export async function requestPasswordReset(formData: FormData) {
   if (email) {
     const user = await db.user.findUnique({ where: { email } });
     if (user && user.active) {
+      const existing = await db.passwordReset.findUnique({ where: { userId: user.id } });
+      const windowLive = existing != null && existing.expiresAt > new Date();
+
+      // Cap codes per active window — stops email-bombing and closes the
+      // brute-force gap where resending reset the wrong-guess counter each time.
+      if (windowLive && existing!.sends >= OTP_MAX_SENDS) {
+        redirect(`/forgot?step=code&email=${encodeURIComponent(email)}&error=throttled`);
+      }
+
       const code = String(Math.floor(100000 + Math.random() * 900000));
       const codeHash = await bcrypt.hash(code, 10);
       const expiresAt = new Date(Date.now() + OTP_TTL_MIN * 60_000);
-      await db.passwordReset.upsert({
-        where: { userId: user.id },
-        create: { userId: user.id, codeHash, expiresAt, attempts: 0 },
-        update: { codeHash, expiresAt, attempts: 0, createdAt: new Date() },
-      });
+
+      if (windowLive) {
+        // Same window: new code, reset guesses, count this send toward the cap.
+        await db.passwordReset.update({
+          where: { userId: user.id },
+          data: { codeHash, expiresAt, attempts: 0, sends: { increment: 1 } },
+        });
+      } else {
+        // Fresh window (none existing, or the previous one expired).
+        await db.passwordReset.upsert({
+          where: { userId: user.id },
+          create: { userId: user.id, codeHash, expiresAt, attempts: 0, sends: 1 },
+          update: { codeHash, expiresAt, attempts: 0, sends: 1, createdAt: new Date() },
+        });
+      }
       notifyPasswordOtp({ to: user.email, name: user.name, code });
     }
   }
@@ -100,8 +120,13 @@ export async function changeOwnPassword(formData: FormData) {
   const next = String(formData.get("next") ?? "");
 
   if (!isStrongPassword(next)) redirect("/settings?error=weak");
-  if (!(await bcrypt.compare(current, user.passwordHash))) {
-    redirect("/settings?error=wrong");
+  // On a forced first-time change the user just authenticated with their
+  // admin-issued password, so don't make them re-enter it. Only verify the
+  // current password for a normal, voluntary change.
+  if (!user.mustChangePassword) {
+    if (!(await bcrypt.compare(current, user.passwordHash))) {
+      redirect("/settings?error=wrong");
+    }
   }
 
   await db.user.update({

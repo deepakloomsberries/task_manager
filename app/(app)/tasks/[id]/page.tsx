@@ -11,13 +11,25 @@ import {
   sendTaskReminder,
   addTaskDependency,
   removeTaskDependency,
+  addTaskCollaborator,
+  removeTaskCollaborator,
+  duplicateTask,
+  deleteComment,
+  watchTask,
+  unwatchTask,
 } from "@/lib/actions/tasks";
 import { deleteAttachment } from "@/lib/actions/files";
 import PasteAttachment from "@/components/PasteAttachment";
+import ConfirmButton from "@/components/ConfirmButton";
+import MentionTextarea from "@/components/MentionTextarea";
+import { renderRich } from "@/components/RichText";
+import SearchSelect from "@/components/SearchSelect";
 import DatePicker from "@/components/DatePicker";
 import ShareTask from "@/components/ShareTask";
 import UserAvatar from "@/components/UserAvatar";
+import AckOnView from "@/components/AckOnView";
 import TaskTimer from "@/components/TaskTimer";
+import { LiveWorkingCard } from "@/components/ActiveTimers";
 import { addTagToTask, removeTagFromTask } from "@/lib/actions/tags";
 import { fmtSize } from "@/lib/storage";
 import { TAG_COLORS, tagBadge } from "@/lib/ui";
@@ -28,23 +40,57 @@ import {
   fmtDate,
   fmtDateTime,
   fmtHours,
+  fmtTimeRange,
   toInputDate,
 } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
+
+/** Pipeline order — moving to a lower index is a "revert" (needs confirmation). */
+const STATUS_ORDER = ["TODO", "IN_PROGRESS", "REVIEW", "DONE"];
+
+/** Colour-coded styling for each status pill in the "Move to" pipeline.
+ *  Full static class strings (dynamic Tailwind class names are not JIT-picked). */
+const STATUS_PILL: Record<string, { active: string; dot: string; hover: string }> = {
+  TODO: {
+    active: "bg-slate-600 text-white",
+    dot: "bg-slate-400",
+    hover: "hover:bg-slate-100 hover:text-slate-800 hover:ring-slate-300",
+  },
+  IN_PROGRESS: {
+    active: "bg-blue-600 text-white",
+    dot: "bg-blue-500",
+    hover: "hover:bg-blue-50 hover:text-blue-700 hover:ring-blue-300",
+  },
+  REVIEW: {
+    active: "bg-amber-500 text-white",
+    dot: "bg-amber-500",
+    hover: "hover:bg-amber-50 hover:text-amber-700 hover:ring-amber-300",
+  },
+  DONE: {
+    active: "bg-green-600 text-white",
+    dot: "bg-green-500",
+    hover: "hover:bg-green-50 hover:text-green-700 hover:ring-green-300",
+  },
+};
 
 export default async function TaskDetailPage({
   params,
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { edit?: string; ok?: string; error?: string };
+  searchParams: { edit?: string; ok?: string; error?: string; back?: string };
 }) {
   const user = await requireUser();
   const id = Number(params.id);
   if (!id) notFound();
 
-  const [task, users, projects, activeTimer, loggedAgg, timeLogs, allTasks] = await Promise.all([
+  // Where "Back to tasks" returns to — the filtered list/board the user came
+  // from, when passed along; otherwise the plain tasks page. Only accept
+  // internal /tasks URLs so `back` can't be used to redirect off-site.
+  const backTo = searchParams.back && searchParams.back.startsWith("/tasks") ? searchParams.back : "/tasks";
+
+  const [task, users, projects, activeTimer, loggedAgg, timeLogs, allTasks, taskTimers] = await Promise.all([
     db.task.findUnique({
       where: { id },
       include: {
@@ -52,6 +98,7 @@ export default async function TaskDetailPage({
         assignee: true,
         createdBy: true,
         comments: { include: { author: true }, orderBy: { createdAt: "asc" } },
+        collaborators: { include: { user: true }, orderBy: { addedAt: "asc" } },
         attachments: { include: { uploadedBy: true }, orderBy: { createdAt: "desc" } },
         parent: true,
         subtasks: {
@@ -63,6 +110,7 @@ export default async function TaskDetailPage({
         activities: { include: { actor: true }, orderBy: { createdAt: "desc" }, take: 30 },
         blockedBy: { include: { blocker: { select: { id: true, title: true, status: true } } } },
         blocking: { include: { task: { select: { id: true, title: true, status: true } } } },
+        watchers: { select: { userId: true } },
       },
     }),
     db.user.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
@@ -81,6 +129,12 @@ export default async function TaskDetailPage({
       select: { id: true, title: true },
       orderBy: { title: "asc" },
       take: 200,
+    }),
+    // Everyone currently running a timer on THIS task (so the owner can see it).
+    db.taskTimer.findMany({
+      where: { taskId: id },
+      include: { user: { select: { id: true, name: true, avatarPath: true } } },
+      orderBy: { startedAt: "asc" },
     }),
   ]);
   if (!task || task.deletedAt) notFound();
@@ -102,6 +156,11 @@ export default async function TaskDetailPage({
   }
   const timeRows = Array.from(timeByUser.values()).sort((a, b) => b.hours - a.hours);
 
+  // Individual entries, newest first — each with its from–to window.
+  const timeEntries = [...timeLogs].sort(
+    (a, b) => new Date(b.startedAt ?? b.date).getTime() - new Date(a.startedAt ?? a.date).getTime()
+  );
+
   const runningStartedAt =
     activeTimer && activeTimer.taskId === task.id ? activeTimer.startedAt.toISOString() : null;
   const otherTimer =
@@ -110,17 +169,35 @@ export default async function TaskDetailPage({
       : null;
   const loggedHours = loggedAgg._sum.hours ?? 0;
 
+  // People currently running a timer on this task — shown live (self-refreshing)
+  // so the owner can see who's working on it right now.
+  const activeTimersOnTask = taskTimers.map((t) => ({
+    id: t.id,
+    userId: t.userId,
+    userName: t.user.name,
+    avatarPath: t.user.avatarPath,
+    taskId: task.id,
+    taskTitle: task.title,
+    estimateHours: task.estimateHours,
+    startedAt: t.startedAt.toISOString(),
+  }));
+
   const status = lookup(TASK_STATUSES, task.status);
   const priority = lookup(TASK_PRIORITIES, task.priority);
   // Editing details, deleting and sending reminders belong to the person who
   // assigned the task (its creator), plus managers and admins. The assignee can
   // still move the task through its statuses.
   const canEdit = isManagerOrAdmin(user.role) || task.createdById === user.id;
-  const canProgress = canEdit || task.assigneeId === user.id;
+  const isCollaborator = task.collaborators.some((c) => c.userId === user.id);
+  const canProgress = canEdit || task.assigneeId === user.id || isCollaborator;
+  // Owner, assignee or a manager can add/remove collaborators.
+  const canManageCollab = canEdit || task.assigneeId === user.id;
   const canDelete = canEdit;
   // Approval-required users (e.g. designers) can move up to Review only; the
   // task owner/manager approves completion (Review → Done).
-  const canCompleteDone = canEdit || !user.requiresApproval;
+  // The assignee can't self-complete when they need approval, or when this task
+  // is flagged review-required — they must send it to Review for the owner.
+  const canCompleteDone = canEdit || (!user.requiresApproval && !task.reviewRequired);
   const editing = searchParams.edit === "1" && canEdit;
   const taskCode = `TM-${task.id}`;
 
@@ -145,8 +222,9 @@ export default async function TaskDetailPage({
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
+      {task.assigneeId === user.id && !task.acknowledgedAt && <AckOnView taskId={task.id} />}
       <Link
-        href={task.parent ? `/tasks/${task.parent.id}` : "/tasks"}
+        href={task.parent ? `/tasks/${task.parent.id}` : backTo}
         className="text-sm text-slate-500 hover:underline"
       >
         ← {task.parent ? `Back to "${task.parent.title}"` : "Back to tasks"}
@@ -174,6 +252,14 @@ export default async function TaskDetailPage({
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <span className={`badge ${status.badge}`}>{status.label}</span>
                   <span className={`badge ${priority.badge}`}>{priority.label}</span>
+                  {task.reviewRequired && (
+                    <span
+                      className="badge bg-amber-100 text-amber-800"
+                      title="The assignee must send this to Review — the owner approves completion"
+                    >
+                      🔎 Review required
+                    </span>
+                  )}
                   {isBlocked && (
                     <span
                       className="badge bg-red-100 text-red-700"
@@ -228,6 +314,23 @@ export default async function TaskDetailPage({
                 </div>
               </div>
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                {(() => {
+                  const isWatching = task.watchers.some((w) => w.userId === user.id);
+                  const count = task.watchers.length;
+                  return (
+                    <form action={isWatching ? unwatchTask : watchTask}>
+                      <input type="hidden" name="taskId" value={task.id} />
+                      <button
+                        type="submit"
+                        title={isWatching ? "Stop following this task" : "Get notified of status changes and comments"}
+                        className={isWatching ? "btn-primary gap-1.5" : "btn-secondary gap-1.5"}
+                      >
+                        {isWatching ? "✓ Watching" : "👁 Watch"}
+                        {count > 0 && <span className="opacity-70">{count}</span>}
+                      </button>
+                    </form>
+                  );
+                })()}
                 <ShareTask code={taskCode} title={task.title} taskId={task.id} />
                 {task.createdById === user.id && task.assignee && (
                   <form action={sendTaskReminder}>
@@ -246,12 +349,23 @@ export default async function TaskDetailPage({
                     Edit
                   </Link>
                 )}
+                {canEdit && (
+                  <form action={duplicateTask}>
+                    <input type="hidden" name="id" value={task.id} />
+                    <button type="submit" className="btn-secondary" title="Create a copy of this task">
+                      Duplicate
+                    </button>
+                  </form>
+                )}
                 {canDelete && (
                   <form action={deleteTask}>
                     <input type="hidden" name="id" value={task.id} />
-                    <button type="submit" className="btn-danger">
+                    <ConfirmButton
+                      message="Delete this task? You can restore it from Trash."
+                      className="btn-danger"
+                    >
                       Delete
-                    </button>
+                    </ConfirmButton>
                   </form>
                 )}
               </div>
@@ -276,7 +390,15 @@ export default async function TaskDetailPage({
               </div>
               <div>
                 <dt className="text-xs text-slate-500">Assignee</dt>
-                <dd className="mt-0.5 font-medium">{task.assignee?.name ?? "Unassigned"}</dd>
+                <dd className="mt-0.5 font-medium">
+                  {task.assignee ? (
+                    <Link href={`/people/${task.assignee.id}`} className="hover:text-sky-700 hover:underline">
+                      {task.assignee.name}
+                    </Link>
+                  ) : (
+                    "Unassigned"
+                  )}
+                </dd>
               </div>
               <div>
                 <dt className="text-xs text-slate-500">Start date</dt>
@@ -296,55 +418,157 @@ export default async function TaskDetailPage({
               </div>
               <div>
                 <dt className="text-xs text-slate-500">Created by</dt>
-                <dd className="mt-0.5 font-medium">{task.createdBy.name}</dd>
+                <dd className="mt-0.5 font-medium">
+                  <Link href={`/people/${task.createdBy.id}`} className="hover:text-sky-700 hover:underline">
+                    {task.createdBy.name}
+                  </Link>
+                </dd>
               </div>
             </dl>
 
+            <div className="mt-6 border-t border-slate-100 pt-4">
+              <div className="mb-2 text-xs font-medium text-slate-500">
+                Collaborators
+                <span className="ml-1 font-normal text-slate-400">— anyone here can work on and complete this task</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {task.assignee && (
+                  <span className="flex items-center gap-1.5 rounded-full bg-slate-100 px-2 py-1 text-xs">
+                    <Link href={`/people/${task.assignee.id}`} className="flex items-center gap-1.5 hover:underline">
+                      <UserAvatar user={task.assignee} size={20} presence={task.assignee.lastSeenAt} />
+                      {task.assignee.name}
+                    </Link>
+                    <span className="text-slate-400">· assignee</span>
+                  </span>
+                )}
+                {task.collaborators.map((c) => (
+                  <span key={c.userId} className="flex items-center gap-1.5 rounded-full bg-sky-50 px-2 py-1 text-xs ring-1 ring-sky-100">
+                    <Link href={`/people/${c.userId}`} className="flex items-center gap-1.5 hover:underline">
+                      <UserAvatar user={c.user} size={20} presence={c.user.lastSeenAt} />
+                      {c.user.name}
+                    </Link>
+                    {(canManageCollab || c.userId === user.id) && (
+                      <form action={removeTaskCollaborator} className="inline">
+                        <input type="hidden" name="taskId" value={task.id} />
+                        <input type="hidden" name="userId" value={c.userId} />
+                        <ConfirmButton
+                          message={`Remove ${c.user.name} from this task?`}
+                          title="Remove collaborator"
+                          className="ml-0.5 text-slate-400 hover:text-red-600"
+                        >
+                          ✕
+                        </ConfirmButton>
+                      </form>
+                    )}
+                  </span>
+                ))}
+                {!task.assignee && task.collaborators.length === 0 && (
+                  <span className="text-xs text-slate-400">No one assigned yet.</span>
+                )}
+              </div>
+              {canManageCollab && (
+                <form action={addTaskCollaborator} className="mt-2 flex items-center gap-2">
+                  <input type="hidden" name="taskId" value={task.id} />
+                  <SearchSelect
+                    name="userId"
+                    required
+                    className="w-60"
+                    placeholder="+ Add collaborator…"
+                    searchPlaceholder="Search people…"
+                    options={users
+                      .filter((u) => u.id !== task.assigneeId && !task.collaborators.some((c) => c.userId === u.id))
+                      .map((u) => ({ value: String(u.id), label: u.name, hint: u.jobTitle ?? undefined }))}
+                  />
+                  <button type="submit" className="btn-secondary !py-1.5 text-xs">
+                    Add
+                  </button>
+                </form>
+              )}
+            </div>
+
             {canProgress && (
               <div className="mt-6 border-t border-slate-100 pt-4">
-                <div className="mb-2 text-xs font-medium text-slate-500">Move to</div>
-                <div className="flex flex-wrap gap-2">
-                  {TASK_STATUSES.filter((s) => s.value !== task.status).map((s) => {
+                <div className="mb-2 text-xs font-medium text-slate-500">Status</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {TASK_STATUSES.map((s) => {
+                    const style = STATUS_PILL[s.value];
+                    const isCurrent = s.value === task.status;
                     const isDone = s.value === "DONE";
-                    if (isDone && !canCompleteDone) {
+                    const locked = isDone && (!canCompleteDone || isBlocked);
+                    const lockTitle = isDone && !canCompleteDone
+                      ? task.reviewRequired
+                        ? "This task needs the owner's review — send it to In Review and they'll approve it."
+                        : "Only the task owner can mark this Done — send it to Review for approval."
+                      : isBlocked
+                        ? `Blocked by ${openBlockers.length} unfinished task(s)`
+                        : "";
+                    const label = isDone && task.status === "REVIEW" && canEdit ? "Approve" : s.label;
+
+                    // Moving to an earlier stage is a revert (e.g. reopening a
+                    // completed task) — confirm it. Forward moves stay one-click.
+                    const currentIdx = STATUS_ORDER.indexOf(task.status);
+                    const targetIdx = STATUS_ORDER.indexOf(s.value);
+                    const isRevert = currentIdx > -1 && targetIdx > -1 && targetIdx < currentIdx;
+                    const reopening = task.status === "DONE";
+
+                    if (isCurrent) {
                       return (
-                        <button
+                        <span
                           key={s.value}
-                          type="button"
-                          disabled
-                          title="Only the task owner can mark this Done — send it to Review for approval."
-                          className="btn-secondary !py-1.5 text-xs cursor-not-allowed opacity-50"
+                          className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold shadow-sm ${style.active}`}
                         >
-                          🔒 Done — owner approves
-                        </button>
+                          <span className="h-1.5 w-1.5 rounded-full bg-white/90" />
+                          {s.label}
+                          <span className="opacity-70">· now</span>
+                        </span>
                       );
                     }
-                    if (isDone && isBlocked) {
+                    if (locked) {
                       return (
-                        <button
+                        <span
                           key={s.value}
-                          type="button"
-                          disabled
-                          title={`Blocked by ${openBlockers.length} unfinished task(s)`}
-                          className="btn-secondary !py-1.5 text-xs cursor-not-allowed opacity-50"
+                          title={lockTitle}
+                          className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium text-slate-400 ring-1 ring-slate-200"
                         >
-                          🔒 Done
-                        </button>
+                          <span className={`h-1.5 w-1.5 rounded-full ${style.dot} opacity-40`} />
+                          {label} 🔒
+                        </span>
                       );
                     }
-                    // When an owner is looking at a task in Review, frame Done as an approval.
-                    const label =
-                      isDone && task.status === "REVIEW" && canEdit ? "✓ Approve (Done)" : s.label;
+                    const pillClass = `inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200 transition ${style.hover}`;
+                    // Confirm every status change (forward moves included).
+                    const approving = isDone && task.status === "REVIEW" && canEdit;
+                    const confirmLabel = isRevert
+                      ? reopening
+                        ? "Reopen"
+                        : "Move back"
+                      : approving
+                        ? "Approve"
+                        : isDone
+                          ? "Mark done"
+                          : "Move";
+                    const message = isRevert
+                      ? reopening
+                        ? `Reopen "${task.title}"? It will move back to ${s.label}.`
+                        : `Move "${task.title}" back to ${s.label}?`
+                      : approving
+                        ? `Approve and complete "${task.title}"?`
+                        : isDone
+                          ? `Mark "${task.title}" as done?`
+                          : `Move "${task.title}" to ${s.label}?`;
                     return (
                       <form key={s.value} action={setTaskStatus}>
                         <input type="hidden" name="id" value={task.id} />
                         <input type="hidden" name="status" value={s.value} />
-                        <button
-                          type="submit"
-                          className={`!py-1.5 text-xs ${isDone && task.status === "REVIEW" && canEdit ? "btn-primary" : "btn-secondary"}`}
+                        <ConfirmButton
+                          tone="primary"
+                          className={pillClass}
+                          confirmLabel={confirmLabel}
+                          message={message}
                         >
+                          <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
                           {label}
-                        </button>
+                        </ConfirmButton>
                       </form>
                     );
                   })}
@@ -370,35 +594,31 @@ export default async function TaskDetailPage({
             </div>
             <div>
               <label className="label">Project</label>
-              <select name="projectId" defaultValue={task.projectId ?? ""} className="input">
-                <option value="">— None —</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+              <SearchSelect
+                name="projectId"
+                defaultValue={task.projectId ? String(task.projectId) : ""}
+                placeholder="— None —"
+                searchPlaceholder="Search projects…"
+                options={[{ value: "", label: "— None —" }, ...projects.map((p) => ({ value: String(p.id), label: p.name }))]}
+              />
             </div>
             <div>
               <label className="label">Assignee</label>
-              <select name="assigneeId" defaultValue={task.assigneeId ?? ""} className="input">
-                <option value="">— Unassigned —</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
+              <SearchSelect
+                name="assigneeId"
+                defaultValue={task.assigneeId ? String(task.assigneeId) : ""}
+                placeholder="— Unassigned —"
+                searchPlaceholder="Search people…"
+                options={[{ value: "", label: "— Unassigned —" }, ...users.map((u) => ({ value: String(u.id), label: u.name, hint: u.jobTitle ?? undefined }))]}
+              />
             </div>
             <div>
               <label className="label">Priority</label>
-              <select name="priority" defaultValue={task.priority} className="input">
-                {TASK_PRIORITIES.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
+              <SearchSelect
+                name="priority"
+                defaultValue={task.priority}
+                options={TASK_PRIORITIES.map((p) => ({ value: p.value, label: p.label }))}
+              />
             </div>
             <div>
               <label className="label">Start date</label>
@@ -410,12 +630,17 @@ export default async function TaskDetailPage({
             </div>
             <div>
               <label className="label">Repeat</label>
-              <select name="recurrence" defaultValue={task.recurrence ?? ""} className="input">
-                <option value="">Does not repeat</option>
-                <option value="DAILY">Daily</option>
-                <option value="WEEKLY">Weekly</option>
-                <option value="MONTHLY">Monthly</option>
-              </select>
+              <SearchSelect
+                name="recurrence"
+                defaultValue={task.recurrence ?? ""}
+                placeholder="Does not repeat"
+                options={[
+                  { value: "", label: "Does not repeat" },
+                  { value: "DAILY", label: "Daily" },
+                  { value: "WEEKLY", label: "Weekly" },
+                  { value: "MONTHLY", label: "Monthly" },
+                ]}
+              />
             </div>
             <div>
               <label className="label">Estimate</label>
@@ -426,6 +651,20 @@ export default async function TaskDetailPage({
                 placeholder="e.g. 3h or 1h 30m"
               />
             </div>
+            <label className="flex items-start gap-2 md:col-span-2">
+              <input
+                type="checkbox"
+                name="reviewRequired"
+                defaultChecked={task.reviewRequired}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+              />
+              <span className="text-sm">
+                <span className="font-medium">Review required</span>
+                <span className="block text-xs text-slate-500">
+                  The assignee can&apos;t mark this Done — they send it to Review and you approve it (you&apos;ll get an email).
+                </span>
+              </span>
+            </label>
             <div className="flex gap-2 md:col-span-2">
               <button type="submit" className="btn-primary">
                 Save changes
@@ -446,6 +685,14 @@ export default async function TaskDetailPage({
           otherTimer={otherTimer}
         />
       )}
+
+      <LiveWorkingCard
+        title="Working on this now"
+        initial={activeTimersOnTask}
+        taskId={task.id}
+        excludeUserId={user.id}
+        showTask={false}
+      />
 
       {(timeRows.length > 0 || task.estimateHours) && (
         <div className="card p-6">
@@ -499,6 +746,40 @@ export default async function TaskDetailPage({
               );
             })}
           </div>
+
+          {timeEntries.length > 0 && (
+            <div className="mt-5 border-t border-slate-100 pt-4">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Entries</div>
+              <div className="overflow-x-auto">
+                <div className="min-w-[520px] divide-y divide-slate-100">
+                  {timeEntries.slice(0, 10).map((e) => (
+                    <div key={e.id} className="flex items-center gap-3 py-2 text-sm">
+                      <span className="w-24 shrink-0 text-slate-500">{fmtDate(e.date)}</span>
+                      <span className="w-28 shrink-0 whitespace-nowrap text-slate-600">
+                        {e.startedAt && e.endedAt ? fmtTimeRange(e.startedAt, e.endedAt) : "—"}
+                      </span>
+                      <span className="w-16 shrink-0 font-medium">{fmtHours(e.hours)}</span>
+                      <span className="flex min-w-0 flex-1 items-center gap-1.5 text-slate-500">
+                        <UserAvatar user={e.user} size={20} />
+                        <span className="truncate">
+                          {e.user.name}
+                          {e.note ? ` · ${e.note}` : ""}
+                        </span>
+                      </span>
+                      {e.source === "timer" && (
+                        <span title="Tracked with the task timer" className="badge shrink-0 bg-sky-100 text-sky-700 !px-1.5 !py-0 text-[10px]">
+                          ⏱
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {timeEntries.length > 10 && (
+                <div className="mt-2 text-xs text-slate-400">Showing the latest 10 of {timeEntries.length} entries.</div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -544,16 +825,14 @@ export default async function TaskDetailPage({
           {canEdit && dependencyOptions.length > 0 && (
             <form action={addTaskDependency} className="mb-5 flex flex-col gap-2 sm:flex-row">
               <input type="hidden" name="taskId" value={task.id} />
-              <select name="blockerId" required defaultValue="" className="input flex-1">
-                <option value="" disabled>
-                  Add a task this one is blocked by…
-                </option>
-                {dependencyOptions.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.title}
-                  </option>
-                ))}
-              </select>
+              <SearchSelect
+                name="blockerId"
+                required
+                className="flex-1"
+                placeholder="Add a task this one is blocked by…"
+                searchPlaceholder="Search tasks…"
+                options={dependencyOptions.map((t) => ({ value: String(t.id), label: t.title }))}
+              />
               <button type="submit" className="btn-secondary">
                 Add blocker
               </button>
@@ -648,16 +927,14 @@ export default async function TaskDetailPage({
             >
               <input type="hidden" name="parentId" value={task.id} />
               <input name="title" required placeholder="Add a subtask…" className="input flex-1" />
-              <select name="assigneeId" required defaultValue="" className="input sm:w-44">
-                <option value="" disabled>
-                  Assign to…
-                </option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
+              <SearchSelect
+                name="assigneeId"
+                required
+                className="sm:w-44"
+                placeholder="Assign to…"
+                searchPlaceholder="Search people…"
+                options={users.map((u) => ({ value: String(u.id), label: u.name, hint: u.jobTitle ?? undefined }))}
+              />
               <button type="submit" className="btn-primary">
                 Add subtask
               </button>
@@ -703,9 +980,12 @@ export default async function TaskDetailPage({
               {(a.uploadedById === user.id || user.role === "ADMIN") && (
                 <form action={deleteAttachment}>
                   <input type="hidden" name="id" value={a.id} />
-                  <button type="submit" className="text-xs text-red-600 hover:underline">
+                  <ConfirmButton
+                    message={`Delete "${a.originalName}"? This can't be undone.`}
+                    className="text-xs text-red-600 hover:underline"
+                  >
                     Delete
-                  </button>
+                  </ConfirmButton>
                 </form>
               )}
             </div>
@@ -724,13 +1004,27 @@ export default async function TaskDetailPage({
         <div className="space-y-4">
           {task.comments.map((c) => (
             <div key={c.id} className="flex gap-3">
-              <UserAvatar user={c.author} size={32} />
+              <Link href={`/people/${c.authorId}`} title={`View ${c.author.name}'s profile`}>
+                <UserAvatar user={c.author} size={32} />
+              </Link>
               <div className="min-w-0 flex-1 rounded-lg bg-slate-50 px-4 py-3">
                 <div className="mb-1 flex items-baseline justify-between gap-2">
-                  <span className="text-sm font-medium">{c.author.name}</span>
-                  <span className="text-xs text-slate-400">{fmtDateTime(c.createdAt)}</span>
+                  <Link href={`/people/${c.authorId}`} className="text-sm font-medium hover:underline">
+                    {c.author.name}
+                  </Link>
+                  <span className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400">{fmtDateTime(c.createdAt)}</span>
+                    {(c.authorId === user.id || user.role === "ADMIN") && (
+                      <form action={deleteComment} className="inline">
+                        <input type="hidden" name="id" value={c.id} />
+                        <ConfirmButton message="Delete this comment?" className="text-xs text-slate-400 hover:text-red-600">
+                          ✕
+                        </ConfirmButton>
+                      </form>
+                    )}
+                  </span>
                 </div>
-                <p className="whitespace-pre-wrap text-sm text-slate-700">{c.body}</p>
+                <p className="whitespace-pre-wrap text-sm text-slate-700">{renderRich(c.body, users)}</p>
               </div>
             </div>
           ))}
@@ -740,12 +1034,12 @@ export default async function TaskDetailPage({
         </div>
         <form action={addComment} key={task.comments.length} className="mt-5 flex gap-3">
           <input type="hidden" name="taskId" value={task.id} />
-          <textarea
+          <MentionTextarea
             name="body"
-            rows={2}
+            users={users}
             required
-            placeholder="Write a comment…"
-            className="input flex-1"
+            rows={2}
+            placeholder="Write a comment…  Type @ to mention someone"
           />
           <button type="submit" className="btn-primary self-end">
             Comment

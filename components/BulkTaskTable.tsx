@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { setTaskStatus, bulkTaskAction } from "@/lib/actions/tasks";
 import DatePicker from "@/components/DatePicker";
+import ConfirmButton from "@/components/ConfirmButton";
 import { TASK_STATUSES } from "@/lib/ui";
 
 export type ListRow = {
@@ -165,9 +166,15 @@ export default function BulkTaskTable({
                     <input type="hidden" name="id" value={t.id} />
                     <input type="hidden" name="status" value={t.statusValue === "DONE" ? "TODO" : "DONE"} />
                     <input type="hidden" name="back" value={back} />
-                    <button
-                      type="submit"
+                    <ConfirmButton
+                      tone="primary"
                       title={t.statusValue === "DONE" ? "Reopen task" : "Mark as done"}
+                      confirmLabel={t.statusValue === "DONE" ? "Reopen" : "Mark done"}
+                      message={
+                        t.statusValue === "DONE"
+                          ? `Reopen "${t.title}"? It will move back to To Do.`
+                          : `Mark "${t.title}" as done?`
+                      }
                       className={`flex h-5 w-5 items-center justify-center rounded-full border-2 text-xs transition-colors ${
                         t.statusValue === "DONE"
                           ? "border-green-500 bg-green-500 text-white"
@@ -175,11 +182,11 @@ export default function BulkTaskTable({
                       }`}
                     >
                       ✓
-                    </button>
+                    </ConfirmButton>
                   </form>
                 </td>
                 <td className="td">
-                  <Link href={`/tasks/${t.id}`} className="font-medium text-sky-700 hover:underline">
+                  <Link href={`/tasks/${t.id}?back=${encodeURIComponent(back)}`} className="font-medium text-sky-700 hover:underline">
                     {t.title}
                   </Link>
                   <div className="flex flex-wrap items-center gap-1.5">

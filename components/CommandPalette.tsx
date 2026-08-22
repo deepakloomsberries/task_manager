@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createTask } from "@/lib/actions/tasks";
 import DatePicker from "@/components/DatePicker";
+import SearchSelect from "@/components/SearchSelect";
 import { TASK_PRIORITIES } from "@/lib/ui";
 
 type Lite = { id: number; name: string };
@@ -252,29 +253,23 @@ function QuickAdd({
         className="input mb-3"
       />
       <div className="grid grid-cols-2 gap-2">
-        <select name="projectId" defaultValue="" className="input">
-          <option value="">— Project —</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-        <select name="assigneeId" defaultValue="" className="input">
-          <option value="">— Assignee —</option>
-          {users.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.name}
-            </option>
-          ))}
-        </select>
-        <select name="priority" defaultValue="MEDIUM" className="input">
-          {TASK_PRIORITIES.map((p) => (
-            <option key={p.value} value={p.value}>
-              {p.label}
-            </option>
-          ))}
-        </select>
+        <SearchSelect
+          name="projectId"
+          placeholder="— Project —"
+          searchPlaceholder="Search projects…"
+          options={[{ value: "", label: "— Project —" }, ...projects.map((p) => ({ value: String(p.id), label: p.name }))]}
+        />
+        <SearchSelect
+          name="assigneeId"
+          placeholder="— Assignee —"
+          searchPlaceholder="Search people…"
+          options={[{ value: "", label: "— Assignee —" }, ...users.map((u) => ({ value: String(u.id), label: u.name }))]}
+        />
+        <SearchSelect
+          name="priority"
+          defaultValue="MEDIUM"
+          options={TASK_PRIORITIES.map((p) => ({ value: p.value, label: p.label }))}
+        />
         <DatePicker name="dueDate" placeholder="Due date" />
       </div>
       <div className="mt-3 flex justify-end">

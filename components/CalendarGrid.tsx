@@ -1,10 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { rescheduleTask } from "@/lib/actions/tasks";
+import DatePicker from "@/components/DatePicker";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
 const pad = (n: number) => String(n).padStart(2, "0");
 
 export type CalTask = {
@@ -35,7 +40,15 @@ export default function CalendarGrid({
 }) {
   const [moves, setMoves] = useState<Record<number, number>>({});
   const [dragOver, setDragOver] = useState<number | null>(null);
+  const [openDay, setOpenDay] = useState<number | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (openDay === null) return;
+    const onEsc = (e: KeyboardEvent) => e.key === "Escape" && setOpenDay(null);
+    document.addEventListener("keydown", onEsc);
+    return () => document.removeEventListener("keydown", onEsc);
+  }, [openDay]);
 
   const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7; // Monday-based
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -59,6 +72,15 @@ export default function CalendarGrid({
     if (!id) return;
     setMoves((m) => ({ ...m, [id]: day }));
     startTransition(() => rescheduleTask(id, `${year}-${pad(month + 1)}-${pad(day)}`));
+  };
+
+  // Reschedule from the day popover (drag isn't possible over the overlay).
+  const reschedule = (id: number, iso: string) => {
+    setOpenDay(null);
+    // Same-month moves update instantly; other months refresh on revalidation.
+    const m = iso.match(/^\d{4}-(\d{2})-(\d{2})$/);
+    if (m && Number(m[1]) === month + 1) setMoves((prev) => ({ ...prev, [id]: Number(m[2]) }));
+    startTransition(() => rescheduleTask(id, iso || null));
   };
 
   return (
@@ -111,9 +133,13 @@ export default function CalendarGrid({
                     </Link>
                   ))}
                   {(byDay.get(day)?.length ?? 0) > 4 && (
-                    <div className="px-1.5 text-[10px] text-slate-400">
+                    <button
+                      type="button"
+                      onClick={() => setOpenDay(day)}
+                      className="block w-full rounded px-1.5 py-0.5 text-left text-[10px] font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700"
+                    >
                       +{byDay.get(day)!.length - 4} more
-                    </div>
+                    </button>
                   )}
                 </div>
               </>
@@ -121,6 +147,71 @@ export default function CalendarGrid({
           </div>
         ))}
       </div>
+
+      {openDay !== null && (
+        <div
+          className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 py-[8vh]"
+          onClick={() => setOpenDay(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl dark:bg-slate-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-1 flex items-center justify-between">
+              <h3 className="font-semibold">
+                {MONTHS[month]} {openDay}, {year}
+                <span className="ml-2 text-xs font-normal text-slate-400">
+                  {(byDay.get(openDay) ?? []).length} task{(byDay.get(openDay) ?? []).length === 1 ? "" : "s"}
+                </span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setOpenDay(null)}
+                aria-label="Close"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="mb-3 text-xs text-slate-400">
+              Tap a task to open it, or use 📅 to move it to another date.
+            </p>
+            <div className="space-y-1">
+              {(byDay.get(openDay) ?? []).map((t) => (
+                <div
+                  key={t.id}
+                  className={`flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm ${
+                    t.status === "DONE"
+                      ? "bg-green-50 text-green-700 dark:bg-green-950/40"
+                      : "hover:bg-slate-50 dark:hover:bg-slate-700"
+                  }`}
+                >
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${t.badge}`} />
+                  <Link
+                    href={`/tasks/${t.id}`}
+                    onClick={() => setOpenDay(null)}
+                    title={t.assigneeName ? `${t.title} — ${t.assigneeName}` : t.title}
+                    className={`flex-1 truncate ${t.status === "DONE" ? "line-through" : ""}`}
+                  >
+                    {t.title}
+                  </Link>
+                  {t.assigneeName && (
+                    <span className="hidden shrink-0 text-xs text-slate-400 sm:inline">{t.assigneeName}</span>
+                  )}
+                  {t.editable && (
+                    <DatePicker
+                      compact
+                      title="Move to another date"
+                      defaultValue={`${year}-${pad(month + 1)}-${pad(openDay)}`}
+                      onPick={(v) => reschedule(t.id, v)}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

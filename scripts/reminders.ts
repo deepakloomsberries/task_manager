@@ -39,7 +39,8 @@ async function main() {
     where: { active: true, emailNotifications: true },
     include: {
       tasksAssigned: {
-        where: { status: { not: "DONE" }, dueDate: { lt: todayEnd } },
+        // deletedAt:null so trashed/duplicated tasks don't show up in the digest.
+        where: { status: { not: "DONE" }, deletedAt: null, dueDate: { lt: todayEnd } },
         orderBy: { dueDate: "asc" },
         include: { project: true },
       },

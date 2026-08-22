@@ -9,6 +9,7 @@ const ERRORS: Record<string, string> = {
   expired: "Your code has expired. Request a new one below.",
   attempts: "Too many incorrect attempts. Request a new code below.",
   code: "Incorrect code. Please check your email and try again.",
+  throttled: "You've requested too many codes. Please wait 15 minutes before trying again.",
 };
 
 export default function ForgotPasswordPage({
@@ -81,7 +82,7 @@ export default function ForgotPasswordPage({
               </div>
               <div>
                 <label className="label" htmlFor="password">New password</label>
-                <PasswordField id="password" name="password" autoComplete="new-password" showStrength />
+                <PasswordField id="password" name="password" autoComplete="new-password" withGenerate showStrength />
               </div>
               <button type="submit" className="btn-primary w-full">Set new password</button>
             </form>

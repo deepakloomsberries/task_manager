@@ -1,10 +1,16 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
-import { notifyAssignment, notifyComment, notifyReminder, pushNotification, logActivity } from "@/lib/notify";
+import { notifyAssignment, notifyComment, notifyReminder, notifyReviewNeeded, notifyCompletion, notifyApproval, notifyReopened, pushNotification, logActivity } from "@/lib/notify";
+import { notifyCollaboratorAdded } from "@/lib/mail";
+import { seriesKeyFor } from "@/lib/recurrence";
+import { findMentionedIds } from "@/lib/mentions";
+import { companyTimezone, zonedStartOfToday } from "@/lib/tz";
+import { commitTimersForTask, startTimerFor } from "@/lib/actions/time";
 import { fmtDate, lookup, parseHours, TASK_STATUSES } from "@/lib/ui";
 
 const STATUSES = ["TODO", "IN_PROGRESS", "REVIEW", "DONE"];
@@ -23,16 +29,8 @@ function parseTaskForm(formData: FormData) {
     dueDate: formData.get("dueDate") ? new Date(String(formData.get("dueDate"))) : null,
     recurrence: RECURRENCES.includes(recurrenceRaw) ? recurrenceRaw : null,
     estimateHours: parseHours(String(formData.get("estimate") ?? "")),
+    reviewRequired: formData.get("reviewRequired") === "on",
   };
-}
-
-/** Advances a date by one recurrence interval. */
-function advanceDate(date: Date, recurrence: string) {
-  const d = new Date(date);
-  if (recurrence === "DAILY") d.setDate(d.getDate() + 1);
-  else if (recurrence === "WEEKLY") d.setDate(d.getDate() + 7);
-  else if (recurrence === "MONTHLY") d.setMonth(d.getMonth() + 1);
-  return d;
 }
 
 /**
@@ -52,9 +50,13 @@ function canEditTask(
  */
 function canChangeStatus(
   user: { id: number; role: string },
-  task: { createdById: number; assigneeId: number | null }
+  task: { createdById: number; assigneeId: number | null; collaborators?: { userId: number }[] }
 ) {
-  return canEditTask(user, task) || task.assigneeId === user.id;
+  return (
+    canEditTask(user, task) ||
+    task.assigneeId === user.id ||
+    (task.collaborators?.some((c) => c.userId === user.id) ?? false)
+  );
 }
 
 async function revalidateTaskViews(taskId?: number) {
@@ -66,12 +68,21 @@ async function revalidateTaskViews(taskId?: number) {
   if (taskId) revalidatePath(`/tasks/${taskId}`);
 }
 
+/** Toggle whether the Tasks list shows recurring occurrences (managers/admins). */
+export async function setRecurringVisibility(formData: FormData) {
+  const show = formData.get("show") === "1";
+  cookies().set("showRecurring", show ? "1" : "0", { sameSite: "lax", path: "/" });
+  redirect(String(formData.get("back") ?? "/tasks"));
+}
+
 export async function createTask(formData: FormData) {
   const user = await requireUser();
   const data = parseTaskForm(formData);
   if (!data.title || !PRIORITIES.includes(data.priority)) redirect("/tasks?error=invalid");
 
-  const task = await db.task.create({ data: { ...data, createdById: user.id } });
+  const task = await db.task.create({
+    data: { ...data, seriesId: seriesKeyFor(data), createdById: user.id },
+  });
   await logActivity(task.id, user.id, "created");
 
   if (task.assigneeId) {
@@ -79,8 +90,122 @@ export async function createTask(formData: FormData) {
     if (assignee) await notifyAssignment({ assignee, task, actor: user });
   }
 
+  // Collaborators chosen on the create form — link them and let them know.
+  const collabIds = Array.from(
+    new Set(
+      formData
+        .getAll("collaboratorIds")
+        .map((v) => Number(v))
+        .filter((n) => Number.isFinite(n) && n > 0 && n !== task.assigneeId)
+    )
+  );
+  for (const cid of collabIds) {
+    await addCollaborator(task.id, cid, task.title, user);
+  }
+
   await revalidateTaskViews(task.id);
   redirect(`/tasks/${task.id}`);
+}
+
+/**
+ * Links a collaborator to a task (if active and not already the assignee),
+ * then notifies them in-app + email. Shared by the create form and the task
+ * detail's "add collaborator".
+ */
+async function addCollaborator(
+  taskId: number,
+  userId: number,
+  taskTitle: string,
+  actor: { id: number; name: string }
+) {
+  const person = await db.user.findUnique({ where: { id: userId } });
+  if (!person || !person.active) return;
+  await db.taskCollaborator.upsert({
+    where: { taskId_userId: { taskId, userId } },
+    update: {},
+    create: { taskId, userId },
+  });
+  await logActivity(taskId, actor.id, "details", `added ${person.name} as a collaborator`);
+  if (userId !== actor.id) {
+    await pushNotification(userId, `${actor.name} added you as a collaborator on: ${taskTitle}`, `/tasks/${taskId}`);
+    if (person.emailNotifications) {
+      notifyCollaboratorAdded({ to: person.email, name: person.name, taskId, taskTitle, addedBy: actor.name });
+    }
+  }
+}
+
+/**
+ * Fast capture from the dashboard: creates a To-Do assigned to the current
+ * user, due today in their office's time zone, so it lands straight in their
+ * "Due today" list. Returns nothing and does not redirect — the inline widget
+ * clears itself and refreshes.
+ */
+export async function quickAddTask(formData: FormData) {
+  const user = await requireUser();
+  const title = String(formData.get("title") ?? "").trim();
+  if (!title || title.length > 300) return;
+
+  const due = zonedStartOfToday(new Date(), companyTimezone(user.company));
+  const task = await db.task.create({
+    data: {
+      title,
+      assigneeId: user.id,
+      createdById: user.id,
+      status: "TODO",
+      priority: "MEDIUM",
+      dueDate: due,
+    },
+  });
+  await logActivity(task.id, user.id, "created");
+  revalidatePath("/dashboard");
+  revalidatePath("/my-tasks");
+  revalidatePath("/tasks");
+}
+
+/** Creates a copy of a task (fields, tags and collaborators — not history). */
+export async function duplicateTask(formData: FormData) {
+  const user = await requireUser();
+  const id = Number(formData.get("id"));
+  const src = await db.task.findUnique({ where: { id }, include: { tags: true, collaborators: true } });
+  if (!src || src.deletedAt) redirect("/tasks");
+  if (!canEditTask(user, src)) redirect(`/tasks/${id}?error=forbidden`);
+
+  const copy = await db.task.create({
+    data: {
+      title: `${src.title} (copy)`,
+      description: src.description,
+      status: "TODO",
+      priority: src.priority,
+      projectId: src.projectId,
+      assigneeId: src.assigneeId,
+      startDate: src.startDate,
+      dueDate: src.dueDate,
+      recurrence: src.recurrence,
+      estimateHours: src.estimateHours,
+      createdById: user.id,
+      tags: { create: src.tags.map((t) => ({ tagId: t.tagId })) },
+      collaborators: { create: src.collaborators.map((c) => ({ userId: c.userId })) },
+    },
+  });
+  await logActivity(copy.id, user.id, "created");
+  if (copy.assigneeId && copy.assigneeId !== user.id) {
+    const assignee = await db.user.findUnique({ where: { id: copy.assigneeId } });
+    if (assignee) await notifyAssignment({ assignee, task: copy, actor: user });
+  }
+  await revalidateTaskViews(copy.id);
+  redirect(`/tasks/${copy.id}`);
+}
+
+/** Deletes a comment. The author can remove their own; admins can remove any. */
+export async function deleteComment(formData: FormData) {
+  const user = await requireUser();
+  const id = Number(formData.get("id"));
+  const comment = await db.taskComment.findUnique({ where: { id } });
+  if (!comment) redirect("/tasks");
+  if (comment.authorId !== user.id && user.role !== "ADMIN") redirect(`/tasks/${comment.taskId}`);
+  await db.taskComment.delete({ where: { id } });
+  revalidatePath(`/tasks/${comment.taskId}`);
+  redirect(`/tasks/${comment.taskId}`);
 }
 
 export async function addSubtask(formData: FormData) {
@@ -89,7 +214,10 @@ export async function addSubtask(formData: FormData) {
   const title = String(formData.get("title") ?? "").trim();
   const assigneeId = formData.get("assigneeId") ? Number(formData.get("assigneeId")) : null;
 
-  const parent = await db.task.findUnique({ where: { id: parentId } });
+  const parent = await db.task.findUnique({
+    where: { id: parentId },
+    include: { collaborators: { select: { userId: true } } },
+  });
   if (!parent || parent.deletedAt || !title) redirect(`/tasks/${parentId}`);
   // The task's owner, its assignee, or a manager/admin can break it down.
   if (!canChangeStatus(user, parent)) redirect(`/tasks/${parentId}?error=forbidden`);
@@ -130,6 +258,8 @@ export async function updateTask(formData: FormData) {
   const updated = await db.task.update({ where: { id }, data });
 
   if (updated.assigneeId !== task.assigneeId) {
+    // New owner hasn't seen it yet — reset the acknowledgement.
+    await db.task.update({ where: { id }, data: { acknowledgedAt: null } });
     const name = updated.assigneeId
       ? (await db.user.findUnique({ where: { id: updated.assigneeId } }))?.name
       : "unassigned";
@@ -164,18 +294,26 @@ async function hasOpenBlockers(taskId: number) {
 async function changeStatus(
   user: { id: number; name: string; role: string; requiresApproval?: boolean },
   taskId: number,
-  status: string
+  status: string,
+  autoTimer = false
 ): Promise<"ok" | "noop" | "blocked" | "needs-approval"> {
   if (!STATUSES.includes(status)) return "noop";
-  const task = await db.task.findUnique({ where: { id: taskId } });
+  const task = await db.task.findUnique({
+    where: { id: taskId },
+    include: { collaborators: { select: { userId: true } } },
+  });
   if (!task || task.deletedAt || !canChangeStatus(user, task)) return "noop";
   if (task.status === status) return "noop";
 
+  // Whether the acting user is the one who actually logs time on this task.
+  const isWorker =
+    task.assigneeId === user.id || task.collaborators.some((c) => c.userId === user.id);
+
   if (status === "DONE") {
-    // Approval-required users (e.g. designers) can't complete their own work —
-    // they send it to Review and the task owner/manager approves.
+    // Can't self-complete when the person needs approval or the task itself is
+    // flagged review-required — they send it to Review and the owner approves.
     const isOwnerOrManager = isManagerOrAdmin(user.role) || task.createdById === user.id;
-    if (!isOwnerOrManager && user.requiresApproval) return "needs-approval";
+    if (!isOwnerOrManager && (user.requiresApproval || task.reviewRequired)) return "needs-approval";
     // Can't complete a task while something it depends on is still open.
     if (await hasOpenBlockers(taskId)) return "blocked";
   }
@@ -188,23 +326,50 @@ async function changeStatus(
   const to = lookup(TASK_STATUSES, status).label;
   await logActivity(taskId, user.id, "status", `${from} → ${to}`);
 
-  // Sent for review → ping the task owner so they can approve completion.
+  // Ping anyone following this task about the status change.
+  for (const wid of await watcherIds(taskId, user.id)) {
+    await pushNotification(wid, `${task.title}: ${from} → ${to}`, `/tasks/${taskId}`);
+  }
+
+  // Work moved backward by someone other than the assignee — tell the assignee.
+  // "Sent back" = pulled out of review; "reopened" = a done task made active again.
+  const sentBack = task.status === "REVIEW" && (status === "TODO" || status === "IN_PROGRESS");
+  const reopened = task.status === "DONE" && status !== "DONE";
+  if ((sentBack || reopened) && task.assigneeId && task.assigneeId !== user.id) {
+    const assignee = await db.user.findUnique({ where: { id: task.assigneeId } });
+    if (assignee) await notifyReopened({ assignee, task, actor: user, newStatus: to, sentBack });
+  }
+
+  // Moving your own task to In Progress starts the stopwatch — the mirror of
+  // completing it, which stops the timer. Only for the assignee/collaborator
+  // actually doing the work (never a manager moving someone else's task), and
+  // only from a direct status change (not a bulk move).
+  if (status === "IN_PROGRESS" && autoTimer && isWorker) {
+    await startTimerFor(user.id, taskId);
+    await revalidateTaskViews(taskId);
+    revalidatePath("/timesheet");
+  }
+
+  // Sent for review → notify the task owner (in-app + email) to approve it.
   if (status === "REVIEW" && task.createdById !== user.id) {
-    await pushNotification(
-      task.createdById,
-      `${user.name} sent "${task.title}" for your review`,
-      `/tasks/${taskId}`
-    );
+    const owner = await db.user.findUnique({ where: { id: task.createdById } });
+    if (owner) await notifyReviewNeeded({ owner, task, actor: user });
   }
 
   if (status === "DONE") {
-    // Tell the task creator when someone else completes their task.
+    // Stop any running timers on this task and bank their time — a completed
+    // task shouldn't keep accruing time for anyone.
+    await commitTimersForTask(taskId);
+
+    // Tell the task owner (in-app + email) when someone else completes their task.
     if (task.createdById !== user.id) {
-      await pushNotification(
-        task.createdById,
-        `${user.name} completed: ${task.title}`,
-        `/tasks/${taskId}`
-      );
+      const owner = await db.user.findUnique({ where: { id: task.createdById } });
+      if (owner) await notifyCompletion({ owner, task, actor: user });
+    }
+    // If this completion approves submitted work (was in Review), tell the assignee.
+    if (task.status === "REVIEW" && task.assigneeId && task.assigneeId !== user.id) {
+      const assignee = await db.user.findUnique({ where: { id: task.assigneeId } });
+      if (assignee) await notifyApproval({ assignee, task, actor: user });
     }
     // Notify assignees of tasks this one was blocking that are now unblocked.
     const dependents = await db.taskDependency.findMany({
@@ -222,31 +387,10 @@ async function changeStatus(
       );
     }
 
-    // Recurring tasks spawn their next occurrence when completed.
-    if (task.recurrence && task.dueDate && !task.parentId) {
-      const next = await db.task.create({
-        data: {
-          title: task.title,
-          description: task.description,
-          priority: task.priority,
-          projectId: task.projectId,
-          assigneeId: task.assigneeId,
-          createdById: task.createdById,
-          startDate: task.startDate ? advanceDate(task.startDate, task.recurrence) : null,
-          dueDate: advanceDate(task.dueDate, task.recurrence),
-          recurrence: task.recurrence,
-          estimateHours: task.estimateHours,
-        },
-      });
-      await logActivity(next.id, user.id, "created");
-      if (next.assigneeId && next.assigneeId !== user.id) {
-        await pushNotification(
-          next.assigneeId,
-          `Recurring task ready: ${next.title}`,
-          `/tasks/${next.id}`
-        );
-      }
-    }
+    // Note: recurring tasks no longer spawn their next occurrence here. A
+    // nightly job (scripts/recurring.ts) rolls each series forward once per
+    // day — archiving the finished/missed instance and creating the new day's
+    // copy — so completing early never creates a same-day duplicate.
   }
   return "ok";
 }
@@ -257,7 +401,7 @@ export async function setTaskStatus(formData: FormData) {
   const status = String(formData.get("status") ?? "");
   const back = String(formData.get("back") ?? `/tasks/${id}`);
 
-  const result = await changeStatus(user, id, status);
+  const result = await changeStatus(user, id, status, true);
   await revalidateTaskViews(id);
   if (result === "blocked" || result === "needs-approval") {
     redirect(`${back}${back.includes("?") ? "&" : "?"}error=${result}`);
@@ -272,13 +416,63 @@ export async function setTaskStatus(formData: FormData) {
 export async function moveTask(taskId: number, status: string) {
   const user = await requireUser();
   if (!STATUSES.includes(status)) return;
-  const task = await db.task.findUnique({ where: { id: taskId } });
+  const task = await db.task.findUnique({
+    where: { id: taskId },
+    include: { collaborators: { select: { userId: true } } },
+  });
   if (!task || task.deletedAt) return;
-  if (task.assigneeId !== user.id && !isManagerOrAdmin(user.role)) return;
+  if (!canChangeStatus(user, task)) return;
   if (task.status === status) return;
 
-  await changeStatus(user, taskId, status);
+  await changeStatus(user, taskId, status, true);
   await revalidateTaskViews(taskId);
+}
+
+// --- Task collaborators ------------------------------------------------------
+
+/** Owner, assignee, or a manager/admin may manage a task's collaborators. */
+function canManageCollaborators(
+  user: { id: number; role: string },
+  task: { createdById: number; assigneeId: number | null }
+) {
+  return isManagerOrAdmin(user.role) || task.createdById === user.id || task.assigneeId === user.id;
+}
+
+export async function addTaskCollaborator(formData: FormData) {
+  const user = await requireUser();
+  const taskId = Number(formData.get("taskId"));
+  const userId = Number(formData.get("userId"));
+  if (!taskId || !userId) redirect(`/tasks/${taskId || ""}`);
+
+  const task = await db.task.findUnique({ where: { id: taskId } });
+  if (!task || task.deletedAt) redirect("/tasks");
+  if (!canManageCollaborators(user, task)) redirect(`/tasks/${taskId}?error=forbidden`);
+
+  // Skip if it's the assignee already; addCollaborator handles inactive users.
+  if (userId === task.assigneeId) redirect(`/tasks/${taskId}`);
+  await addCollaborator(taskId, userId, task.title, user);
+  await revalidateTaskViews(taskId);
+  redirect(`/tasks/${taskId}`);
+}
+
+export async function removeTaskCollaborator(formData: FormData) {
+  const user = await requireUser();
+  const taskId = Number(formData.get("taskId"));
+  const userId = Number(formData.get("userId"));
+  if (!taskId || !userId) redirect(`/tasks/${taskId || ""}`);
+
+  const task = await db.task.findUnique({ where: { id: taskId } });
+  if (!task || task.deletedAt) redirect("/tasks");
+  // A collaborator can remove themselves; otherwise owner/assignee/manager only.
+  if (!canManageCollaborators(user, task) && userId !== user.id) {
+    redirect(`/tasks/${taskId}?error=forbidden`);
+  }
+
+  await db.taskCollaborator.deleteMany({ where: { taskId, userId } });
+  const person = await db.user.findUnique({ where: { id: userId }, select: { name: true } });
+  await logActivity(taskId, user.id, "details", `removed ${person?.name ?? "a collaborator"} from collaborators`);
+  await revalidateTaskViews(taskId);
+  redirect(`/tasks/${taskId}`);
 }
 
 export async function deleteTask(formData: FormData) {
@@ -354,6 +548,38 @@ export async function sendTaskReminder(formData: FormData) {
   redirect(`/tasks/${id}?ok=reminder`);
 }
 
+/** Follow a task to get notified of status changes and new comments. */
+export async function watchTask(formData: FormData) {
+  const user = await requireUser();
+  const taskId = Number(formData.get("taskId"));
+  if (!taskId) redirect("/tasks");
+  const task = await db.task.findFirst({ where: { id: taskId, deletedAt: null }, select: { id: true } });
+  if (task) {
+    await db.taskWatcher.upsert({
+      where: { taskId_userId: { taskId, userId: user.id } },
+      create: { taskId, userId: user.id },
+      update: {},
+    });
+  }
+  revalidatePath(`/tasks/${taskId}`);
+  redirect(`/tasks/${taskId}`);
+}
+
+export async function unwatchTask(formData: FormData) {
+  const user = await requireUser();
+  const taskId = Number(formData.get("taskId"));
+  if (!taskId) redirect("/tasks");
+  await db.taskWatcher.deleteMany({ where: { taskId, userId: user.id } });
+  revalidatePath(`/tasks/${taskId}`);
+  redirect(`/tasks/${taskId}`);
+}
+
+/** The user ids watching a task, excluding one actor (who triggered the event). */
+async function watcherIds(taskId: number, exclude: number): Promise<number[]> {
+  const rows = await db.taskWatcher.findMany({ where: { taskId, userId: { not: exclude } }, select: { userId: true } });
+  return rows.map((r) => r.userId);
+}
+
 export async function addComment(formData: FormData) {
   const user = await requireUser();
   const taskId = Number(formData.get("taskId"));
@@ -368,11 +594,28 @@ export async function addComment(formData: FormData) {
 
   await db.taskComment.create({ data: { taskId, body, authorId: user.id } });
 
-  // Notify the assignee and the task creator, except whoever wrote the comment.
+  // Resolve any @mentions in the comment against the active directory and ping
+  // those people directly — they get a mention notification instead of (not in
+  // addition to) the generic "commented" one.
+  const directory = await db.user.findMany({ where: { active: true }, select: { id: true, name: true } });
+  const mentionedIds = new Set(findMentionedIds(body, directory));
+  mentionedIds.delete(user.id);
+  for (const id of Array.from(mentionedIds)) {
+    await pushNotification(id, `${user.name} mentioned you on: ${task.title}`, `/tasks/${taskId}`);
+  }
+
+  // Notify the assignee, the task creator, and anyone watching the task, except
+  // whoever wrote the comment and anyone already pinged by name above.
   const recipients = new Map<number, { id: number; email: string; name: string }>();
   if (task.assignee?.active) recipients.set(task.assignee.id, task.assignee);
   if (task.createdBy.active) recipients.set(task.createdBy.id, task.createdBy);
+  const watchers = await db.taskWatcher.findMany({
+    where: { taskId, user: { active: true } },
+    select: { user: { select: { id: true, email: true, name: true } } },
+  });
+  for (const w of watchers) recipients.set(w.user.id, w.user);
   recipients.delete(user.id);
+  for (const id of Array.from(mentionedIds)) recipients.delete(id);
 
   await notifyComment({
     recipients: Array.from(recipients.values()),
@@ -473,7 +716,10 @@ export async function bulkTaskAction(formData: FormData) {
     .filter((n) => Number.isFinite(n) && n > 0);
 
   for (const id of ids) {
-    const task = await db.task.findUnique({ where: { id } });
+    const task = await db.task.findUnique({
+      where: { id },
+      include: { collaborators: { select: { userId: true } } },
+    });
     if (!task || task.deletedAt) continue;
 
     if (op === "status") {

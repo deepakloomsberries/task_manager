@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
-import { pushNotification } from "@/lib/notify";
+import { pushNotification, logActivity } from "@/lib/notify";
 import { parseHours } from "@/lib/ui";
 import { weekStartOf } from "@/lib/timerange";
 
@@ -17,10 +17,35 @@ async function weekLocked(userId: number, date: Date | string) {
   return !!sub && (sub.status === "SUBMITTED" || sub.status === "APPROVED");
 }
 
+/**
+ * Resolves the hours and optional precise window from the form. A person can
+ * either type hours directly, or give a start + end time (HH:MM) on the date —
+ * in which case the hours are derived and the window is recorded.
+ */
+function resolveWindow(formData: FormData, date: string): {
+  hours: number | null;
+  startedAt: Date | null;
+  endedAt: Date | null;
+} {
+  const start = String(formData.get("start") ?? "").trim();
+  const end = String(formData.get("end") ?? "").trim();
+  const ok = /^\d{2}:\d{2}$/;
+  if (date && ok.test(start) && ok.test(end)) {
+    const startedAt = new Date(`${date}T${start}:00`);
+    const endedAt = new Date(`${date}T${end}:00`);
+    if (!isNaN(startedAt.getTime()) && !isNaN(endedAt.getTime()) && endedAt > startedAt) {
+      const hours = Math.round(((endedAt.getTime() - startedAt.getTime()) / 3600000) * 60) / 60;
+      return { hours, startedAt, endedAt };
+    }
+    return { hours: null, startedAt: null, endedAt: null }; // bad range → invalid
+  }
+  return { hours: parseHours(String(formData.get("hours") ?? "")), startedAt: null, endedAt: null };
+}
+
 export async function createTimeEntry(formData: FormData) {
   const user = await requireUser();
   const date = String(formData.get("date") ?? "");
-  const hours = parseHours(String(formData.get("hours") ?? ""));
+  const { hours, startedAt, endedAt } = resolveWindow(formData, date);
   const taskId = formData.get("taskId") ? Number(formData.get("taskId")) : null;
   const projectId = formData.get("projectId") ? Number(formData.get("projectId")) : null;
   const note = String(formData.get("note") ?? "").trim() || null;
@@ -31,7 +56,7 @@ export async function createTimeEntry(formData: FormData) {
   }
 
   await db.timeEntry.create({
-    data: { userId: user.id, date: new Date(date), hours, taskId, projectId, note },
+    data: { userId: user.id, date: new Date(date), hours, startedAt, endedAt, taskId, projectId, note },
   });
   revalidatePath("/timesheet");
   redirect(backFrom(formData));
@@ -47,7 +72,7 @@ export async function updateTimeEntry(formData: FormData) {
   const user = await requireUser();
   const id = Number(formData.get("id"));
   const date = String(formData.get("date") ?? "");
-  const hours = parseHours(String(formData.get("hours") ?? ""));
+  const { hours, startedAt, endedAt } = resolveWindow(formData, date);
   const taskId = formData.get("taskId") ? Number(formData.get("taskId")) : null;
   const projectId = formData.get("projectId") ? Number(formData.get("projectId")) : null;
   const note = String(formData.get("note") ?? "").trim() || null;
@@ -68,7 +93,7 @@ export async function updateTimeEntry(formData: FormData) {
 
   await db.timeEntry.update({
     where: { id },
-    data: { date: new Date(date), hours, taskId, projectId, note },
+    data: { date: new Date(date), hours, startedAt, endedAt, taskId, projectId, note },
   });
   revalidatePath("/timesheet");
   redirect(back);
@@ -102,6 +127,8 @@ async function commitTimer(timer: { id: number; userId: number; taskId: number; 
         projectId: task?.projectId ?? null,
         date: new Date(timer.startedAt),
         hours,
+        startedAt: new Date(timer.startedAt),
+        endedAt: new Date(),
         note: timer.note,
         source: "timer",
       },
@@ -109,6 +136,33 @@ async function commitTimer(timer: { id: number; userId: number; taskId: number; 
     db.taskTimer.delete({ where: { id: timer.id } }),
   ]);
   return hours;
+}
+
+/**
+ * Stops every running timer on a task and banks the elapsed time. Called when a
+ * task is completed, so nobody keeps accruing time against finished work.
+ * Returns how many timers were stopped.
+ */
+export async function commitTimersForTask(taskId: number): Promise<number> {
+  const timers = await db.taskTimer.findMany({ where: { taskId } });
+  for (const t of timers) await commitTimer(t);
+  return timers.length;
+}
+
+/**
+ * Starts (or switches to) a user's stopwatch on a task. A person can only time
+ * one task at a time, so if they were already timing something else we bank that
+ * time first and then switch — the "what am I working on now" flow of Toggl or
+ * Harvest. No-ops if they're already timing this task. Shared by the Start-timer
+ * button and the auto-start when a task is moved to In Progress.
+ */
+export async function startTimerFor(userId: number, taskId: number) {
+  const existing = await db.taskTimer.findUnique({ where: { userId } });
+  if (existing) {
+    if (existing.taskId === taskId) return; // already timing this task
+    await commitTimer(existing);
+  }
+  await db.taskTimer.create({ data: { userId, taskId } });
 }
 
 /**
@@ -126,12 +180,19 @@ export async function startTaskTimer(formData: FormData) {
   if (!task) redirect("/tasks");
 
   const existing = await db.taskTimer.findUnique({ where: { userId: user.id } });
-  if (existing) {
-    if (existing.taskId === taskId) redirect(back); // already timing this task
-    await commitTimer(existing);
+  if (existing && existing.taskId === taskId) redirect(back); // already timing this task
+  await startTimerFor(user.id, taskId);
+
+  // Starting the clock means work has begun, so nudge a fresh task out of the
+  // backlog into "In Progress" automatically (only from To-Do — never override
+  // Review or Done).
+  if (task.status === "TODO") {
+    await db.task.update({ where: { id: taskId }, data: { status: "IN_PROGRESS" } });
+    await logActivity(taskId, user.id, "status", "TODO → IN_PROGRESS (timer started)");
+    revalidatePath(`/tasks/${taskId}`);
+    revalidatePath("/tasks");
   }
 
-  await db.taskTimer.create({ data: { userId: user.id, taskId } });
   revalidatePath(back);
   revalidatePath("/timesheet");
   redirect(back);
