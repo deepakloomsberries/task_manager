@@ -10,8 +10,10 @@ import {
 import { ROLES, lookup, fmtDate, isOnline, lastSeenLabel } from "@/lib/ui";
 import PasswordField from "@/components/PasswordField";
 import BulkUserImport from "@/components/BulkUserImport";
+import DeleteUserButton from "@/components/DeleteUserButton";
 import SearchSelect from "@/components/SearchSelect";
 import { PASSWORD_RULES } from "@/lib/password";
+import { USER_DATA_COUNT_SELECT, userHasData } from "@/lib/userData";
 
 export const dynamic = "force-dynamic";
 
@@ -19,10 +21,12 @@ const MESSAGES: Record<string, { text: string; error?: boolean }> = {
   created: { text: "User created. They have been emailed their login details and must change the password on first login." },
   updated: { text: "User updated." },
   reset: { text: "Password reset. The user has been emailed the new temporary password." },
+  deleted: { text: "User permanently deleted." },
   invalid: { text: "Invalid input. Please check the fields and try again.", error: true },
   exists: { text: "A user with that email already exists.", error: true },
   weak: { text: `Password is too weak. ${PASSWORD_RULES}`, error: true },
-  self: { text: "You cannot deactivate or demote your own admin account.", error: true },
+  self: { text: "You cannot deactivate, delete or demote your own admin account.", error: true },
+  notempty: { text: "That account can't be deleted — it has logged in or already has data. Deactivate it instead.", error: true },
 };
 
 export default async function UsersPage({
@@ -34,14 +38,14 @@ export default async function UsersPage({
 
   const [users, companies, departments] = await Promise.all([
     db.user.findMany({
-      include: { company: true, department: true },
+      include: { company: true, department: true, _count: { select: USER_DATA_COUNT_SELECT } },
       orderBy: [{ active: "desc" }, { name: "asc" }],
     }),
     db.company.findMany({ orderBy: { name: "asc" } }),
     db.department.findMany({ include: { company: true }, orderBy: { name: "asc" } }),
   ]);
 
-  const msgKey = ["created", "updated", "reset", "error"].find((k) => searchParams[k]);
+  const msgKey = ["created", "updated", "reset", "deleted", "error"].find((k) => searchParams[k]);
   const msg = searchParams.error
     ? MESSAGES[searchParams.error]
     : msgKey
@@ -162,6 +166,8 @@ export default async function UsersPage({
             {users.map((u) => {
               const role = lookup(ROLES, u.role);
               const isEditing = editId === u.id;
+              // A mistakenly-created account: never logged in, owns no data, not self.
+              const deletable = u.id !== admin.id && !u.lastSeenAt && !userHasData(u._count);
               return (
                 <tr key={u.id} className={u.active ? "hover:bg-slate-50" : "bg-slate-50 opacity-60"}>
                   {isEditing ? (
@@ -171,6 +177,10 @@ export default async function UsersPage({
                         <div>
                           <label className="label">Name</label>
                           <input name="name" defaultValue={u.name} required className="input" />
+                        </div>
+                        <div>
+                          <label className="label">Email</label>
+                          <input name="email" type="email" defaultValue={u.email} required className="input" />
                         </div>
                         <div>
                           <label className="label">Role</label>
@@ -279,6 +289,7 @@ export default async function UsersPage({
                               </button>
                             </form>
                           )}
+                          {deletable && <DeleteUserButton id={u.id} name={u.name} />}
                         </div>
                       </td>
                     </>

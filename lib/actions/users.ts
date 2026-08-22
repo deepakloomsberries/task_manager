@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 import { notifyUserWelcome, notifyPasswordReset } from "@/lib/mail";
 import { isStrongPassword } from "@/lib/password";
+import { USER_DATA_COUNT_SELECT, userHasData } from "@/lib/userData";
 
 const ROLES = ["ADMIN", "MANAGER", "EMPLOYEE"];
 
@@ -56,6 +57,7 @@ export async function updateUser(formData: FormData) {
   const admin = await requireAdmin();
   const id = Number(formData.get("id"));
   const name = String(formData.get("name") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const role = String(formData.get("role") ?? "EMPLOYEE");
   const companyId = Number(formData.get("companyId"));
   const departmentId = formData.get("departmentId")
@@ -64,14 +66,18 @@ export async function updateUser(formData: FormData) {
   const jobTitle = String(formData.get("jobTitle") ?? "").trim();
   const requiresApproval = formData.get("requiresApproval") === "on";
 
-  if (!id || !name || !ROLES.includes(role) || !companyId) redirect("/users?error=invalid");
+  if (!id || !name || !email || !ROLES.includes(role) || !companyId) redirect("/users?error=invalid");
   // An admin cannot demote themselves — prevents locking everyone out.
   if (id === admin.id && role !== "ADMIN") redirect("/users?error=self");
+  // Email must stay unique — allow keeping the current one, block collisions.
+  const clash = await db.user.findUnique({ where: { email }, select: { id: true } });
+  if (clash && clash.id !== id) redirect(`/users?error=exists&edit=${id}`);
 
   await db.user.update({
     where: { id },
     data: {
       name,
+      email,
       role,
       companyId,
       departmentId: departmentId || null,
@@ -81,6 +87,29 @@ export async function updateUser(formData: FormData) {
   });
   revalidatePath("/users");
   redirect("/users?updated=1");
+}
+
+/**
+ * Permanently delete a user — only allowed for an account that was created by
+ * mistake: it has never logged in and owns no data. Anything with history must
+ * be Deactivated instead (toggleUserActive), which keeps its records.
+ */
+export async function deleteUser(formData: FormData) {
+  const admin = await requireAdmin();
+  const id = Number(formData.get("id"));
+  if (!id || id === admin.id) redirect("/users?error=self");
+
+  const user = await db.user.findUnique({
+    where: { id },
+    select: { id: true, lastSeenAt: true, _count: { select: USER_DATA_COUNT_SELECT } },
+  });
+  if (!user) redirect("/users?error=invalid");
+  // Re-check the safety gate server-side (never trust the button being shown).
+  if (user.lastSeenAt || userHasData(user._count)) redirect(`/users?error=notempty&edit=${id}`);
+
+  await db.user.delete({ where: { id } });
+  revalidatePath("/users");
+  redirect("/users?deleted=1");
 }
 
 export async function resetUserPassword(formData: FormData) {
