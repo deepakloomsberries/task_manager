@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
@@ -65,6 +66,13 @@ async function revalidateTaskViews(taskId?: number) {
   revalidatePath("/calendar");
   revalidatePath("/trash");
   if (taskId) revalidatePath(`/tasks/${taskId}`);
+}
+
+/** Toggle whether the Tasks list shows recurring occurrences (managers/admins). */
+export async function setRecurringVisibility(formData: FormData) {
+  const show = formData.get("show") === "1";
+  cookies().set("showRecurring", show ? "1" : "0", { sameSite: "lax", path: "/" });
+  redirect(String(formData.get("back") ?? "/tasks"));
 }
 
 export async function createTask(formData: FormData) {

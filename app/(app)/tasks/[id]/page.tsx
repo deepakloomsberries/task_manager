@@ -536,30 +536,39 @@ export default async function TaskDetailPage({
                       );
                     }
                     const pillClass = `inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200 transition ${style.hover}`;
+                    // Confirm every status change (forward moves included).
+                    const approving = isDone && task.status === "REVIEW" && canEdit;
+                    const confirmLabel = isRevert
+                      ? reopening
+                        ? "Reopen"
+                        : "Move back"
+                      : approving
+                        ? "Approve"
+                        : isDone
+                          ? "Mark done"
+                          : "Move";
+                    const message = isRevert
+                      ? reopening
+                        ? `Reopen "${task.title}"? It will move back to ${s.label}.`
+                        : `Move "${task.title}" back to ${s.label}?`
+                      : approving
+                        ? `Approve and complete "${task.title}"?`
+                        : isDone
+                          ? `Mark "${task.title}" as done?`
+                          : `Move "${task.title}" to ${s.label}?`;
                     return (
                       <form key={s.value} action={setTaskStatus}>
                         <input type="hidden" name="id" value={task.id} />
                         <input type="hidden" name="status" value={s.value} />
-                        {isRevert ? (
-                          <ConfirmButton
-                            tone="primary"
-                            className={pillClass}
-                            confirmLabel={reopening ? "Reopen" : "Move back"}
-                            message={
-                              reopening
-                                ? `Reopen "${task.title}"? It will move back to ${s.label}.`
-                                : `Move "${task.title}" back to ${s.label}?`
-                            }
-                          >
-                            <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
-                            {label}
-                          </ConfirmButton>
-                        ) : (
-                          <button type="submit" className={pillClass}>
-                            <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
-                            {label}
-                          </button>
-                        )}
+                        <ConfirmButton
+                          tone="primary"
+                          className={pillClass}
+                          confirmLabel={confirmLabel}
+                          message={message}
+                        >
+                          <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
+                          {label}
+                        </ConfirmButton>
                       </form>
                     );
                   })}

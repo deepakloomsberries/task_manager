@@ -14,12 +14,15 @@ export type TaskListParams = {
   due?: string;
   blocked?: string;
   watching?: string;
+  collaborating?: string;
+  /** "1" hides recurring-series occurrences from the list (managers' default). */
+  hiderec?: string;
   sort?: string;
 };
 
 /** The query param keys that affect which tasks are shown (i.e. not view/UI state). */
 export const TASK_FILTER_KEYS: (keyof TaskListParams)[] = [
-  "status", "assignee", "project", "tag", "q", "open", "overdue", "due", "blocked", "watching", "sort",
+  "status", "assignee", "project", "tag", "q", "open", "overdue", "due", "blocked", "watching", "collaborating", "hiderec", "sort",
 ];
 
 export function buildTaskListQuery(sp: TaskListParams, userId: number) {
@@ -45,6 +48,14 @@ export function buildTaskListQuery(sp: TaskListParams, userId: number) {
   // Only tasks the current user is watching.
   if (sp.watching) {
     where.watchers = { some: { userId } };
+  }
+  // Only tasks the current user collaborates on (but isn't necessarily assigned).
+  if (sp.collaborating) {
+    where.collaborators = { some: { userId } };
+  }
+  // Hide recurring-series occurrences (the daily-generated tasks) from the list.
+  if (sp.hiderec === "1") {
+    where.seriesId = null;
   }
   if (sp.q) {
     const q = sp.q.trim();

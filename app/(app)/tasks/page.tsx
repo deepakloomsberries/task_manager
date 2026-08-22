@@ -2,7 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
-import { createTask, moveTask } from "@/lib/actions/tasks";
+import { createTask, moveTask, setRecurringVisibility } from "@/lib/actions/tasks";
 import Board, { type BoardTask } from "@/components/Board";
 import BulkTaskTable, { type ListRow } from "@/components/BulkTaskTable";
 import DatePicker from "@/components/DatePicker";
@@ -43,12 +43,22 @@ export default async function TasksPage({
     due?: string;
     blocked?: string;
     watching?: string;
+    collaborating?: string;
     sort?: string;
   };
 }) {
   const user = await requireUser();
+  const canManage = isManagerOrAdmin(user.role);
 
-  const { where, orderBy } = buildTaskListQuery(searchParams, user.id);
+  // Managers/admins don't see the daily recurring occurrences in this list by
+  // default (they'd flood it) — a toggle, remembered in a cookie, shows them.
+  const showRecurring = cookies().get("showRecurring")?.value === "1";
+  const hideRecurring = canManage && !showRecurring;
+
+  const { where, orderBy } = buildTaskListQuery(
+    { ...searchParams, hiderec: hideRecurring ? "1" : undefined },
+    user.id
+  );
 
   const [tasks, users, projects, allTags, savedViews] = await Promise.all([
     db.task.findMany({
@@ -79,7 +89,6 @@ export default async function TasksPage({
   const cookieView = cookies().get("taskView")?.value;
   const boardView = searchParams.view ? searchParams.view === "board" : cookieView === "board";
   const viewParam = boardView ? "board" : "list";
-  const canManage = isManagerOrAdmin(user.role);
 
   const query = new URLSearchParams();
   for (const [k, v] of Object.entries(searchParams)) {
@@ -93,9 +102,10 @@ export default async function TasksPage({
   // Export the currently-applied filter view (managers/admins only).
   const filterQuery = new URLSearchParams();
   for (const k of TASK_FILTER_KEYS) {
-    const v = searchParams[k];
+    const v = (searchParams as Record<string, string | undefined>)[k];
     if (v) filterQuery.set(k, v);
   }
+  if (hideRecurring) filterQuery.set("hiderec", "1");
   const exportHref = `/api/export/tasks${filterQuery.toString() ? `?${filterQuery}` : ""}`;
 
   // Saved views (personal quick views): the current filters as a string, the URL
@@ -170,6 +180,19 @@ export default async function TasksPage({
             </Link>
           </div>
           {canManage && (
+            <form action={setRecurringVisibility}>
+              <input type="hidden" name="show" value={showRecurring ? "0" : "1"} />
+              <input type="hidden" name="back" value={currentHref} />
+              <button
+                type="submit"
+                className="btn-secondary"
+                title={showRecurring ? "Hide the daily recurring tasks from this list" : "Show the daily recurring tasks in this list"}
+              >
+                {showRecurring ? "↻ Hide recurring" : "↻ Show recurring"}
+              </button>
+            </form>
+          )}
+          {canManage && (
             <Link href={showImport ? listHref : "/tasks?import=1"} className="btn-secondary">
               {showImport ? "Close" : "⇧ Import"}
             </Link>
@@ -203,6 +226,16 @@ export default async function TasksPage({
           }`}
         >
           Assigned to me
+        </Link>
+        <Link
+          href={`/tasks?collaborating=1&view=${viewParam}`}
+          className={`rounded-full px-3 py-1 text-xs font-medium ${
+            searchParams.collaborating
+              ? "bg-sky-600 text-white"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+          }`}
+        >
+          🤝 Collaborating
         </Link>
         <Link
           href={`/tasks?blocked=1&view=${viewParam}`}

@@ -73,6 +73,7 @@ export default async function RecurringPage({
     seriesId: string;
     title: string;
     assignee: string | null;
+    openId: number; // the most recent occurrence, to open from the row
     cells: Map<string, Cell>;
     lastDone: Date | null;
     doneCount: number;
@@ -86,12 +87,13 @@ export default async function RecurringPage({
   for (const t of rows) {
     let s = series.get(t.seriesId!);
     if (!s) {
-      s = { seriesId: t.seriesId!, title: t.title, assignee: t.assignee?.name ?? null, cells: new Map(), lastDone: null, doneCount: 0, missedCount: 0 };
+      s = { seriesId: t.seriesId!, title: t.title, assignee: t.assignee?.name ?? null, openId: t.id, cells: new Map(), lastDone: null, doneCount: 0, missedCount: 0 };
       series.set(t.seriesId!, s);
     }
-    // Keep the most recent title/assignee as the label.
+    // Keep the most recent title/assignee/id as the label (rows are date-asc).
     s.title = t.title;
     s.assignee = t.assignee?.name ?? s.assignee;
+    s.openId = t.id;
     if (!t.dueDate) continue;
     const key = ymd(t.dueDate);
     const past = key < todayKey;
@@ -256,8 +258,10 @@ export default async function RecurringPage({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
               {list.map((s) => (
                 <tr key={s.seriesId} className="hover:bg-slate-50 dark:hover:bg-slate-700/40">
-                  <td className="sticky left-0 z-10 max-w-72 truncate bg-white px-3 py-2 dark:bg-slate-800">
-                    <div className="truncate font-medium" title={s.title}>{s.title}</div>
+                  <td className="sticky left-0 z-10 w-80 min-w-[16rem] max-w-[24rem] bg-white px-3 py-2 dark:bg-slate-800">
+                    <Link href={`/tasks/${s.openId}`} className="block font-medium hover:text-sky-600 hover:underline" title={s.title}>
+                      <span className="line-clamp-2">{s.title}</span>
+                    </Link>
                     {s.assignee && <div className="text-[11px] text-slate-400">{s.assignee}</div>}
                   </td>
                   {days.map((d) => {
