@@ -210,3 +210,72 @@ export function notifyTaskComment(opts: {
     emailShell("New comment on your task", lines, `${APP_URL}/tasks/${opts.taskId}`, "View discussion")
   );
 }
+
+/** To the task owner when someone else completes their task. */
+export function notifyTaskCompleted(opts: {
+  to: string;
+  ownerName: string;
+  taskId: number;
+  taskTitle: string;
+  completedBy: string;
+}) {
+  const lines = [
+    `Hi ${esc(opts.ownerName)},`,
+    `<b>${esc(opts.completedBy)}</b> marked the task <b>${esc(opts.taskTitle)}</b> as done.`,
+    `Open it to review the work or its logged time.`,
+  ];
+  sendMail(
+    opts.to,
+    `Task completed: ${opts.taskTitle}`,
+    emailShell("A task was completed", lines, `${APP_URL}/tasks/${opts.taskId}`, "Open task")
+  );
+}
+
+/** To the assignee when the owner approves their submitted (in-review) work. */
+export function notifyTaskApproved(opts: {
+  to: string;
+  assigneeName: string;
+  taskId: number;
+  taskTitle: string;
+  approvedBy: string;
+}) {
+  const lines = [
+    `Hi ${esc(opts.assigneeName)},`,
+    `<b>${esc(opts.approvedBy)}</b> approved and completed your task <b>${esc(opts.taskTitle)}</b>.`,
+    `Nice work — no further action is needed.`,
+  ];
+  sendMail(
+    opts.to,
+    `Approved & done: ${opts.taskTitle}`,
+    emailShell("Your task was approved", lines, `${APP_URL}/tasks/${opts.taskId}`, "Open task")
+  );
+}
+
+/** To the assignee when the owner sends work back for changes or reopens a done task. */
+export function notifyTaskReopened(opts: {
+  to: string;
+  assigneeName: string;
+  taskId: number;
+  taskTitle: string;
+  reopenedBy: string;
+  newStatus: string;
+  sentBack: boolean;
+}) {
+  const lines = [
+    `Hi ${esc(opts.assigneeName)},`,
+    opts.sentBack
+      ? `<b>${esc(opts.reopenedBy)}</b> sent the task <b>${esc(opts.taskTitle)}</b> back for changes.`
+      : `<b>${esc(opts.reopenedBy)}</b> reopened the task <b>${esc(opts.taskTitle)}</b>.`,
+    `It's now <b>${esc(opts.newStatus)}</b> — please pick it back up.`,
+  ];
+  sendMail(
+    opts.to,
+    opts.sentBack ? `Changes requested: ${opts.taskTitle}` : `Task reopened: ${opts.taskTitle}`,
+    emailShell(
+      opts.sentBack ? "A task needs changes" : "A task was reopened",
+      lines,
+      `${APP_URL}/tasks/${opts.taskId}`,
+      "Open task"
+    )
+  );
+}

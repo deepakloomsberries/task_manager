@@ -1,5 +1,13 @@
 import { db } from "./db";
-import { notifyTaskAssigned, notifyTaskComment, notifyTaskReminder, notifyReviewRequested } from "./mail";
+import {
+  notifyTaskAssigned,
+  notifyTaskComment,
+  notifyTaskReminder,
+  notifyReviewRequested,
+  notifyTaskCompleted,
+  notifyTaskApproved,
+  notifyTaskReopened,
+} from "./mail";
 import { sendPushToUser } from "./push";
 
 /** Creates an in-app notification and fires a matching Web Push (if enabled). */
@@ -71,6 +79,81 @@ export async function notifyReviewNeeded(opts: {
       taskId: opts.task.id,
       taskTitle: opts.task.title,
       sentBy: opts.actor.name,
+    });
+  }
+}
+
+/** In-app notification + email to the task owner when their task is completed. */
+export async function notifyCompletion(opts: {
+  owner: { id: number; email: string; name: string; active: boolean; emailNotifications?: boolean };
+  task: { id: number; title: string };
+  actor: { id: number; name: string };
+}) {
+  if (!opts.owner.active || opts.owner.id === opts.actor.id) return;
+  await pushNotification(
+    opts.owner.id,
+    `${opts.actor.name} completed: ${opts.task.title}`,
+    `/tasks/${opts.task.id}`
+  );
+  if (await wantsEmail(opts.owner)) {
+    notifyTaskCompleted({
+      to: opts.owner.email,
+      ownerName: opts.owner.name,
+      taskId: opts.task.id,
+      taskTitle: opts.task.title,
+      completedBy: opts.actor.name,
+    });
+  }
+}
+
+/** In-app notification + email to the assignee when their in-review work is approved. */
+export async function notifyApproval(opts: {
+  assignee: { id: number; email: string; name: string; active: boolean; emailNotifications?: boolean };
+  task: { id: number; title: string };
+  actor: { id: number; name: string };
+}) {
+  if (!opts.assignee.active || opts.assignee.id === opts.actor.id) return;
+  await pushNotification(
+    opts.assignee.id,
+    `${opts.actor.name} approved & completed your task: ${opts.task.title}`,
+    `/tasks/${opts.task.id}`
+  );
+  if (await wantsEmail(opts.assignee)) {
+    notifyTaskApproved({
+      to: opts.assignee.email,
+      assigneeName: opts.assignee.name,
+      taskId: opts.task.id,
+      taskTitle: opts.task.title,
+      approvedBy: opts.actor.name,
+    });
+  }
+}
+
+/** In-app notification + email to the assignee when work is sent back or reopened. */
+export async function notifyReopened(opts: {
+  assignee: { id: number; email: string; name: string; active: boolean; emailNotifications?: boolean };
+  task: { id: number; title: string };
+  actor: { id: number; name: string };
+  newStatus: string;
+  sentBack: boolean;
+}) {
+  if (!opts.assignee.active || opts.assignee.id === opts.actor.id) return;
+  await pushNotification(
+    opts.assignee.id,
+    opts.sentBack
+      ? `${opts.actor.name} sent "${opts.task.title}" back for changes`
+      : `${opts.actor.name} reopened: ${opts.task.title}`,
+    `/tasks/${opts.task.id}`
+  );
+  if (await wantsEmail(opts.assignee)) {
+    notifyTaskReopened({
+      to: opts.assignee.email,
+      assigneeName: opts.assignee.name,
+      taskId: opts.task.id,
+      taskTitle: opts.task.title,
+      reopenedBy: opts.actor.name,
+      newStatus: opts.newStatus,
+      sentBack: opts.sentBack,
     });
   }
 }

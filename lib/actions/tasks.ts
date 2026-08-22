@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
-import { notifyAssignment, notifyComment, notifyReminder, notifyReviewNeeded, pushNotification, logActivity } from "@/lib/notify";
+import { notifyAssignment, notifyComment, notifyReminder, notifyReviewNeeded, notifyCompletion, notifyApproval, notifyReopened, pushNotification, logActivity } from "@/lib/notify";
 import { notifyCollaboratorAdded } from "@/lib/mail";
 import { findMentionedIds } from "@/lib/mentions";
 import { companyTimezone, zonedStartOfToday } from "@/lib/tz";
@@ -329,6 +329,15 @@ async function changeStatus(
     await pushNotification(wid, `${task.title}: ${from} → ${to}`, `/tasks/${taskId}`);
   }
 
+  // Work moved backward by someone other than the assignee — tell the assignee.
+  // "Sent back" = pulled out of review; "reopened" = a done task made active again.
+  const sentBack = task.status === "REVIEW" && (status === "TODO" || status === "IN_PROGRESS");
+  const reopened = task.status === "DONE" && status !== "DONE";
+  if ((sentBack || reopened) && task.assigneeId && task.assigneeId !== user.id) {
+    const assignee = await db.user.findUnique({ where: { id: task.assigneeId } });
+    if (assignee) await notifyReopened({ assignee, task, actor: user, newStatus: to, sentBack });
+  }
+
   // Moving your own task to In Progress starts the stopwatch — the mirror of
   // completing it, which stops the timer. Only for the assignee/collaborator
   // actually doing the work (never a manager moving someone else's task), and
@@ -350,13 +359,15 @@ async function changeStatus(
     // task shouldn't keep accruing time for anyone.
     await commitTimersForTask(taskId);
 
-    // Tell the task creator when someone else completes their task.
+    // Tell the task owner (in-app + email) when someone else completes their task.
     if (task.createdById !== user.id) {
-      await pushNotification(
-        task.createdById,
-        `${user.name} completed: ${task.title}`,
-        `/tasks/${taskId}`
-      );
+      const owner = await db.user.findUnique({ where: { id: task.createdById } });
+      if (owner) await notifyCompletion({ owner, task, actor: user });
+    }
+    // If this completion approves submitted work (was in Review), tell the assignee.
+    if (task.status === "REVIEW" && task.assigneeId && task.assigneeId !== user.id) {
+      const assignee = await db.user.findUnique({ where: { id: task.assigneeId } });
+      if (assignee) await notifyApproval({ assignee, task, actor: user });
     }
     // Notify assignees of tasks this one was blocking that are now unblocked.
     const dependents = await db.taskDependency.findMany({
