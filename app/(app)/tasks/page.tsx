@@ -10,6 +10,7 @@ import SearchSelect from "@/components/SearchSelect";
 import MultiSelect from "@/components/MultiSelect";
 import RememberTaskView from "@/components/RememberTaskView";
 import SaveViewButton from "@/components/SaveViewButton";
+import BulkTaskImport from "@/components/BulkTaskImport";
 import { deleteSavedView } from "@/lib/actions/savedViews";
 import { buildTaskListQuery, TASK_FILTER_KEYS } from "@/lib/taskFilters";
 import {
@@ -35,6 +36,7 @@ export default async function TasksPage({
     tag?: string;
     q?: string;
     new?: string;
+    import?: string;
     view?: string;
     open?: string;
     overdue?: string;
@@ -71,6 +73,7 @@ export default async function TasksPage({
   ]);
 
   const showNew = searchParams.new === "1";
+  const showImport = searchParams.import === "1";
   // Remember the last view (list/board) between visits via a cookie, so
   // switching tabs and coming back doesn't reset the board to the list.
   const cookieView = cookies().get("taskView")?.value;
@@ -80,7 +83,7 @@ export default async function TasksPage({
 
   const query = new URLSearchParams();
   for (const [k, v] of Object.entries(searchParams)) {
-    if (v && k !== "view" && k !== "new") query.set(k, v);
+    if (v && k !== "view" && k !== "new" && k !== "import") query.set(k, v);
   }
   const baseQuery = query.toString();
   const withView = (view: string) => `/tasks?${baseQuery ? `${baseQuery}&` : ""}view=${view}`;
@@ -166,11 +169,18 @@ export default async function TasksPage({
               Board
             </Link>
           </div>
+          {canManage && (
+            <Link href={showImport ? listHref : "/tasks?import=1"} className="btn-secondary">
+              {showImport ? "Close" : "⇧ Import"}
+            </Link>
+          )}
           <Link href={showNew ? listHref : "/tasks?new=1"} className="btn-primary">
             {showNew ? "Close" : "+ New Task"}
           </Link>
         </div>
       </div>
+
+      {showImport && canManage && <BulkTaskImport />}
 
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium text-slate-400">Quick view:</span>
