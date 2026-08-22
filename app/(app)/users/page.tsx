@@ -239,7 +239,9 @@ export default async function UsersPage({
                     <>
                       <td className="td font-medium">
                         <span className="flex items-center gap-1.5">
-                          {u.name}
+                          <Link href={`/people/${u.id}`} className="hover:text-sky-600 hover:underline">
+                            {u.name}
+                          </Link>
                           {u.requiresApproval && (
                             <span
                               title="Requires completion approval"

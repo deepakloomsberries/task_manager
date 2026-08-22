@@ -5,7 +5,19 @@ import { deleteUser } from "@/lib/actions/users";
 /** Hard-delete action for a mistakenly-created account. Only rendered for users
  *  that never logged in and own no data; still asks for confirmation because
  *  the delete is permanent. */
-export default function DeleteUserButton({ id, name }: { id: number; name: string }) {
+export default function DeleteUserButton({
+  id,
+  name,
+  redirectTo,
+  className = "text-red-600 hover:underline",
+  label = "Delete",
+}: {
+  id: number;
+  name: string;
+  redirectTo?: string;
+  className?: string;
+  label?: string;
+}) {
   return (
     <form
       action={deleteUser}
@@ -20,8 +32,9 @@ export default function DeleteUserButton({ id, name }: { id: number; name: strin
       }}
     >
       <input type="hidden" name="id" value={id} />
-      <button type="submit" className="text-red-600 hover:underline">
-        Delete
+      {redirectTo && <input type="hidden" name="redirectTo" value={redirectTo} />}
+      <button type="submit" className={className}>
+        {label}
       </button>
     </form>
   );

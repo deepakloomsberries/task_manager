@@ -4,18 +4,35 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import UserAvatar from "@/components/UserAvatar";
 import { LiveWorkingCard } from "@/components/ActiveTimers";
+import PasswordField from "@/components/PasswordField";
+import SearchSelect from "@/components/SearchSelect";
+import DeleteUserButton from "@/components/DeleteUserButton";
+import { updateUser, resetUserPassword, toggleUserActive } from "@/lib/actions/users";
 import {
   TASK_STATUSES,
   TASK_PRIORITIES,
+  ROLES,
   lookup,
   fmtDate,
   fmtHours,
   lastSeenLabel,
   isOverdue,
 } from "@/lib/ui";
+import { PASSWORD_RULES } from "@/lib/password";
+import { USER_DATA_COUNT_SELECT, userHasData } from "@/lib/userData";
 import { weekStartOf } from "@/lib/timerange";
 
 export const dynamic = "force-dynamic";
+
+const PROFILE_MESSAGES: Record<string, { text: string; error?: boolean }> = {
+  updated: { text: "Details saved." },
+  reset: { text: "Password reset. The user has been emailed the new temporary password." },
+  invalid: { text: "Invalid input. Please check the fields and try again.", error: true },
+  exists: { text: "A user with that email already exists.", error: true },
+  weak: { text: `Password is too weak. ${PASSWORD_RULES}`, error: true },
+  self: { text: "You cannot deactivate, delete or demote your own admin account.", error: true },
+  notempty: { text: "That account can't be deleted — it has logged in or already has data. Deactivate it instead.", error: true },
+};
 
 const ROLE_BADGE: Record<string, string> = {
   ADMIN: "bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300",
@@ -24,18 +41,43 @@ const ROLE_BADGE: Record<string, string> = {
 };
 const ROLE_LABEL: Record<string, string> = { ADMIN: "Admin", MANAGER: "Manager", EMPLOYEE: "Employee" };
 
-export default async function PersonProfilePage({ params }: { params: { id: string } }) {
+export default async function PersonProfilePage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams: Record<string, string | undefined>;
+}) {
   const viewer = await requireUser();
   const id = Number(params.id);
   if (!id) notFound();
 
   const person = await db.user.findUnique({
     where: { id },
-    include: { company: true, department: true, activeTimer: { include: { task: true } } },
+    include: {
+      company: true,
+      department: true,
+      activeTimer: { include: { task: true } },
+      _count: { select: USER_DATA_COUNT_SELECT },
+    },
   });
   if (!person) notFound();
 
   const isSelf = person.id === viewer.id;
+  const isAdmin = viewer.role === "ADMIN";
+
+  // Admin-only account management on the profile: edit details, reset password,
+  // (de)activate, and delete mistakenly-created empty accounts.
+  const [companies, departments] = isAdmin
+    ? await Promise.all([
+        db.company.findMany({ orderBy: { name: "asc" } }),
+        db.department.findMany({ include: { company: true }, orderBy: { name: "asc" } }),
+      ])
+    : [[], []];
+  const deletable = isAdmin && person.id !== viewer.id && !person.lastSeenAt && !userHasData(person._count);
+  const msgKey = searchParams.error ?? ["updated", "reset"].find((k) => searchParams[k]);
+  const profileMsg = msgKey ? PROFILE_MESSAGES[msgKey] : null;
+  const backParam = `/people/${id}`;
   const now = new Date();
   const weekStart = weekStartOf(now);
 
@@ -167,9 +209,110 @@ export default async function PersonProfilePage({ params }: { params: { id: stri
                 Edit profile
               </Link>
             )}
+            {isAdmin && !isSelf && (
+              <a href={`${backParam}?manage=1#manage`} className="btn-secondary text-sm">
+                ⚙ Edit account
+              </a>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Admin: manage this account */}
+      {isAdmin && !isSelf && (
+        <details id="manage" open={searchParams.manage === "1" || !!profileMsg} className="card p-5">
+          <summary className="cursor-pointer select-none font-semibold">
+            ⚙ Manage account <span className="text-xs font-normal text-slate-400">— admin</span>
+          </summary>
+
+          {profileMsg && (
+            <div
+              className={`mt-4 rounded-lg border px-4 py-3 text-sm ${
+                profileMsg.error
+                  ? "border-red-200 bg-red-50 text-red-700"
+                  : "border-green-200 bg-green-50 text-green-700"
+              }`}
+            >
+              {profileMsg.text}
+            </div>
+          )}
+
+          <form action={updateUser} className="mt-4 grid items-end gap-3 md:grid-cols-2">
+            <input type="hidden" name="id" value={person.id} />
+            <input type="hidden" name="redirectTo" value={backParam} />
+            <div>
+              <label className="label">Name</label>
+              <input name="name" defaultValue={person.name} required className="input" />
+            </div>
+            <div>
+              <label className="label">Email</label>
+              <input name="email" type="email" defaultValue={person.email} required className="input" />
+            </div>
+            <div>
+              <label className="label">Role</label>
+              <SearchSelect name="role" defaultValue={person.role} options={ROLES.map((r) => ({ value: r.value, label: r.label }))} />
+            </div>
+            <div>
+              <label className="label">Company</label>
+              <SearchSelect name="companyId" defaultValue={String(person.companyId)} options={companies.map((c) => ({ value: String(c.id), label: c.name }))} />
+            </div>
+            <div>
+              <label className="label">Department</label>
+              <SearchSelect
+                name="departmentId"
+                defaultValue={person.departmentId ? String(person.departmentId) : ""}
+                placeholder="— None —"
+                searchPlaceholder="Search departments…"
+                options={[{ value: "", label: "— None —" }, ...departments.map((d) => ({ value: String(d.id), label: `${d.name} (${d.company.code})` }))]}
+              />
+            </div>
+            <div>
+              <label className="label">Job title</label>
+              <input name="jobTitle" defaultValue={person.jobTitle ?? ""} className="input" />
+            </div>
+            <label className="flex items-center gap-2 md:col-span-2">
+              <input type="checkbox" name="requiresApproval" defaultChecked={person.requiresApproval} className="h-4 w-4 rounded border-slate-300" />
+              <span className="text-sm text-slate-600 dark:text-slate-300">
+                Requires completion approval (can only send tasks to Review)
+              </span>
+            </label>
+            <div className="md:col-span-2">
+              <button type="submit" className="btn-primary">Save details</button>
+            </div>
+          </form>
+
+          <form action={resetUserPassword} className="mt-4 flex flex-wrap items-end gap-3 border-t border-slate-100 pt-4 dark:border-slate-700">
+            <input type="hidden" name="id" value={person.id} />
+            <input type="hidden" name="redirectTo" value={backParam} />
+            <div className="w-72 max-w-full">
+              <label className="label">Reset password</label>
+              <PasswordField name="password" withGenerate showStrength />
+            </div>
+            <button type="submit" className="btn-secondary">Reset password</button>
+          </form>
+
+          <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-slate-100 pt-4 text-sm dark:border-slate-700">
+            <form action={toggleUserActive}>
+              <input type="hidden" name="id" value={person.id} />
+              <input type="hidden" name="redirectTo" value={backParam} />
+              <button
+                type="submit"
+                className={person.active ? "text-red-600 hover:underline" : "text-green-600 hover:underline"}
+              >
+                {person.active ? "Deactivate account" : "Reactivate account"}
+              </button>
+            </form>
+            {deletable && (
+              <DeleteUserButton id={person.id} name={person.name} redirectTo={backParam} label="Delete account" />
+            )}
+            <span className="text-xs text-slate-400">
+              {person.active
+                ? "Deactivating hides them from assignment and blocks login, but keeps their history."
+                : "This account is deactivated."}
+            </span>
+          </div>
+        </details>
+      )}
 
       {/* Stat tiles */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
