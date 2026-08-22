@@ -117,7 +117,9 @@ model Task {
   priority       String        @default("MEDIUM") // LOW | MEDIUM | HIGH | URGENT
   startDate      DateTime?
   dueDate        DateTime?
-  recurrence     String? // null | DAILY | WEEKLY | MONTHLY — recreates on completion
+  recurrence     String? // null | DAILY | WEEKLY | MONTHLY — one instance per period
+  seriesId       String? // groups all daily/weekly/monthly occurrences of one recurring job
+  missedAt       DateTime? // set when a recurring occurrence rolled over without being done
   estimateHours  Float? // effort estimate in hours, powers the workload view
   project        Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
   projectId      Int?
@@ -155,6 +157,7 @@ model Task {
   @@index([dueDate])
   @@index([parentId])
   @@index([createdById])
+  @@index([seriesId])
 }
 
 /**

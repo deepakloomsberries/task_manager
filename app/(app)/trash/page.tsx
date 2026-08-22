@@ -34,6 +34,9 @@ export default async function TrashPage({
     db.task.findMany({
       where: {
         deletedAt: { not: null },
+        // Recurring occurrences are auto-archived by the nightly roll-over; they
+        // belong in the Recurring grid, not the Recycle bin.
+        seriesId: null,
         OR: [{ parentId: null }, { parent: { deletedAt: null } }],
         ...taskSearch,
       },

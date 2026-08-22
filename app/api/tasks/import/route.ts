@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import { db } from "@/lib/db";
 import { getSession, isManagerOrAdmin } from "@/lib/auth";
 import { pushNotification } from "@/lib/notify";
+import { seriesKeyFor } from "@/lib/recurrence";
 import { parseHours } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
@@ -334,8 +335,17 @@ export async function POST(req: NextRequest) {
     }
     try {
       if (plan.action === "create") {
+        const d = plan.data as { title: string; recurrence?: string | null; assigneeId?: number | null };
         const task = await db.task.create({
-          data: { ...(plan.data as { title: string }), createdById: me.id },
+          data: {
+            ...d,
+            seriesId: seriesKeyFor({
+              recurrence: d.recurrence ?? null,
+              assigneeId: d.assigneeId ?? null,
+              title: d.title,
+            }),
+            createdById: me.id,
+          },
         });
         idByPlan.set(plan, task.id);
         newIdByTitle.set(norm(task.title), task.id);

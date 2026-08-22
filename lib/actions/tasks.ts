@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import { notifyAssignment, notifyComment, notifyReminder, notifyReviewNeeded, notifyCompletion, notifyApproval, notifyReopened, pushNotification, logActivity } from "@/lib/notify";
 import { notifyCollaboratorAdded } from "@/lib/mail";
+import { seriesKeyFor } from "@/lib/recurrence";
 import { findMentionedIds } from "@/lib/mentions";
 import { companyTimezone, zonedStartOfToday } from "@/lib/tz";
 import { commitTimersForTask, startTimerFor } from "@/lib/actions/time";
@@ -29,15 +30,6 @@ function parseTaskForm(formData: FormData) {
     estimateHours: parseHours(String(formData.get("estimate") ?? "")),
     reviewRequired: formData.get("reviewRequired") === "on",
   };
-}
-
-/** Advances a date by one recurrence interval. */
-function advanceDate(date: Date, recurrence: string) {
-  const d = new Date(date);
-  if (recurrence === "DAILY") d.setDate(d.getDate() + 1);
-  else if (recurrence === "WEEKLY") d.setDate(d.getDate() + 7);
-  else if (recurrence === "MONTHLY") d.setMonth(d.getMonth() + 1);
-  return d;
 }
 
 /**
@@ -80,7 +72,9 @@ export async function createTask(formData: FormData) {
   const data = parseTaskForm(formData);
   if (!data.title || !PRIORITIES.includes(data.priority)) redirect("/tasks?error=invalid");
 
-  const task = await db.task.create({ data: { ...data, createdById: user.id } });
+  const task = await db.task.create({
+    data: { ...data, seriesId: seriesKeyFor(data), createdById: user.id },
+  });
   await logActivity(task.id, user.id, "created");
 
   if (task.assigneeId) {
@@ -385,31 +379,10 @@ async function changeStatus(
       );
     }
 
-    // Recurring tasks spawn their next occurrence when completed.
-    if (task.recurrence && task.dueDate && !task.parentId) {
-      const next = await db.task.create({
-        data: {
-          title: task.title,
-          description: task.description,
-          priority: task.priority,
-          projectId: task.projectId,
-          assigneeId: task.assigneeId,
-          createdById: task.createdById,
-          startDate: task.startDate ? advanceDate(task.startDate, task.recurrence) : null,
-          dueDate: advanceDate(task.dueDate, task.recurrence),
-          recurrence: task.recurrence,
-          estimateHours: task.estimateHours,
-        },
-      });
-      await logActivity(next.id, user.id, "created");
-      if (next.assigneeId && next.assigneeId !== user.id) {
-        await pushNotification(
-          next.assigneeId,
-          `Recurring task ready: ${next.title}`,
-          `/tasks/${next.id}`
-        );
-      }
-    }
+    // Note: recurring tasks no longer spawn their next occurrence here. A
+    // nightly job (scripts/recurring.ts) rolls each series forward once per
+    // day — archiving the finished/missed instance and creating the new day's
+    // copy — so completing early never creates a same-day duplicate.
   }
   return "ok";
 }
