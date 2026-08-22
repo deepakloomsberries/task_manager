@@ -29,6 +29,7 @@ export default async function RecurringPage({
       })
     : [];
   const selectedAssignee = canSeeAll && searchParams.assignee ? Number(searchParams.assignee) : null;
+  const q = (searchParams.q ?? "").trim();
 
   const now = new Date();
   const m = /^(\d{4})-(\d{2})$/.exec(searchParams.month ?? "");
@@ -47,6 +48,7 @@ export default async function RecurringPage({
       seriesId: { not: null },
       recurrence: { not: null },
       dueDate: { gte: monthStart, lt: monthEnd },
+      ...(q ? { title: { contains: q } } : {}),
       ...(canSeeAll
         ? selectedAssignee
           ? { assigneeId: selectedAssignee }
@@ -76,6 +78,10 @@ export default async function RecurringPage({
     doneCount: number;
     missedCount: number;
   };
+  // A day can hold more than one occurrence (e.g. a duplicate that the nightly
+  // roll-over archived as missed alongside the live one). Show the most
+  // meaningful: done beats a still-live pending, which beats missed.
+  const RANK: Record<Cell["state"], number> = { done: 3, pending: 2, missed: 1 };
   const series = new Map<string, Series>();
   for (const t of rows) {
     let s = series.get(t.seriesId!);
@@ -92,18 +98,27 @@ export default async function RecurringPage({
     let state: Cell["state"];
     if (t.completedAt) {
       state = "done";
-      s.doneCount++;
       if (!s.lastDone || t.completedAt > s.lastDone) s.lastDone = t.completedAt;
     } else if (t.missedAt || past) {
       state = "missed";
-      s.missedCount++;
     } else {
       state = "pending";
     }
-    s.cells.set(key, { id: t.id, state });
+    const existing = s.cells.get(key);
+    // Prefer the higher-ranked state; on a tie, prefer the live (undeleted) row.
+    if (!existing || RANK[state] > RANK[existing.state] || (RANK[state] === RANK[existing.state] && !t.deletedAt)) {
+      s.cells.set(key, { id: t.id, state });
+    }
   }
 
+  // Per-row tallies come from the final cells, so duplicates never double-count.
   const list = Array.from(series.values()).sort((a, b) => a.title.localeCompare(b.title));
+  for (const s of list) {
+    for (const c of Array.from(s.cells.values())) {
+      if (c.state === "done") s.doneCount++;
+      else if (c.state === "missed") s.missedCount++;
+    }
+  }
 
   // Today's progress across all jobs.
   const todayDone = list.filter((s) => s.cells.get(todayKey)?.state === "done").length;
@@ -119,6 +134,7 @@ export default async function RecurringPage({
     p.set("month", opts.month ?? mkMonth(monthStart));
     const a = opts.assignee === undefined ? selectedAssignee : opts.assignee;
     if (a) p.set("assignee", String(a));
+    if (q) p.set("q", q);
     return `/recurring?${p.toString()}`;
   };
 
@@ -171,15 +187,37 @@ export default async function RecurringPage({
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2 text-sm">
-        <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-200">
-          {list.length} recurring jobs
-        </span>
-        {isCurrentMonth && (
-          <span className="rounded-full bg-green-100 px-3 py-1 font-medium text-green-700">
-            {todayDone} / {todayTotal} done today
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+        <div className="flex flex-wrap gap-2">
+          <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+            {list.length} {q ? "matching" : "recurring"} jobs
           </span>
-        )}
+          {isCurrentMonth && (
+            <span className="rounded-full bg-green-100 px-3 py-1 font-medium text-green-700">
+              {todayDone} / {todayTotal} done today
+            </span>
+          )}
+        </div>
+        <form method="GET" action="/recurring" className="flex items-center gap-2">
+          <input type="hidden" name="month" value={mkMonth(monthStart)} />
+          {selectedAssignee && <input type="hidden" name="assignee" value={selectedAssignee} />}
+          <input
+            type="search"
+            name="q"
+            defaultValue={q}
+            placeholder="Search tasks…"
+            className="input !py-1.5 w-48 text-sm"
+          />
+          <button type="submit" className="btn-secondary !py-1.5 text-sm">Search</button>
+          {q && (
+            <Link
+              href={`/recurring?month=${mkMonth(monthStart)}${selectedAssignee ? `&assignee=${selectedAssignee}` : ""}`}
+              className="text-xs text-slate-500 hover:underline"
+            >
+              Clear
+            </Link>
+          )}
+        </form>
       </div>
 
       {list.length === 0 ? (
@@ -209,6 +247,9 @@ export default async function RecurringPage({
                     </th>
                   );
                 })}
+                <th className="px-3 py-2 text-center font-medium text-slate-500" title="Done / missed this month">
+                  ✓/✕
+                </th>
                 <th className="px-3 py-2 text-right font-medium text-slate-500">Last done</th>
               </tr>
             </thead>
@@ -238,6 +279,11 @@ export default async function RecurringPage({
                       </td>
                     );
                   })}
+                  <td className="whitespace-nowrap px-3 py-2 text-center text-xs">
+                    <span className="font-medium text-green-600">{s.doneCount}</span>
+                    <span className="text-slate-300"> / </span>
+                    <span className="font-medium text-red-500">{s.missedCount}</span>
+                  </td>
                   <td className="whitespace-nowrap px-3 py-2 text-right text-xs text-slate-500">
                     {s.lastDone ? s.lastDone.toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : "—"}
                   </td>
