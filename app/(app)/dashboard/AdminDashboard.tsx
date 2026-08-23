@@ -66,15 +66,18 @@ export default async function AdminDashboard({ user }: { user: AdminUser }) {
     activities,
     runningTimers,
   ] = await Promise.all([
-    db.task.count({ where: { status: { not: "DONE" }, deletedAt: null } }),
-    db.task.count({ where: { status: { not: "DONE" }, deletedAt: null, dueDate: { lt: todayStart } } }),
-    db.task.count({ where: { status: { not: "DONE" }, deletedAt: null, dueDate: { gte: todayStart, lt: tomorrow } } }),
-    db.task.count({ where: { status: "DONE", deletedAt: null, completedAt: { gte: weekStart, lt: weekEnd } } }),
-    db.task.count({ where: { status: "REVIEW", deletedAt: null } }),
-    db.task.count({ where: { status: { not: "DONE" }, deletedAt: null, assigneeId: null } }),
+    // Recurring occurrences (the daily-generated tasks) are excluded from every
+    // dashboard stat — they live on the Recurring page, and would otherwise
+    // swamp the team's real open/overdue picture.
+    db.task.count({ where: { status: { not: "DONE" }, deletedAt: null, seriesId: null } }),
+    db.task.count({ where: { status: { not: "DONE" }, deletedAt: null, seriesId: null, dueDate: { lt: todayStart } } }),
+    db.task.count({ where: { status: { not: "DONE" }, deletedAt: null, seriesId: null, dueDate: { gte: todayStart, lt: tomorrow } } }),
+    db.task.count({ where: { status: "DONE", deletedAt: null, seriesId: null, completedAt: { gte: weekStart, lt: weekEnd } } }),
+    db.task.count({ where: { status: "REVIEW", deletedAt: null, seriesId: null } }),
+    db.task.count({ where: { status: { not: "DONE" }, deletedAt: null, seriesId: null, assigneeId: null } }),
     db.timesheetSubmission.count({ where: { status: "SUBMITTED" } }),
     db.task.findMany({
-      where: { status: { not: "DONE" }, deletedAt: null, assigneeId: { not: null } },
+      where: { status: { not: "DONE" }, deletedAt: null, seriesId: null, assigneeId: { not: null } },
       select: { assigneeId: true, dueDate: true, estimateHours: true },
     }),
     db.user.findMany({

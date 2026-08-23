@@ -140,8 +140,18 @@ async function main() {
     }
   }
 
+  // Retention: hard-delete archived occurrences older than the grid window, so
+  // the task table doesn't grow without bound. Recent history stays for the
+  // Recurring grid; live occurrences are never touched.
+  const RETENTION_DAYS = 180;
+  const cutoff = new Date(dayStart(now));
+  cutoff.setDate(cutoff.getDate() - RETENTION_DAYS);
+  const purged = await db.task.deleteMany({
+    where: { seriesId: { not: null }, deletedAt: { not: null }, dueDate: { lt: cutoff } },
+  });
+
   console.log(
-    `Done at ${now.toISOString()}: ${bySeries.size} series, ${closed} closed (${missed} missed), ${created} created.`
+    `Done at ${now.toISOString()}: ${bySeries.size} series, ${closed} closed (${missed} missed), ${created} created, ${purged.count} old occurrence(s) purged (>${RETENTION_DAYS}d).`
   );
 }
 
