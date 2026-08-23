@@ -114,37 +114,67 @@ export default async function RecurringPage({
   }
 
   // Per-row tallies come from the final cells, so duplicates never double-count.
-  const list = Array.from(series.values()).sort((a, b) => a.title.localeCompare(b.title));
+  const list = Array.from(series.values());
   for (const s of list) {
     for (const c of Array.from(s.cells.values())) {
       if (c.state === "done") s.doneCount++;
       else if (c.state === "missed") s.missedCount++;
     }
   }
+  const rate = (s: Series) => {
+    const t = s.doneCount + s.missedCount;
+    return t ? s.doneCount / t : 1;
+  };
+  // Sort: by name, most-missed first, or worst completion rate (spot problems).
+  const sort = searchParams.sort ?? "name";
+  list.sort((a, b) => {
+    if (sort === "missed") return b.missedCount - a.missedCount || a.title.localeCompare(b.title);
+    if (sort === "rate") return rate(a) - rate(b) || b.missedCount - a.missedCount;
+    if (sort === "recent") return (b.lastDone?.getTime() ?? 0) - (a.lastDone?.getTime() ?? 0);
+    return a.title.localeCompare(b.title);
+  });
 
-  // Today's progress across all jobs.
+  // Per-day metadata drives the weekend tint, weekday letters and today column.
+  const DOW = ["S", "M", "T", "W", "T", "F", "S"];
+  const dayMeta = days.map((d) => {
+    const dow = d.getDay();
+    return { d, key: ymd(d), letter: DOW[dow], isSun: dow === 0, isSat: dow === 6, isToday: ymd(d) === todayKey };
+  });
+
+  // Today's progress + this month's totals.
   const todayDone = list.filter((s) => s.cells.get(todayKey)?.state === "done").length;
   const todayTotal = list.filter((s) => s.cells.has(todayKey)).length;
+  const monthDone = list.reduce((a, s) => a + s.doneCount, 0);
+  const monthMissed = list.reduce((a, s) => a + s.missedCount, 0);
+  const monthRate = monthDone + monthMissed ? Math.round((monthDone / (monthDone + monthMissed)) * 100) : null;
 
   const monthLabel = monthStart.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
   const prev = new Date(year, month0 - 1, 1);
   const next = new Date(year, month0 + 1, 1);
   const mkMonth = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   // Build a /recurring URL keeping the month + assignee filter in sync.
-  const href = (opts: { month?: string; assignee?: number | null }) => {
+  const href = (opts: { month?: string; assignee?: number | null; sort?: string }) => {
     const p = new URLSearchParams();
     p.set("month", opts.month ?? mkMonth(monthStart));
     const a = opts.assignee === undefined ? selectedAssignee : opts.assignee;
     if (a) p.set("assignee", String(a));
     if (q) p.set("q", q);
+    const so = opts.sort === undefined ? sort : opts.sort;
+    if (so && so !== "name") p.set("sort", so);
     return `/recurring?${p.toString()}`;
   };
 
   const CELL: Record<Cell["state"], string> = {
-    done: "bg-green-500 text-white",
-    missed: "bg-red-400 text-white",
-    pending: "bg-amber-100 text-amber-700 ring-1 ring-amber-300",
+    done: "bg-green-500 text-white shadow-sm",
+    missed: "bg-rose-500 text-white shadow-sm",
+    pending: "bg-amber-100 text-amber-700 ring-1 ring-amber-400",
   };
+  const SORTS: { key: string; label: string }[] = [
+    { key: "name", label: "Name" },
+    { key: "missed", label: "Most missed" },
+    { key: "rate", label: "Worst rate" },
+    { key: "recent", label: "Recently done" },
+  ];
 
   return (
     <div className="space-y-4">
@@ -152,9 +182,10 @@ export default async function RecurringPage({
         <div>
           <h1 className="text-2xl font-bold">Recurring tasks</h1>
           <p className="text-sm text-slate-500">
-            Every recurring job, day by day. <span className="text-green-600">Green</span> = done that
-            day, <span className="text-red-500">red</span> = missed,{" "}
-            <span className="text-amber-600">amber</span> = today, still pending.
+            Every recurring job, day by day. <span className="font-medium text-green-600">✓ done</span>,{" "}
+            <span className="font-medium text-rose-500">✕ missed</span>,{" "}
+            <span className="font-medium text-amber-600">• today</span>. Weekends (
+            <span className="text-rose-500">Sun</span>) are tinted.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -195,12 +226,20 @@ export default async function RecurringPage({
             {list.length} {q ? "matching" : "recurring"} jobs
           </span>
           {isCurrentMonth && (
-            <span className="rounded-full bg-green-100 px-3 py-1 font-medium text-green-700">
+            <span className="rounded-full bg-sky-100 px-3 py-1 font-medium text-sky-700">
               {todayDone} / {todayTotal} done today
+            </span>
+          )}
+          <span className="rounded-full bg-green-100 px-3 py-1 font-medium text-green-700">✓ {monthDone} done</span>
+          <span className="rounded-full bg-rose-100 px-3 py-1 font-medium text-rose-700">✕ {monthMissed} missed</span>
+          {monthRate !== null && (
+            <span className="rounded-full bg-slate-800 px-3 py-1 font-medium text-white dark:bg-slate-200 dark:text-slate-800">
+              {monthRate}% completion
             </span>
           )}
         </div>
         <form method="GET" action="/recurring" className="flex items-center gap-2">
+          {sort !== "name" && <input type="hidden" name="sort" value={sort} />}
           <input type="hidden" name="month" value={mkMonth(monthStart)} />
           {selectedAssignee && <input type="hidden" name="assignee" value={selectedAssignee} />}
           <input
@@ -222,77 +261,120 @@ export default async function RecurringPage({
         </form>
       </div>
 
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="mr-1 text-xs font-medium text-slate-500">Sort:</span>
+        {SORTS.map((so) => (
+          <Link
+            key={so.key}
+            href={href({ sort: so.key })}
+            className={`rounded-full px-3 py-1 text-xs font-medium ${
+              sort === so.key ? "bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-800" : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200"
+            }`}
+          >
+            {so.label}
+          </Link>
+        ))}
+      </div>
+
       {list.length === 0 ? (
         <div className="card p-10 text-center text-sm text-slate-400">
           No recurring tasks this month. Set a task&apos;s recurrence to Daily/Weekly/Monthly to see it here.
         </div>
       ) : (
-        <div className="card overflow-x-auto">
-          <table className="min-w-max text-sm">
+        <div className="card overflow-x-auto p-0">
+          <table className="min-w-max border-separate border-spacing-0 text-sm">
             <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-700">
-                <th className="sticky left-0 z-10 bg-white px-3 py-2 text-left font-medium text-slate-500 dark:bg-slate-800">
+              <tr>
+                <th className="sticky left-0 top-0 z-30 border-b border-slate-200 bg-white px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-800">
                   Task
                 </th>
-                {days.map((d) => {
-                  const key = ymd(d);
-                  const isToday = key === todayKey;
-                  return (
-                    <th
-                      key={key}
-                      className={`w-7 px-0 py-2 text-center text-[10px] font-medium ${
-                        isToday ? "text-sky-600" : "text-slate-400"
-                      }`}
-                      title={d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" })}
-                    >
-                      {d.getDate()}
-                    </th>
-                  );
-                })}
-                <th className="px-3 py-2 text-center font-medium text-slate-500" title="Done / missed this month">
-                  ✓/✕
+                {dayMeta.map((m) => (
+                  <th
+                    key={m.key}
+                    className={`sticky top-0 z-20 w-8 border-b px-0 py-1.5 text-center font-medium ${
+                      m.isToday
+                        ? "border-sky-300 bg-sky-100 dark:bg-sky-900/50"
+                        : m.isSun
+                          ? "border-slate-200 bg-rose-50 dark:border-slate-700 dark:bg-rose-950/30"
+                          : m.isSat
+                            ? "border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-700/40"
+                            : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800"
+                    }`}
+                    title={m.d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" })}
+                  >
+                    <div className={`text-[9px] uppercase ${m.isSun ? "text-rose-400" : m.isToday ? "text-sky-600" : "text-slate-300"}`}>{m.letter}</div>
+                    <div className={`text-[11px] ${m.isToday ? "font-bold text-sky-700 dark:text-sky-300" : m.isSun ? "text-rose-500" : "text-slate-500"}`}>{m.d.getDate()}</div>
+                  </th>
+                ))}
+                <th className="sticky top-0 z-20 border-b border-slate-200 bg-white px-4 py-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-800">
+                  This month
                 </th>
-                <th className="px-3 py-2 text-right font-medium text-slate-500">Last done</th>
+                <th className="sticky top-0 z-20 border-b border-slate-200 bg-white px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-800">
+                  Last done
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-              {list.map((s) => (
-                <tr key={s.seriesId} className="hover:bg-slate-50 dark:hover:bg-slate-700/40">
-                  <td className="sticky left-0 z-10 w-80 min-w-[16rem] max-w-[24rem] bg-white px-3 py-2 dark:bg-slate-800">
-                    <Link href={`/tasks/${s.openId}`} className="block font-medium hover:text-sky-600 hover:underline" title={s.title}>
-                      <span className="line-clamp-2">{s.title}</span>
-                    </Link>
-                    {s.assignee && <div className="text-[11px] text-slate-400">{s.assignee}</div>}
-                  </td>
-                  {days.map((d) => {
-                    const key = ymd(d);
-                    const cell = s.cells.get(key);
-                    if (!cell) {
-                      return <td key={key} className="px-0.5 py-1 text-center"><span className="mx-auto block h-5 w-5 rounded bg-slate-50 dark:bg-slate-700/40" /></td>;
-                    }
-                    const label = cell.state === "done" ? "✓" : cell.state === "missed" ? "✕" : "•";
-                    return (
-                      <td key={key} className="px-0.5 py-1 text-center">
-                        <Link
-                          href={`/tasks/${cell.id}`}
-                          title={`${d.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} — ${cell.state}`}
-                          className={`mx-auto flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold ${CELL[cell.state]}`}
-                        >
-                          {label}
-                        </Link>
-                      </td>
-                    );
-                  })}
-                  <td className="whitespace-nowrap px-3 py-2 text-center text-xs">
-                    <span className="font-medium text-green-600">{s.doneCount}</span>
-                    <span className="text-slate-300"> / </span>
-                    <span className="font-medium text-red-500">{s.missedCount}</span>
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right text-xs text-slate-500">
-                    {s.lastDone ? s.lastDone.toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : "—"}
-                  </td>
-                </tr>
-              ))}
+            <tbody>
+              {list.map((s, ri) => {
+                const total = s.doneCount + s.missedCount;
+                const pct = total ? Math.round((s.doneCount / total) * 100) : null;
+                const zebra = ri % 2 === 1;
+                const rowBg = zebra ? "bg-slate-50/60 dark:bg-slate-800/40" : "bg-white dark:bg-slate-800";
+                return (
+                  <tr key={s.seriesId} className="group">
+                    <td className={`sticky left-0 z-10 w-80 min-w-[16rem] max-w-[24rem] border-b border-slate-100 px-4 py-2.5 dark:border-slate-700 ${rowBg} group-hover:bg-sky-50 dark:group-hover:bg-slate-700/60`}>
+                      <Link href={`/tasks/${s.openId}`} className="block font-medium leading-snug hover:text-sky-600 hover:underline" title={s.title}>
+                        <span className="line-clamp-2">{s.title}</span>
+                      </Link>
+                      {s.assignee && <div className="mt-0.5 text-[11px] text-slate-400">{s.assignee}</div>}
+                    </td>
+                    {dayMeta.map((m) => {
+                      const cell = s.cells.get(m.key);
+                      const tint = m.isToday
+                        ? "bg-sky-50/70 dark:bg-sky-900/20"
+                        : m.isSun
+                          ? "bg-rose-50/50 dark:bg-rose-950/20"
+                          : m.isSat
+                            ? "bg-slate-50 dark:bg-slate-700/20"
+                            : "";
+                      if (!cell) {
+                        return (
+                          <td key={m.key} className={`border-b border-slate-100 px-0.5 py-1 text-center dark:border-slate-700 ${tint}`}>
+                            <span className="mx-auto block h-1.5 w-1.5 rounded-full bg-slate-200 dark:bg-slate-600" />
+                          </td>
+                        );
+                      }
+                      const label = cell.state === "done" ? "✓" : cell.state === "missed" ? "✕" : "•";
+                      return (
+                        <td key={m.key} className={`border-b border-slate-100 px-0.5 py-1 text-center dark:border-slate-700 ${tint}`}>
+                          <Link
+                            href={`/tasks/${cell.id}`}
+                            title={`${m.d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} — ${cell.state}`}
+                            className={`mx-auto flex h-6 w-6 items-center justify-center rounded-md text-[11px] font-bold transition hover:scale-110 ${CELL[cell.state]}`}
+                          >
+                            {label}
+                          </Link>
+                        </td>
+                      );
+                    })}
+                    <td className={`whitespace-nowrap border-b border-slate-100 px-4 py-2.5 dark:border-slate-700 ${rowBg} group-hover:bg-sky-50 dark:group-hover:bg-slate-700/60`}>
+                      <div className="flex items-center gap-2">
+                        <div className="h-1.5 w-16 overflow-hidden rounded-full bg-rose-200 dark:bg-rose-900/50">
+                          <div className="h-full rounded-full bg-green-500" style={{ width: `${pct ?? 0}%` }} />
+                        </div>
+                        <span className="text-xs tabular-nums text-slate-500">
+                          <span className="font-semibold text-green-600">{s.doneCount}</span>
+                          <span className="text-slate-300">/</span>
+                          <span className="font-semibold text-rose-500">{s.missedCount}</span>
+                        </span>
+                      </div>
+                    </td>
+                    <td className={`whitespace-nowrap border-b border-slate-100 px-4 py-2.5 text-right text-xs text-slate-500 dark:border-slate-700 ${rowBg} group-hover:bg-sky-50 dark:group-hover:bg-slate-700/60`}>
+                      {s.lastDone ? s.lastDone.toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
