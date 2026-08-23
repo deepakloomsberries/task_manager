@@ -403,8 +403,13 @@ export async function setTaskStatus(formData: FormData) {
 
   const result = await changeStatus(user, id, status, true);
   await revalidateTaskViews(id);
+  const sep = back.includes("?") ? "&" : "?";
   if (result === "blocked" || result === "needs-approval") {
-    redirect(`${back}${back.includes("?") ? "&" : "?"}error=${result}`);
+    redirect(`${back}${sep}error=${result}`);
+  }
+  // A quiet toast confirms the change (no dialog for forward moves).
+  if (result === "ok") {
+    redirect(`${back}${sep}moved=${status}`);
   }
   redirect(back);
 }

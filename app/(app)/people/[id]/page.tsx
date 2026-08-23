@@ -281,15 +281,22 @@ export default async function PersonProfilePage({
             </div>
           </form>
 
-          <form action={resetUserPassword} className="mt-4 flex flex-wrap items-end gap-3 border-t border-slate-100 pt-4 dark:border-slate-700">
-            <input type="hidden" name="id" value={person.id} />
-            <input type="hidden" name="redirectTo" value={backParam} />
-            <div className="w-72 max-w-full">
-              <label className="label">Reset password</label>
-              <PasswordField name="password" withGenerate showStrength />
-            </div>
-            <button type="submit" className="btn-secondary">Reset password</button>
-          </form>
+          <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-700">
+            <form action={resetUserPassword} className="flex flex-wrap items-end gap-3">
+              <input type="hidden" name="id" value={person.id} />
+              <input type="hidden" name="redirectTo" value={backParam} />
+              <div className="w-72 max-w-full">
+                <label className="label">Set / reset password</label>
+                <PasswordField name="password" withGenerate showStrength />
+              </div>
+              <button type="submit" className="btn-secondary">Set password</button>
+            </form>
+            <p className="mt-2 max-w-xl text-xs text-slate-500">
+              Forgot their password? Existing passwords can&apos;t be shown (they&apos;re encrypted) — instead
+              click <b>Generate</b>, <b>Copy</b> the new password and share it with {person.name.split(" ")[0]}.
+              They&apos;ll be asked to change it on their next login.
+            </p>
+          </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-slate-100 pt-4 text-sm dark:border-slate-700">
             <form action={toggleUserActive}>
