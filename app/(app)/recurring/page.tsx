@@ -309,7 +309,7 @@ export default async function RecurringPage({
           No recurring tasks this month. Set a task&apos;s recurrence to Daily/Weekly/Monthly to see it here.
         </div>
       ) : (
-        <div className="card overflow-x-auto p-0">
+        <div className="card max-h-[74vh] overflow-auto p-0">
           <table className="min-w-max border-separate border-spacing-0 text-sm">
             <thead>
               <tr>

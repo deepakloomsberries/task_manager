@@ -36,16 +36,12 @@ async function wantsEmail(user: { id: number; emailNotifications?: boolean }) {
 }
 
 /**
- * Whether a task should generate notifications at all. Two rules keep the noise
- * down: recurring occurrences (the daily-generated jobs) never notify anyone,
- * and among ordinary tasks only High/Urgent ones do — normal/low priority work
- * is tracked silently.
+ * Whether a task should generate notifications at all. Ordinary tasks always
+ * notify (assignee gets pinged for every one); only the daily recurring
+ * occurrences are silent — they'd otherwise flood everyone every day.
  */
-const NOTIFY_PRIORITIES = new Set(["HIGH", "URGENT"]);
-export function taskWantsNotify(task: { priority?: string | null; seriesId?: string | null }) {
-  if (task.seriesId) return false;
-  if (task.priority && !NOTIFY_PRIORITIES.has(task.priority)) return false;
-  return true;
+export function taskWantsNotify(task: { seriesId?: string | null }) {
+  return !task.seriesId;
 }
 
 /** In-app notification + email when a task is assigned to someone. */
