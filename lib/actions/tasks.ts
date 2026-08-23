@@ -326,9 +326,12 @@ async function changeStatus(
   const to = lookup(TASK_STATUSES, status).label;
   await logActivity(taskId, user.id, "status", `${from} → ${to}`);
 
-  // Ping anyone following this task about the status change.
-  for (const wid of await watcherIds(taskId, user.id)) {
-    await pushNotification(wid, `${task.title}: ${from} → ${to}`, `/tasks/${taskId}`);
+  // Ping anyone following this task about the status change — but never for
+  // recurring occurrences (they'd flood watchers with daily churn).
+  if (!task.seriesId) {
+    for (const wid of await watcherIds(taskId, user.id)) {
+      await pushNotification(wid, `${task.title}: ${from} → ${to}`, `/tasks/${taskId}`);
+    }
   }
 
   // Work moved backward by someone other than the assignee — tell the assignee.

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { db } from "@/lib/db";
 import { getSession, isManagerOrAdmin } from "@/lib/auth";
-import { pushNotification } from "@/lib/notify";
+import { pushNotification, taskWantsNotify } from "@/lib/notify";
 import { seriesKeyFor } from "@/lib/recurrence";
 import { parseHours } from "@/lib/ui";
 
@@ -351,7 +351,11 @@ export async function POST(req: NextRequest) {
         newIdByTitle.set(norm(task.title), task.id);
         await linkTags(task.id, plan.tagNames ?? []);
         await addCollaborators(task.id, plan.collaboratorIds ?? []);
-        if (typeof plan.data?.assigneeId === "number" && plan.data.assigneeId !== me.id) {
+        if (
+          typeof plan.data?.assigneeId === "number" &&
+          plan.data.assigneeId !== me.id &&
+          taskWantsNotify(task)
+        ) {
           await pushNotification(plan.data.assigneeId as number, `You were assigned: ${task.title}`, `/tasks/${task.id}`);
         }
         results.push({ row: plan.rowNo, title: task.title, status: "created" });

@@ -148,6 +148,34 @@ export default async function RecurringPage({
   const monthMissed = list.reduce((a, s) => a + s.missedCount, 0);
   const monthRate = monthDone + monthMissed ? Math.round((monthDone / (monthDone + monthMissed)) * 100) : null;
 
+  // Per-day totals across all jobs (footer bar row).
+  const dayDone = new Map<string, number>();
+  const dayScheduled = new Map<string, number>();
+  for (const s of list) {
+    for (const m of dayMeta) {
+      const c = s.cells.get(m.key);
+      if (!c) continue;
+      dayScheduled.set(m.key, (dayScheduled.get(m.key) ?? 0) + 1);
+      if (c.state === "done") dayDone.set(m.key, (dayDone.get(m.key) ?? 0) + 1);
+    }
+  }
+  const dayPeak = Math.max(1, ...dayMeta.map((m) => dayScheduled.get(m.key) ?? 0));
+
+  // Current streak: consecutive done days ending at the most recent scheduled
+  // day (today still pending doesn't break it).
+  const streakOf = (s: Series) => {
+    let n = 0;
+    for (let i = dayMeta.length - 1; i >= 0; i--) {
+      const m = dayMeta[i];
+      if (m.key > todayKey) continue;
+      const c = s.cells.get(m.key);
+      if (!c || c.state === "pending") continue;
+      if (c.state === "done") n++;
+      else break;
+    }
+    return n;
+  };
+
   const monthLabel = monthStart.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
   const prev = new Date(year, month0 - 1, 1);
   const next = new Date(year, month0 + 1, 1);
@@ -362,11 +390,22 @@ export default async function RecurringPage({
                         <div className="h-1.5 w-16 overflow-hidden rounded-full bg-rose-200 dark:bg-rose-900/50">
                           <div className="h-full rounded-full bg-green-500" style={{ width: `${pct ?? 0}%` }} />
                         </div>
-                        <span className="text-xs tabular-nums text-slate-500">
-                          <span className="font-semibold text-green-600">{s.doneCount}</span>
-                          <span className="text-slate-300">/</span>
-                          <span className="font-semibold text-rose-500">{s.missedCount}</span>
+                        {pct !== null && (
+                          <span
+                            className={`rounded px-1.5 py-0.5 text-[11px] font-bold tabular-nums ${
+                              pct >= 80 ? "bg-green-100 text-green-700" : pct >= 50 ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700"
+                            }`}
+                          >
+                            {pct}%
+                          </span>
+                        )}
+                        <span className="text-[11px] tabular-nums text-slate-400">
+                          <span className="text-green-600">{s.doneCount}</span>/<span className="text-rose-500">{s.missedCount}</span>
                         </span>
+                        {(() => {
+                          const st = streakOf(s);
+                          return st >= 2 ? <span className="text-[11px] font-semibold text-orange-500" title={`${st}-day streak`}>🔥{st}</span> : null;
+                        })()}
                       </div>
                     </td>
                     <td className={`whitespace-nowrap border-b border-slate-100 px-4 py-2.5 text-right text-xs text-slate-500 dark:border-slate-700 ${rowBg} group-hover:bg-sky-50 dark:group-hover:bg-slate-700/60`}>
@@ -376,6 +415,29 @@ export default async function RecurringPage({
                 );
               })}
             </tbody>
+            <tfoot>
+              <tr>
+                <td className="sticky left-0 z-10 border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-800">
+                  Done that day
+                </td>
+                {dayMeta.map((m) => {
+                  const done = dayDone.get(m.key) ?? 0;
+                  const sched = dayScheduled.get(m.key) ?? 0;
+                  const h = sched ? Math.max(3, Math.round((sched / dayPeak) * 26)) : 0;
+                  const dh = sched ? Math.round((done / sched) * h) : 0;
+                  return (
+                    <td key={m.key} className={`border-t border-slate-200 px-0.5 py-1 align-bottom dark:border-slate-700 ${m.isToday ? "bg-sky-50/70 dark:bg-sky-900/20" : m.isSun ? "bg-rose-50/50 dark:bg-rose-950/20" : ""}`} title={sched ? `${done}/${sched} done` : "no jobs"}>
+                      <div className="mx-auto flex h-[26px] w-4 items-end overflow-hidden rounded bg-slate-200 dark:bg-slate-600">
+                        <div className="w-full rounded bg-green-500" style={{ height: `${dh}px` }} />
+                      </div>
+                      <div className="mt-0.5 text-center text-[9px] tabular-nums text-slate-400">{sched ? done : ""}</div>
+                    </td>
+                  );
+                })}
+                <td className="border-t border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800" />
+                <td className="border-t border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800" />
+              </tr>
+            </tfoot>
           </table>
         </div>
       )}

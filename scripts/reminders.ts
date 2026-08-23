@@ -39,8 +39,9 @@ async function main() {
     where: { active: true, emailNotifications: true },
     include: {
       tasksAssigned: {
-        // deletedAt:null so trashed/duplicated tasks don't show up in the digest.
-        where: { status: { not: "DONE" }, deletedAt: null, dueDate: { lt: todayEnd } },
+        // deletedAt:null so trashed tasks don't show; seriesId:null so the daily
+        // recurring occurrences never flood the reminder digest.
+        where: { status: { not: "DONE" }, deletedAt: null, seriesId: null, dueDate: { lt: todayEnd } },
         orderBy: { dueDate: "asc" },
         include: { project: true },
       },
