@@ -22,6 +22,7 @@ import { deleteAttachment } from "@/lib/actions/files";
 import PasteAttachment from "@/components/PasteAttachment";
 import ConfirmButton from "@/components/ConfirmButton";
 import FlashToast from "@/components/FlashToast";
+import AutoRefresh from "@/components/AutoRefresh";
 import MentionTextarea from "@/components/MentionTextarea";
 import { renderRich } from "@/components/RichText";
 import SearchSelect from "@/components/SearchSelect";
@@ -232,6 +233,7 @@ export default async function TaskDetailPage({
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
+      <AutoRefresh />
       {movedMsg && <FlashToast message={movedMsg} />}
       {task.assigneeId === user.id && !task.acknowledgedAt && <AckOnView taskId={task.id} />}
       <Link
