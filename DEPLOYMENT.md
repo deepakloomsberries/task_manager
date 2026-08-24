@@ -317,6 +317,16 @@ One-time setup (nightly at 02:00, 14-day retention):
 (crontab -l 2>/dev/null; echo '0 2 * * * d=$(date +\%F); mkdir -p /home/kapil/backups/$d; cp /home/kapil/task_manager/prisma/dev.db /home/kapil/backups/$d/; cp -r /home/kapil/task_manager/uploads /home/kapil/backups/$d/ 2>/dev/null; find /home/kapil/backups -maxdepth 1 -mtime +14 -exec rm -rf {} \;') | crontab -
 ```
 
+Required — nightly recurring-task roll-over at 00:05 (closes out each elapsed
+recurring occurrence — marking it missed if nobody finished it — and creates the
+one fresh occurrence for the new period; also collapses any stray duplicate live
+occurrences of the same job and purges old archived ones). Without this cron
+entry, recurring tasks never roll over or get deduplicated:
+
+```bash
+(crontab -l 2>/dev/null; echo '5 0 * * * cd /home/kapil/task_manager && /usr/bin/npx tsx scripts/recurring.ts >> /var/log/task-recurring.log 2>&1') | crontab -
+```
+
 Optional — daily reminder emails at 08:00 (each employee receives a digest of their
 overdue and due-today tasks; requires SMTP to be configured in `.env`):
 

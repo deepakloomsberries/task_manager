@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 
 type RowStatus = "create" | "update" | "created" | "updated" | "error" | "skip";
 type RowResult = { row: number; title: string; status: RowStatus; reason?: string };
-type Preview = { preview: true; willCreate: number; willUpdate: number; failed: number; results: RowResult[] };
-type Done = { created: number; updated: number; failed: number; results: RowResult[] };
+type Preview = { preview: true; willCreate: number; willUpdate: number; willSkip: number; failed: number; results: RowResult[] };
+type Done = { created: number; updated: number; skipped: number; failed: number; results: RowResult[] };
 
 const STYLE: Record<RowStatus, string> = {
   create: "bg-green-100 text-green-700",
@@ -145,6 +145,9 @@ export default function BulkTaskImport() {
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="rounded-full bg-green-100 px-3 py-1 font-medium text-green-700">{preview.willCreate} to create</span>
             <span className="rounded-full bg-sky-100 px-3 py-1 font-medium text-sky-700">{preview.willUpdate} to update</span>
+            {preview.willSkip > 0 && (
+              <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">{preview.willSkip} skipped (already open)</span>
+            )}
             <span className="rounded-full bg-red-100 px-3 py-1 font-medium text-red-700">{preview.failed} with errors</span>
             {preview.failed > 0 && (
               <span className="text-xs text-slate-500">Fix the flagged rows and Preview again — only valid rows import.</span>
@@ -159,6 +162,9 @@ export default function BulkTaskImport() {
           <div className="flex flex-wrap gap-2 text-sm">
             <span className="rounded-full bg-green-100 px-3 py-1 font-medium text-green-700">{done.created} created</span>
             <span className="rounded-full bg-sky-100 px-3 py-1 font-medium text-sky-700">{done.updated} updated</span>
+            {done.skipped > 0 && (
+              <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600">{done.skipped} skipped (already open)</span>
+            )}
             <span className="rounded-full bg-red-100 px-3 py-1 font-medium text-red-700">{done.failed} failed</span>
           </div>
           <ResultTable results={done.results} />
