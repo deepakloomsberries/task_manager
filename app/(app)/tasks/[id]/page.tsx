@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import {
@@ -139,7 +139,24 @@ export default async function TaskDetailPage({
       orderBy: { startedAt: "asc" },
     }),
   ]);
-  if (!task || task.deletedAt) notFound();
+  if (!task) notFound();
+  if (task.deletedAt) {
+    // Archived occurrence of a recurring job (the nightly roll-over archives
+    // every day's copy once its period elapses, done or missed). Links to it
+    // — the Recurring grid's day cells, old bookmarks/notifications — would
+    // otherwise 404 forever. Send the viewer to the series' current live
+    // occurrence instead; only truly-deleted one-off tasks (no seriesId, or
+    // no live sibling left) still 404.
+    const current = task.seriesId
+      ? await db.task.findFirst({
+          where: { seriesId: task.seriesId, deletedAt: null },
+          orderBy: { dueDate: "desc" },
+          select: { id: true },
+        })
+      : null;
+    if (current) redirect(`/tasks/${current.id}`);
+    notFound();
+  }
 
   // Dependency edges.
   const blockers = task.blockedBy.map((d) => d.blocker);
