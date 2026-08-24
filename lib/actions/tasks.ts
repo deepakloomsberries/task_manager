@@ -326,9 +326,12 @@ async function changeStatus(
   const to = lookup(TASK_STATUSES, status).label;
   await logActivity(taskId, user.id, "status", `${from} → ${to}`);
 
-  // Ping anyone following this task about the status change.
-  for (const wid of await watcherIds(taskId, user.id)) {
-    await pushNotification(wid, `${task.title}: ${from} → ${to}`, `/tasks/${taskId}`);
+  // Ping anyone following this task about the status change — but never for
+  // recurring occurrences (they'd flood watchers with daily churn).
+  if (!task.seriesId) {
+    for (const wid of await watcherIds(taskId, user.id)) {
+      await pushNotification(wid, `${task.title}: ${from} → ${to}`, `/tasks/${taskId}`);
+    }
   }
 
   // Work moved backward by someone other than the assignee — tell the assignee.
@@ -403,8 +406,13 @@ export async function setTaskStatus(formData: FormData) {
 
   const result = await changeStatus(user, id, status, true);
   await revalidateTaskViews(id);
+  const sep = back.includes("?") ? "&" : "?";
   if (result === "blocked" || result === "needs-approval") {
-    redirect(`${back}${back.includes("?") ? "&" : "?"}error=${result}`);
+    redirect(`${back}${sep}error=${result}`);
+  }
+  // A quiet toast confirms the change (no dialog for forward moves).
+  if (result === "ok") {
+    redirect(`${back}${sep}moved=${status}`);
   }
   redirect(back);
 }

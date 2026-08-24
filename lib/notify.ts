@@ -35,13 +35,23 @@ async function wantsEmail(user: { id: number; emailNotifications?: boolean }) {
   return row?.emailNotifications ?? true;
 }
 
+/**
+ * Whether a task should generate notifications at all. Ordinary tasks always
+ * notify (assignee gets pinged for every one); only the daily recurring
+ * occurrences are silent — they'd otherwise flood everyone every day.
+ */
+export function taskWantsNotify(task: { seriesId?: string | null }) {
+  return !task.seriesId;
+}
+
 /** In-app notification + email when a task is assigned to someone. */
 export async function notifyAssignment(opts: {
   assignee: { id: number; email: string; name: string; active: boolean; emailNotifications?: boolean };
-  task: { id: number; title: string; dueDate: Date | null; priority: string };
+  task: { id: number; title: string; dueDate: Date | null; priority: string; seriesId?: string | null };
   actor: { id: number; name: string };
 }) {
   if (!opts.assignee.active || opts.assignee.id === opts.actor.id) return;
+  if (!taskWantsNotify(opts.task)) return;
   await pushNotification(
     opts.assignee.id,
     `${opts.actor.name} assigned you: ${opts.task.title}`,
@@ -63,10 +73,11 @@ export async function notifyAssignment(opts: {
 /** In-app notification + email to the task owner when work is sent for review. */
 export async function notifyReviewNeeded(opts: {
   owner: { id: number; email: string; name: string; active: boolean; emailNotifications?: boolean };
-  task: { id: number; title: string };
+  task: { id: number; title: string; priority?: string | null; seriesId?: string | null };
   actor: { id: number; name: string };
 }) {
   if (!opts.owner.active || opts.owner.id === opts.actor.id) return;
+  if (!taskWantsNotify(opts.task)) return;
   await pushNotification(
     opts.owner.id,
     `${opts.actor.name} sent "${opts.task.title}" for your review`,
@@ -86,10 +97,11 @@ export async function notifyReviewNeeded(opts: {
 /** In-app notification + email to the task owner when their task is completed. */
 export async function notifyCompletion(opts: {
   owner: { id: number; email: string; name: string; active: boolean; emailNotifications?: boolean };
-  task: { id: number; title: string };
+  task: { id: number; title: string; priority?: string | null; seriesId?: string | null };
   actor: { id: number; name: string };
 }) {
   if (!opts.owner.active || opts.owner.id === opts.actor.id) return;
+  if (!taskWantsNotify(opts.task)) return;
   await pushNotification(
     opts.owner.id,
     `${opts.actor.name} completed: ${opts.task.title}`,
@@ -109,10 +121,11 @@ export async function notifyCompletion(opts: {
 /** In-app notification + email to the assignee when their in-review work is approved. */
 export async function notifyApproval(opts: {
   assignee: { id: number; email: string; name: string; active: boolean; emailNotifications?: boolean };
-  task: { id: number; title: string };
+  task: { id: number; title: string; priority?: string | null; seriesId?: string | null };
   actor: { id: number; name: string };
 }) {
   if (!opts.assignee.active || opts.assignee.id === opts.actor.id) return;
+  if (!taskWantsNotify(opts.task)) return;
   await pushNotification(
     opts.assignee.id,
     `${opts.actor.name} approved & completed your task: ${opts.task.title}`,
@@ -132,12 +145,13 @@ export async function notifyApproval(opts: {
 /** In-app notification + email to the assignee when work is sent back or reopened. */
 export async function notifyReopened(opts: {
   assignee: { id: number; email: string; name: string; active: boolean; emailNotifications?: boolean };
-  task: { id: number; title: string };
+  task: { id: number; title: string; priority?: string | null; seriesId?: string | null };
   actor: { id: number; name: string };
   newStatus: string;
   sentBack: boolean;
 }) {
   if (!opts.assignee.active || opts.assignee.id === opts.actor.id) return;
+  if (!taskWantsNotify(opts.task)) return;
   await pushNotification(
     opts.assignee.id,
     opts.sentBack

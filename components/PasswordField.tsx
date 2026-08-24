@@ -22,8 +22,19 @@ export default function PasswordField({
 }) {
   const [visible, setVisible] = useState(false);
   const [value, setValue] = useState("");
+  const [copied, setCopied] = useState(false);
 
   const problem = showStrength && value ? passwordProblem(value) : null;
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard blocked — the value is visible to copy manually */
+    }
+  }
 
   return (
     <div>
@@ -40,6 +51,18 @@ export default function PasswordField({
           className="input pr-20"
         />
         <div className="absolute inset-y-0 right-2 flex items-center gap-1">
+          {value && (
+            <button
+              type="button"
+              onClick={copy}
+              title="Copy password"
+              className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                copied ? "text-green-600" : "text-slate-500 hover:bg-slate-100"
+              }`}
+            >
+              {copied ? "Copied ✓" : "Copy"}
+            </button>
+          )}
           {withGenerate && (
             <button
               type="button"

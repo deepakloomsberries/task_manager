@@ -21,6 +21,7 @@ import {
 import { deleteAttachment } from "@/lib/actions/files";
 import PasteAttachment from "@/components/PasteAttachment";
 import ConfirmButton from "@/components/ConfirmButton";
+import FlashToast from "@/components/FlashToast";
 import MentionTextarea from "@/components/MentionTextarea";
 import { renderRich } from "@/components/RichText";
 import SearchSelect from "@/components/SearchSelect";
@@ -79,7 +80,7 @@ export default async function TaskDetailPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { edit?: string; ok?: string; error?: string; back?: string };
+  searchParams: { edit?: string; ok?: string; error?: string; back?: string; moved?: string };
 }) {
   const user = await requireUser();
   const id = Number(params.id);
@@ -201,6 +202,15 @@ export default async function TaskDetailPage({
   const editing = searchParams.edit === "1" && canEdit;
   const taskCode = `TM-${task.id}`;
 
+  // A quiet floating toast after a one-click status change.
+  const MOVED_MSG: Record<string, string> = {
+    TODO: "Moved to To Do",
+    IN_PROGRESS: "Moved to In Progress",
+    REVIEW: "Sent for review",
+    DONE: "Marked done ✓",
+  };
+  const movedMsg = searchParams.moved ? MOVED_MSG[searchParams.moved] : null;
+
   const banner =
     searchParams.ok === "reminder"
       ? { text: `Reminder sent to ${task.assignee?.name ?? "the assignee"}.`, error: false }
@@ -222,6 +232,7 @@ export default async function TaskDetailPage({
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
+      {movedMsg && <FlashToast message={movedMsg} />}
       {task.assigneeId === user.id && !task.acknowledgedAt && <AckOnView taskId={task.id} />}
       <Link
         href={task.parent ? `/tasks/${task.parent.id}` : backTo}
@@ -536,39 +547,33 @@ export default async function TaskDetailPage({
                       );
                     }
                     const pillClass = `inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200 transition ${style.hover}`;
-                    // Confirm every status change (forward moves included).
-                    const approving = isDone && task.status === "REVIEW" && canEdit;
-                    const confirmLabel = isRevert
-                      ? reopening
-                        ? "Reopen"
-                        : "Move back"
-                      : approving
-                        ? "Approve"
-                        : isDone
-                          ? "Mark done"
-                          : "Move";
-                    const message = isRevert
-                      ? reopening
-                        ? `Reopen "${task.title}"? It will move back to ${s.label}.`
-                        : `Move "${task.title}" back to ${s.label}?`
-                      : approving
-                        ? `Approve and complete "${task.title}"?`
-                        : isDone
-                          ? `Mark "${task.title}" as done?`
-                          : `Move "${task.title}" to ${s.label}?`;
+                    // Forward moves are one-click (a toast confirms after). Only a
+                    // revert — reopening a done task or pulling one back a stage —
+                    // asks first, since that undoes work.
                     return (
                       <form key={s.value} action={setTaskStatus}>
                         <input type="hidden" name="id" value={task.id} />
                         <input type="hidden" name="status" value={s.value} />
-                        <ConfirmButton
-                          tone="primary"
-                          className={pillClass}
-                          confirmLabel={confirmLabel}
-                          message={message}
-                        >
-                          <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
-                          {label}
-                        </ConfirmButton>
+                        {isRevert ? (
+                          <ConfirmButton
+                            tone="primary"
+                            className={pillClass}
+                            confirmLabel={reopening ? "Reopen" : "Move back"}
+                            message={
+                              reopening
+                                ? `Reopen "${task.title}"? It will move back to ${s.label}.`
+                                : `Move "${task.title}" back to ${s.label}?`
+                            }
+                          >
+                            <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
+                            {label}
+                          </ConfirmButton>
+                        ) : (
+                          <button type="submit" className={pillClass}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
+                            {label}
+                          </button>
+                        )}
                       </form>
                     );
                   })}

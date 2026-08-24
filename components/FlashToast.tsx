@@ -22,9 +22,10 @@ export default function FlashToast({
   useEffect(() => {
     // Strip ok/error from the URL so a manual refresh doesn't replay the toast.
     const url = new URL(window.location.href);
-    if (url.searchParams.has("ok") || url.searchParams.has("error")) {
+    if (url.searchParams.has("ok") || url.searchParams.has("error") || url.searchParams.has("moved")) {
       url.searchParams.delete("ok");
       url.searchParams.delete("error");
+      url.searchParams.delete("moved");
       window.history.replaceState(null, "", url.pathname + url.search);
     }
     // Success is transient; errors stay until dismissed so they can't be missed.

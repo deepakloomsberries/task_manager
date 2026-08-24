@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { db } from "@/lib/db";
 import { getSession, isManagerOrAdmin } from "@/lib/auth";
-import { pushNotification } from "@/lib/notify";
+import { pushNotification, taskWantsNotify } from "@/lib/notify";
 import { seriesKeyFor } from "@/lib/recurrence";
 import { parseHours } from "@/lib/ui";
 
@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
     db.user.findMany({ where: { active: true }, select: { id: true, name: true, email: true } }),
     db.project.findMany({ select: { id: true, name: true } }),
     db.tag.findMany({ select: { id: true, name: true } }),
-    db.task.findMany({ where: { deletedAt: null }, select: { id: true, title: true } }),
+    db.task.findMany({ where: { deletedAt: null }, select: { id: true, title: true, assigneeId: true, status: true } }),
   ]);
   const userBy = (s: string) => users.find((u) => norm(u.email) === norm(s) || norm(u.name) === norm(s)) ?? null;
   const projectBy = (s: string) => projects.find((p) => norm(p.name) === norm(s)) ?? null;
@@ -132,6 +132,18 @@ export async function POST(req: NextRequest) {
     if (t && !hasId) batchTitleCount.set(norm(t), (batchTitleCount.get(norm(t)) ?? 0) + 1);
   }
 
+  /** title + assignee → key, so a re-import of the same template only ever
+   *  collides with the same person's copy of that job. */
+  const dupKey = (title: string, assigneeId: number | null | undefined) => `${norm(title)}|${assigneeId ?? "none"}`;
+  // Still-open tasks (not Done) already in the DB, e.g. yesterday's copy of a
+  // recurring template that nobody finished yet.
+  const openExisting = new Map<string, number>();
+  for (const t of existingTasks) {
+    if (t.status !== "DONE") openExisting.set(dupKey(t.title, t.assigneeId), t.id);
+  }
+  // Rows already claimed by an earlier "create" in this same file.
+  const claimedInBatch = new Map<string, number>();
+
   // --- Phase 1: validate every row into a plan (no writes) -------------------
   const plans: Plan[] = [];
   for (let i = 0; i < rows.length; i++) {
@@ -141,6 +153,7 @@ export async function POST(req: NextRequest) {
     const idStr = field(r, ["tmid", "tm id", "id", "taskid"]);
     const updateId = idStr ? parseTaskRef(idStr) : null;
     const err = (reason: string): Plan => ({ rowNo, title, action: "error", reason });
+    const skip = (reason: string): Plan => ({ rowNo, title, action: "skip", reason });
 
     // Skip fully-blank rows silently.
     if (Object.values(r).every((v) => String(v ?? "").trim() === "")) continue;
@@ -278,6 +291,26 @@ export async function POST(req: NextRequest) {
       continue;
     }
 
+    // A "create" row (no TM-id) that matches the title + assignee of an
+    // already-open task is almost always the same template being re-imported
+    // before the earlier copy was finished — skip it instead of spawning a
+    // duplicate. (Re-importing after the earlier one is marked Done is fine:
+    // that's a legitimate new occurrence.)
+    if (!updateId) {
+      const key = dupKey(title, data.assigneeId as number | undefined);
+      const existingId = openExisting.get(key);
+      if (existingId) {
+        plans.push(skip(`TM-${existingId} already has this title and assignee open. Finish/delete it first, or use its TM-id to update it.`));
+        continue;
+      }
+      const claimedRow = claimedInBatch.get(key);
+      if (claimedRow) {
+        plans.push(skip(`Duplicate of row ${claimedRow} in this same file (same title and assignee).`));
+        continue;
+      }
+      claimedInBatch.set(key, rowNo);
+    }
+
     plans.push({
       rowNo,
       title: title || taskById.get(updateId!)?.title || "",
@@ -294,11 +327,13 @@ export async function POST(req: NextRequest) {
   if (!commit) {
     const willCreate = plans.filter((p) => p.action === "create").length;
     const willUpdate = plans.filter((p) => p.action === "update").length;
+    const willSkip = plans.filter((p) => p.action === "skip").length;
     const failed = plans.filter((p) => p.action === "error").length;
     return NextResponse.json({
       preview: true,
       willCreate,
       willUpdate,
+      willSkip,
       failed,
       results: plans.map((p) => ({ row: p.rowNo, title: p.title, status: p.action, reason: p.reason })),
     });
@@ -325,12 +360,12 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const results: { row: number; title: string; status: "created" | "updated" | "error"; reason?: string }[] = [];
+  const results: { row: number; title: string; status: "created" | "updated" | "error" | "skip"; reason?: string }[] = [];
   const idByPlan = new Map<Plan, number>();
   const newIdByTitle = new Map<string, number>();
   for (const plan of plans) {
     if (plan.action === "error" || plan.action === "skip") {
-      results.push({ row: plan.rowNo, title: plan.title, status: "error", reason: plan.reason });
+      results.push({ row: plan.rowNo, title: plan.title, status: plan.action, reason: plan.reason });
       continue;
     }
     try {
@@ -351,7 +386,11 @@ export async function POST(req: NextRequest) {
         newIdByTitle.set(norm(task.title), task.id);
         await linkTags(task.id, plan.tagNames ?? []);
         await addCollaborators(task.id, plan.collaboratorIds ?? []);
-        if (typeof plan.data?.assigneeId === "number" && plan.data.assigneeId !== me.id) {
+        if (
+          typeof plan.data?.assigneeId === "number" &&
+          plan.data.assigneeId !== me.id &&
+          taskWantsNotify(task)
+        ) {
           await pushNotification(plan.data.assigneeId as number, `You were assigned: ${task.title}`, `/tasks/${task.id}`);
         }
         results.push({ row: plan.rowNo, title: task.title, status: "created" });
@@ -380,6 +419,7 @@ export async function POST(req: NextRequest) {
 
   const created = results.filter((r) => r.status === "created").length;
   const updated = results.filter((r) => r.status === "updated").length;
+  const skipped = results.filter((r) => r.status === "skip").length;
   const failed = results.filter((r) => r.status === "error").length;
-  return NextResponse.json({ created, updated, failed, results });
+  return NextResponse.json({ created, updated, skipped, failed, results });
 }
