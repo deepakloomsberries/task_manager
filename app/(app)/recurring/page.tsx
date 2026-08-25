@@ -154,21 +154,26 @@ export default async function RecurringPage({
     return { d, key: ymd(d), letter: DOW[dow], isSun: dow === 0, isSat: dow === 6, isToday: ymd(d) === todayKey };
   });
 
+  // Retired count always reflects everything, even while hidden, so the
+  // toggle still shows what it's hiding. Everything else below respects it.
+  const retiredCount = list.filter((s) => s.retired).length;
+  const hideRetired = searchParams.hideRetired === "1";
+  const visibleList = hideRetired ? list.filter((s) => !s.retired) : list;
+
   // Today's progress + this month's totals.
-  const todayDone = list.filter((s) => s.cells.get(todayKey)?.state === "done").length;
-  const todayTotal = list.filter((s) => {
+  const todayDone = visibleList.filter((s) => s.cells.get(todayKey)?.state === "done").length;
+  const todayTotal = visibleList.filter((s) => {
     const c = s.cells.get(todayKey);
     return c && c.state !== "retired";
   }).length;
-  const monthDone = list.reduce((a, s) => a + s.doneCount, 0);
-  const monthMissed = list.reduce((a, s) => a + s.missedCount, 0);
+  const monthDone = visibleList.reduce((a, s) => a + s.doneCount, 0);
+  const monthMissed = visibleList.reduce((a, s) => a + s.missedCount, 0);
   const monthRate = monthDone + monthMissed ? Math.round((monthDone / (monthDone + monthMissed)) * 100) : null;
-  const retiredCount = list.filter((s) => s.retired).length;
 
   // Per-day totals across all jobs (footer bar row).
   const dayDone = new Map<string, number>();
   const dayScheduled = new Map<string, number>();
-  for (const s of list) {
+  for (const s of visibleList) {
     for (const m of dayMeta) {
       const c = s.cells.get(m.key);
       if (!c) continue;
@@ -198,14 +203,17 @@ export default async function RecurringPage({
   const next = new Date(year, month0 + 1, 1);
   const mkMonth = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   // Build a /recurring URL keeping the month + assignee filter in sync.
-  const href = (opts: { month?: string; assignee?: number | null; sort?: string }) => {
+  const href = (opts: { month?: string; assignee?: number | null; sort?: string; hideRetired?: boolean; q?: string }) => {
     const p = new URLSearchParams();
     p.set("month", opts.month ?? mkMonth(monthStart));
     const a = opts.assignee === undefined ? selectedAssignee : opts.assignee;
     if (a) p.set("assignee", String(a));
-    if (q) p.set("q", q);
+    const query = opts.q === undefined ? q : opts.q;
+    if (query) p.set("q", query);
     const so = opts.sort === undefined ? sort : opts.sort;
     if (so && so !== "name") p.set("sort", so);
+    const hr = opts.hideRetired === undefined ? hideRetired : opts.hideRetired;
+    if (hr) p.set("hideRetired", "1");
     return `/recurring?${p.toString()}`;
   };
 
@@ -228,14 +236,16 @@ export default async function RecurringPage({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Recurring tasks</h1>
-          <p className="text-sm text-slate-500">
-            Every recurring job, day by day. <span className="font-medium text-green-600">✓ done</span>,{" "}
-            <span className="font-medium text-rose-500">✕ missed</span>,{" "}
-            <span className="font-medium text-amber-600">• today</span>,{" "}
-            <span className="font-medium text-slate-500">– retired</span> (that day deleted by hand).
-            A <span className="font-medium text-rose-500 line-through">struck-through</span> task name
-            means the whole job is retired — its most recent occurrence was deleted and nothing has
-            replaced it. Weekends (<span className="text-rose-500">Sun</span>) are tinted.
+          <p
+            className="text-sm text-slate-500"
+            title="✓ done · ✕ missed · • today · – retired (that day deleted by hand). A struck-through task name means the whole job is retired — its most recent occurrence was deleted and nothing has replaced it. Weekends are tinted."
+          >
+            Every recurring job, day by day.{" "}
+            <span className="font-medium text-green-600">✓</span>{" "}
+            <span className="font-medium text-rose-500">✕</span>{" "}
+            <span className="font-medium text-amber-600">•</span>{" "}
+            <span className="font-medium text-rose-500 line-through">–</span>{" "}
+            <span className="text-xs">(hover for legend)</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -273,7 +283,7 @@ export default async function RecurringPage({
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <div className="flex flex-wrap gap-2">
           <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-200">
-            {list.length} {q ? "matching" : "recurring"} jobs
+            {visibleList.length} {q ? "matching" : "recurring"} jobs
           </span>
           {isCurrentMonth && (
             <span className="rounded-full bg-sky-100 px-3 py-1 font-medium text-sky-700">
@@ -283,9 +293,21 @@ export default async function RecurringPage({
           <span className="rounded-full bg-green-100 px-3 py-1 font-medium text-green-700">✓ {monthDone} done</span>
           <span className="rounded-full bg-rose-100 px-3 py-1 font-medium text-rose-700">✕ {monthMissed} missed</span>
           {retiredCount > 0 && (
-            <span className="rounded-full bg-slate-200 px-3 py-1 font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">
-              – {retiredCount} retired
-            </span>
+            <>
+              <span className="rounded-full bg-slate-200 px-3 py-1 font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                – {retiredCount} retired
+              </span>
+              <Link
+                href={href({ hideRetired: !hideRetired })}
+                className={`rounded-full px-3 py-1 font-medium ${
+                  hideRetired
+                    ? "bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-800"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200"
+                }`}
+              >
+                {hideRetired ? "✓ Retired hidden" : "Hide retired"}
+              </Link>
+            </>
           )}
           {monthRate !== null && (
             <span className="rounded-full bg-slate-800 px-3 py-1 font-medium text-white dark:bg-slate-200 dark:text-slate-800">
@@ -297,6 +319,7 @@ export default async function RecurringPage({
           {sort !== "name" && <input type="hidden" name="sort" value={sort} />}
           <input type="hidden" name="month" value={mkMonth(monthStart)} />
           {selectedAssignee && <input type="hidden" name="assignee" value={selectedAssignee} />}
+          {hideRetired && <input type="hidden" name="hideRetired" value="1" />}
           <input
             type="search"
             name="q"
@@ -306,10 +329,7 @@ export default async function RecurringPage({
           />
           <button type="submit" className="btn-secondary !py-1.5 text-sm">Search</button>
           {q && (
-            <Link
-              href={`/recurring?month=${mkMonth(monthStart)}${selectedAssignee ? `&assignee=${selectedAssignee}` : ""}`}
-              className="text-xs text-slate-500 hover:underline"
-            >
+            <Link href={href({ q: "" })} className="text-xs text-slate-500 hover:underline">
               Clear
             </Link>
           )}
@@ -331,9 +351,11 @@ export default async function RecurringPage({
         ))}
       </div>
 
-      {list.length === 0 ? (
+      {visibleList.length === 0 ? (
         <div className="card p-10 text-center text-sm text-slate-400">
-          No recurring tasks this month. Set a task&apos;s recurrence to Daily/Weekly/Monthly to see it here.
+          {hideRetired && list.length > 0
+            ? "Every recurring job this month is retired. Turn off “Hide retired” to see them."
+            : "No recurring tasks this month. Set a task's recurrence to Daily/Weekly/Monthly to see it here."}
         </div>
       ) : (
         <div className="card max-h-[74vh] overflow-auto p-0">
@@ -370,7 +392,7 @@ export default async function RecurringPage({
               </tr>
             </thead>
             <tbody>
-              {list.map((s, ri) => {
+              {visibleList.map((s, ri) => {
                 const total = s.doneCount + s.missedCount;
                 const pct = total ? Math.round((s.doneCount / total) * 100) : null;
                 const zebra = ri % 2 === 1;
