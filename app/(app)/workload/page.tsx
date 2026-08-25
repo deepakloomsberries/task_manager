@@ -7,6 +7,7 @@ import { fmtHours } from "@/lib/ui";
 import { weekStartOf } from "@/lib/timerange";
 import SearchSelect from "@/components/SearchSelect";
 import { ActiveTimersProvider, WorkingCell } from "@/components/ActiveTimers";
+import AutoRefresh from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -172,6 +173,7 @@ export default async function WorkloadPage({
 
   return (
     <div className="space-y-4">
+      <AutoRefresh />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Workload</h1>

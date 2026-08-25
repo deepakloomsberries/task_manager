@@ -12,6 +12,7 @@ import { saveProjectAsTemplate } from "@/lib/actions/templates";
 import UserAvatar from "@/components/UserAvatar";
 import ProjectTimeline from "@/components/ProjectTimeline";
 import SearchSelect from "@/components/SearchSelect";
+import AutoRefresh from "@/components/AutoRefresh";
 import {
   PROJECT_STATUSES,
   TASK_STATUSES,
@@ -96,6 +97,7 @@ export default async function ProjectDetailPage({
 
   return (
     <div className="space-y-4">
+      <AutoRefresh />
       <Link href="/projects" className="text-sm text-slate-500 hover:underline">
         ← Back to projects
       </Link>

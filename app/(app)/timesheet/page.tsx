@@ -10,6 +10,7 @@ import {
 } from "@/lib/actions/time";
 import ActiveTimerBanner from "@/components/ActiveTimerBanner";
 import RangePicker from "@/components/RangePicker";
+import AutoRefresh from "@/components/AutoRefresh";
 import SearchSelect from "@/components/SearchSelect";
 import DatePicker from "@/components/DatePicker";
 import TimePicker from "@/components/TimePicker";
@@ -100,6 +101,7 @@ export default async function TimesheetPage({
 
   return (
     <div className="space-y-4">
+      <AutoRefresh />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Time sheet</h1>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { isManagerOrAdmin } from "@/lib/auth";
+import AutoRefresh from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ function ymd(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-type Cell = { id: number; state: "done" | "missed" | "pending"; };
+type Cell = { id: number; state: "done" | "missed" | "pending" | "retired"; };
 
 export default async function RecurringPage({
   searchParams,
@@ -81,8 +82,9 @@ export default async function RecurringPage({
   };
   // A day can hold more than one occurrence (e.g. a duplicate that the nightly
   // roll-over archived as missed alongside the live one). Show the most
-  // meaningful: done beats a still-live pending, which beats missed.
-  const RANK: Record<Cell["state"], number> = { done: 3, pending: 2, missed: 1 };
+  // meaningful: done beats a still-live pending, which beats missed, which
+  // beats a manually-retired duplicate (nothing to see there).
+  const RANK: Record<Cell["state"], number> = { done: 4, pending: 3, missed: 2, retired: 1 };
   const series = new Map<string, Series>();
   for (const t of rows) {
     let s = series.get(t.seriesId!);
@@ -101,6 +103,11 @@ export default async function RecurringPage({
     if (t.completedAt) {
       state = "done";
       if (!s.lastDone || t.completedAt > s.lastDone) s.lastDone = t.completedAt;
+    } else if (t.deletedAt && !t.missedAt) {
+      // The nightly roll-over always stamps missedAt (or completedAt) on
+      // anything it archives, so deletedAt-without-either means a person
+      // deleted this occurrence by hand — retired, not missed.
+      state = "retired";
     } else if (t.missedAt || past) {
       state = "missed";
     } else {
@@ -143,7 +150,10 @@ export default async function RecurringPage({
 
   // Today's progress + this month's totals.
   const todayDone = list.filter((s) => s.cells.get(todayKey)?.state === "done").length;
-  const todayTotal = list.filter((s) => s.cells.has(todayKey)).length;
+  const todayTotal = list.filter((s) => {
+    const c = s.cells.get(todayKey);
+    return c && c.state !== "retired";
+  }).length;
   const monthDone = list.reduce((a, s) => a + s.doneCount, 0);
   const monthMissed = list.reduce((a, s) => a + s.missedCount, 0);
   const monthRate = monthDone + monthMissed ? Math.round((monthDone / (monthDone + monthMissed)) * 100) : null;
@@ -196,6 +206,7 @@ export default async function RecurringPage({
     done: "bg-green-500 text-white shadow-sm",
     missed: "bg-rose-500 text-white shadow-sm",
     pending: "bg-amber-100 text-amber-700 ring-1 ring-amber-400",
+    retired: "bg-slate-300 text-slate-500 dark:bg-slate-600 dark:text-slate-400",
   };
   const SORTS: { key: string; label: string }[] = [
     { key: "name", label: "Name" },
@@ -206,14 +217,16 @@ export default async function RecurringPage({
 
   return (
     <div className="space-y-4">
+      <AutoRefresh />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Recurring tasks</h1>
           <p className="text-sm text-slate-500">
             Every recurring job, day by day. <span className="font-medium text-green-600">✓ done</span>,{" "}
             <span className="font-medium text-rose-500">✕ missed</span>,{" "}
-            <span className="font-medium text-amber-600">• today</span>. Weekends (
-            <span className="text-rose-500">Sun</span>) are tinted.
+            <span className="font-medium text-amber-600">• today</span>,{" "}
+            <span className="font-medium text-slate-500">– retired</span> (deleted by hand, nothing to
+            chase). Weekends (<span className="text-rose-500">Sun</span>) are tinted.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -372,12 +385,28 @@ export default async function RecurringPage({
                           </td>
                         );
                       }
-                      const label = cell.state === "done" ? "✓" : cell.state === "missed" ? "✕" : "•";
+                      const label = cell.state === "done" ? "✓" : cell.state === "missed" ? "✕" : cell.state === "retired" ? "–" : "•";
+                      const dayLabel = m.d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+                      if (cell.state === "retired") {
+                        // Deleted by hand — there's no live task to open, so this
+                        // isn't a link, just a muted marker so it stops reading as
+                        // an unresolved miss.
+                        return (
+                          <td key={m.key} className={`border-b border-slate-100 px-0.5 py-1 text-center dark:border-slate-700 ${tint}`}>
+                            <span
+                              title={`${dayLabel} — retired (deleted, not tracked)`}
+                              className={`mx-auto flex h-6 w-6 items-center justify-center rounded-md text-[11px] font-bold ${CELL.retired}`}
+                            >
+                              {label}
+                            </span>
+                          </td>
+                        );
+                      }
                       return (
                         <td key={m.key} className={`border-b border-slate-100 px-0.5 py-1 text-center dark:border-slate-700 ${tint}`}>
                           <Link
                             href={`/tasks/${cell.id}`}
-                            title={`${m.d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} — ${cell.state}`}
+                            title={`${dayLabel} — ${cell.state}`}
                             className={`mx-auto flex h-6 w-6 items-center justify-center rounded-md text-[11px] font-bold transition hover:scale-110 ${CELL[cell.state]}`}
                           >
                             {label}

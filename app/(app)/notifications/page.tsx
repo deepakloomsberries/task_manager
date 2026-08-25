@@ -8,6 +8,7 @@ import {
   clearNotifications,
 } from "@/lib/actions/notifications";
 import { fmtRelative } from "@/lib/ui";
+import AutoRefresh from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -95,6 +96,7 @@ export default async function InboxPage({ searchParams }: { searchParams: { filt
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
+      <AutoRefresh />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Inbox</h1>

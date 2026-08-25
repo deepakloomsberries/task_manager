@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { setTaskStatus } from "@/lib/actions/tasks";
 import { TASK_PRIORITIES, lookup, fmtDate, tagBadge } from "@/lib/ui";
 import ConfirmButton from "@/components/ConfirmButton";
+import AutoRefresh from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,7 @@ function Section({ title, accent, tasks, back }: { title: string; accent: string
   if (tasks.length === 0) return null;
   return (
     <div className="card">
+      <AutoRefresh />
       <div className="flex items-center gap-2 border-b border-slate-200 px-5 py-3">
         <span className={`h-2 w-2 rounded-full ${accent}`} />
         <h2 className="text-sm font-semibold">{title}</h2>

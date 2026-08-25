@@ -7,6 +7,7 @@ import { LiveWorkingCard } from "@/components/ActiveTimers";
 import PasswordField from "@/components/PasswordField";
 import SearchSelect from "@/components/SearchSelect";
 import DeleteUserButton from "@/components/DeleteUserButton";
+import AutoRefresh from "@/components/AutoRefresh";
 import { updateUser, resetUserPassword, toggleUserActive } from "@/lib/actions/users";
 import {
   TASK_STATUSES,
@@ -172,6 +173,7 @@ export default async function PersonProfilePage({
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
+      <AutoRefresh />
       <Link href="/dashboard" className="text-sm text-slate-500 hover:underline">
         ← Back to dashboard
       </Link>
