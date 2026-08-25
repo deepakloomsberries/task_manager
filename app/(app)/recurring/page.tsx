@@ -79,6 +79,7 @@ export default async function RecurringPage({
     lastDone: Date | null;
     doneCount: number;
     missedCount: number;
+    retired: boolean; // its most recent occurrence was deleted — series is dormant
   };
   // A day can hold more than one occurrence (e.g. a duplicate that the nightly
   // roll-over archived as missed alongside the live one). Show the most
@@ -89,7 +90,7 @@ export default async function RecurringPage({
   for (const t of rows) {
     let s = series.get(t.seriesId!);
     if (!s) {
-      s = { seriesId: t.seriesId!, title: t.title, assignee: t.assignee?.name ?? null, openId: t.id, cells: new Map(), lastDone: null, doneCount: 0, missedCount: 0 };
+      s = { seriesId: t.seriesId!, title: t.title, assignee: t.assignee?.name ?? null, openId: t.id, cells: new Map(), lastDone: null, doneCount: 0, missedCount: 0, retired: false };
       series.set(t.seriesId!, s);
     }
     // Keep the most recent title/assignee/id as the label (rows are date-asc).
@@ -127,6 +128,11 @@ export default async function RecurringPage({
       if (c.state === "done") s.doneCount++;
       else if (c.state === "missed") s.missedCount++;
     }
+    // The series is dormant if its most recent occurrence (this month) is the
+    // retired one — nothing live is left to roll forward, so nobody should be
+    // chasing this row until it's recreated.
+    const lastKey = Array.from(s.cells.keys()).sort().pop();
+    s.retired = lastKey !== undefined && s.cells.get(lastKey)?.state === "retired";
   }
   const rate = (s: Series) => {
     const t = s.doneCount + s.missedCount;
@@ -157,6 +163,7 @@ export default async function RecurringPage({
   const monthDone = list.reduce((a, s) => a + s.doneCount, 0);
   const monthMissed = list.reduce((a, s) => a + s.missedCount, 0);
   const monthRate = monthDone + monthMissed ? Math.round((monthDone / (monthDone + monthMissed)) * 100) : null;
+  const retiredCount = list.filter((s) => s.retired).length;
 
   // Per-day totals across all jobs (footer bar row).
   const dayDone = new Map<string, number>();
@@ -225,8 +232,10 @@ export default async function RecurringPage({
             Every recurring job, day by day. <span className="font-medium text-green-600">✓ done</span>,{" "}
             <span className="font-medium text-rose-500">✕ missed</span>,{" "}
             <span className="font-medium text-amber-600">• today</span>,{" "}
-            <span className="font-medium text-slate-500">– retired</span> (deleted by hand, nothing to
-            chase). Weekends (<span className="text-rose-500">Sun</span>) are tinted.
+            <span className="font-medium text-slate-500">– retired</span> (that day deleted by hand).
+            A <span className="font-medium text-rose-500 line-through">struck-through</span> task name
+            means the whole job is retired — its most recent occurrence was deleted and nothing has
+            replaced it. Weekends (<span className="text-rose-500">Sun</span>) are tinted.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -273,6 +282,11 @@ export default async function RecurringPage({
           )}
           <span className="rounded-full bg-green-100 px-3 py-1 font-medium text-green-700">✓ {monthDone} done</span>
           <span className="rounded-full bg-rose-100 px-3 py-1 font-medium text-rose-700">✕ {monthMissed} missed</span>
+          {retiredCount > 0 && (
+            <span className="rounded-full bg-slate-200 px-3 py-1 font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+              – {retiredCount} retired
+            </span>
+          )}
           {monthRate !== null && (
             <span className="rounded-full bg-slate-800 px-3 py-1 font-medium text-white dark:bg-slate-200 dark:text-slate-800">
               {monthRate}% completion
@@ -364,10 +378,30 @@ export default async function RecurringPage({
                 return (
                   <tr key={s.seriesId} className="group">
                     <td className={`sticky left-0 z-10 w-80 min-w-[16rem] max-w-[24rem] border-b border-slate-100 px-4 py-2.5 dark:border-slate-700 ${rowBg} group-hover:bg-sky-50 dark:group-hover:bg-slate-700/60`}>
-                      <Link href={`/tasks/${s.openId}`} className="block font-medium leading-snug hover:text-sky-600 hover:underline" title={s.title}>
-                        <span className="line-clamp-2">{s.title}</span>
-                      </Link>
-                      {s.assignee && <div className="mt-0.5 text-[11px] text-slate-400">{s.assignee}</div>}
+                      {s.retired ? (
+                        // Deleted by hand and nothing has replaced it — the last
+                        // occurrence isn't live, so there's nowhere to link.
+                        // Recreating a task with this exact title, assignee and
+                        // recurrence picks the same series back up.
+                        <div
+                          className="flex items-center gap-1.5 font-medium leading-snug text-rose-500 line-through decoration-2 dark:text-rose-400"
+                          title={`${s.title} — retired: deleted, no longer tracked`}
+                        >
+                          <span className="line-clamp-2">{s.title}</span>
+                        </div>
+                      ) : (
+                        <Link href={`/tasks/${s.openId}`} className="block font-medium leading-snug hover:text-sky-600 hover:underline" title={s.title}>
+                          <span className="line-clamp-2">{s.title}</span>
+                        </Link>
+                      )}
+                      <div className="mt-0.5 flex items-center gap-1.5">
+                        {s.assignee && <span className="text-[11px] text-slate-400">{s.assignee}</span>}
+                        {s.retired && (
+                          <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-600 dark:bg-rose-950/50 dark:text-rose-400">
+                            Retired
+                          </span>
+                        )}
+                      </div>
                     </td>
                     {dayMeta.map((m) => {
                       const cell = s.cells.get(m.key);
