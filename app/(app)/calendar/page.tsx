@@ -4,6 +4,7 @@ import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import { TASK_PRIORITIES, TASK_STATUSES, lookup } from "@/lib/ui";
 import CalendarGrid, { type CalTask } from "@/components/CalendarGrid";
 import SearchSelect from "@/components/SearchSelect";
+import AutoRefresh from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -108,6 +109,7 @@ export default async function CalendarPage({
 
   return (
     <div className="space-y-4">
+      <AutoRefresh />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Calendar</h1>

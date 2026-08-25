@@ -4,6 +4,7 @@ import { uploadAttachment } from "@/lib/actions/files";
 import { fmtSize } from "@/lib/storage";
 import { fmtDateTime } from "@/lib/ui";
 import DocumentsTable, { type DocRow } from "@/components/DocumentsTable";
+import AutoRefresh from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,7 @@ export default async function DocumentsPage({
 
   return (
     <div className="space-y-4">
+      <AutoRefresh />
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-bold">Documents</h1>

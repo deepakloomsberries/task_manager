@@ -4,6 +4,7 @@ import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import { createProject } from "@/lib/actions/projects";
 import { PROJECT_STATUSES, lookup, fmtDate } from "@/lib/ui";
 import SearchSelect from "@/components/SearchSelect";
+import AutoRefresh from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,7 @@ export default async function ProjectsPage({
 
   return (
     <div className="space-y-4">
+      <AutoRefresh />
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Projects</h1>
         {canManage && (

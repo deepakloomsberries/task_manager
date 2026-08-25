@@ -45,9 +45,12 @@ export async function GET(request: Request) {
 
   const iso = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : "");
 
+  const recurrenceLabel = (r: string | null) =>
+    r ? r.charAt(0) + r.slice(1).toLowerCase() : "";
+
   const header = [
     "ID", "Title", "Status", "Priority", "Project", "Assignee", "Created by",
-    "Tags", "Start date", "Due date", "Estimate (h)", "Blocked", "Created", "Completed",
+    "Tags", "Recurrence", "Start date", "Due date", "Estimate (h)", "Blocked", "Created", "Completed",
   ];
   const rows = tasks.map((t) =>
     [
@@ -59,6 +62,7 @@ export async function GET(request: Request) {
       t.assignee?.name ?? "",
       t.createdBy.name,
       t.tags.map(({ tag }) => tag.name).join(", "),
+      recurrenceLabel(t.recurrence),
       iso(t.startDate),
       iso(t.dueDate),
       t.estimateHours ?? "",

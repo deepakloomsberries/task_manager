@@ -11,6 +11,7 @@ import MultiSelect from "@/components/MultiSelect";
 import RememberTaskView from "@/components/RememberTaskView";
 import SaveViewButton from "@/components/SaveViewButton";
 import BulkTaskImport from "@/components/BulkTaskImport";
+import AutoRefresh from "@/components/AutoRefresh";
 import { deleteSavedView } from "@/lib/actions/savedViews";
 import { buildTaskListQuery, TASK_FILTER_KEYS } from "@/lib/taskFilters";
 import {
@@ -161,6 +162,7 @@ export default async function TasksPage({
 
   return (
     <div className="space-y-4">
+      <AutoRefresh />
       <RememberTaskView view={viewParam} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Tasks</h1>

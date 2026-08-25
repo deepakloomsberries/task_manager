@@ -7,6 +7,7 @@ import UserAvatar from "@/components/UserAvatar";
 import { approveTimesheet, rejectTimesheet, approveAllTimesheets } from "@/lib/actions/time";
 import { fmtDate, fmtHours, toInputDate } from "@/lib/ui";
 import { rangeBounds } from "@/lib/timerange";
+import AutoRefresh from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -87,6 +88,7 @@ export default async function TeamTimesheetPage({
 
   return (
     <div className="space-y-4">
+      <AutoRefresh />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <Link href="/timesheet" className="text-sm text-slate-500 hover:underline">
