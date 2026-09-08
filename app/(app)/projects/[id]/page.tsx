@@ -7,11 +7,14 @@ import {
   addProjectMember,
   removeProjectMember,
   deleteProject,
+  linkTaskToProject,
 } from "@/lib/actions/projects";
+import { createTask } from "@/lib/actions/tasks";
 import { saveProjectAsTemplate } from "@/lib/actions/templates";
 import UserAvatar from "@/components/UserAvatar";
 import ProjectTimeline from "@/components/ProjectTimeline";
 import SearchSelect from "@/components/SearchSelect";
+import DatePicker from "@/components/DatePicker";
 import AutoRefresh from "@/components/AutoRefresh";
 import {
   PROJECT_STATUSES,
@@ -32,13 +35,14 @@ export default async function ProjectDetailPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { edit?: string };
+  searchParams: { edit?: string; addTask?: string; error?: string };
 }) {
   const user = await requireUser();
   const id = Number(params.id);
   if (!id) notFound();
 
-  const [project, allUsers] = await Promise.all([
+  const addingTask = searchParams.addTask === "1";
+  const [project, allUsers, openTasks] = await Promise.all([
     db.project.findUnique({
       where: { id },
       include: {
@@ -53,6 +57,16 @@ export default async function ProjectDetailPage({
       },
     }),
     db.user.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+    // Only fetched when the picker is open — existing tasks with no project
+    // yet, so "Add task" can attach one instead of always creating new.
+    addingTask
+      ? db.task.findMany({
+          where: { projectId: null, deletedAt: null },
+          select: { id: true, title: true, status: true },
+          orderBy: { createdAt: "desc" },
+          take: 200,
+        })
+      : Promise.resolve([]),
   ]);
   if (!project) notFound();
 
@@ -89,6 +103,7 @@ export default async function ProjectDetailPage({
 
   const canManage = isManagerOrAdmin(user.role);
   const editing = searchParams.edit === "1" && canManage;
+  const showAddTask = addingTask && canManage;
   const status = lookup(PROJECT_STATUSES, project.status);
   const memberIds = new Set(project.members.map((m) => m.userId));
   const nonMembers = allUsers.filter((u) => !memberIds.has(u.id));
@@ -188,10 +203,93 @@ export default async function ProjectDetailPage({
         <div className="card lg:col-span-2">
           <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
             <h2 className="font-semibold">Tasks</h2>
-            <Link href={`/tasks?new=1`} className="text-sm text-sky-600 hover:underline">
-              + Add task
-            </Link>
+            {canManage ? (
+              <Link
+                href={showAddTask ? `/projects/${project.id}` : `/projects/${project.id}?addTask=1`}
+                className="text-sm text-sky-600 hover:underline"
+              >
+                {showAddTask ? "Close" : "+ Add task"}
+              </Link>
+            ) : (
+              <Link href="/tasks?new=1" className="text-sm text-sky-600 hover:underline">
+                + Add task
+              </Link>
+            )}
           </div>
+          {showAddTask && (
+            <div className="border-b border-slate-200 bg-slate-50/60 px-5 py-4 dark:bg-slate-900/20">
+              {searchParams.error === "pick-a-task" && (
+                <p className="mb-3 text-sm text-rose-600">Pick a task from the list first.</p>
+              )}
+              <div className="grid gap-5 md:grid-cols-2">
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Link an existing task
+                  </p>
+                  {openTasks.length === 0 ? (
+                    <p className="text-sm text-slate-400">No project-less tasks to attach right now.</p>
+                  ) : (
+                    <form action={linkTaskToProject} className="flex items-start gap-2">
+                      <input type="hidden" name="projectId" value={project.id} />
+                      <div className="flex-1">
+                        <SearchSelect
+                          name="taskId"
+                          placeholder="Search open tasks…"
+                          searchPlaceholder="Search open tasks…"
+                          options={openTasks.map((t) => ({
+                            value: String(t.id),
+                            label: `${t.title} — ${lookup(TASK_STATUSES, t.status).label}`,
+                          }))}
+                        />
+                      </div>
+                      <button type="submit" className="btn-secondary shrink-0">
+                        Attach
+                      </button>
+                    </form>
+                  )}
+                  <p className="mt-2 text-xs text-slate-400">
+                    Only tasks not already in a project are listed — move one out of another
+                    project first if it needs to switch.
+                  </p>
+                </div>
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Or create a new one
+                  </p>
+                  <form action={createTask} className="grid grid-cols-2 gap-2">
+                    <input type="hidden" name="projectId" value={project.id} />
+                    <input
+                      name="title"
+                      required
+                      placeholder="Task title"
+                      className="input col-span-2"
+                    />
+                    <SearchSelect
+                      name="assigneeId"
+                      defaultValue={String(user.id)}
+                      placeholder="— Unassigned —"
+                      searchPlaceholder="Search people…"
+                      options={[
+                        { value: "", label: "— Unassigned —" },
+                        ...allUsers.map((u) => ({ value: String(u.id), label: u.name })),
+                      ]}
+                    />
+                    <SearchSelect
+                      name="priority"
+                      defaultValue="MEDIUM"
+                      options={TASK_PRIORITIES.map((p) => ({ value: p.value, label: p.label }))}
+                    />
+                    <div className="col-span-2">
+                      <DatePicker name="dueDate" placeholder="Due date (optional)" />
+                    </div>
+                    <button type="submit" className="btn-primary col-span-2">
+                      Create task
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="divide-y divide-slate-100">
             {project.tasks.length === 0 && (
               <p className="px-5 py-8 text-center text-sm text-slate-400">No tasks in this project.</p>
