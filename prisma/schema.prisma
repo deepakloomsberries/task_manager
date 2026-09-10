@@ -67,6 +67,7 @@ model User {
   passwordReset        PasswordReset?
   savedViews           SavedView[]
   taskWatches          TaskWatcher[]
+  billingSnapshots     BillingSnapshot[]
 }
 
 /**
@@ -439,4 +440,35 @@ model TaskTimer {
   taskId    Int
   note      String?
   startedAt DateTime @default(now())
+}
+
+/**
+ * The per-seat rate an admin has set for internal cost-recovery billing (see
+ * /billing). Always exactly one row (id 1) — a singleton settings record, not
+ * a history; BillingSnapshot below is what preserves history month to month.
+ */
+model BillingSetting {
+  id          Int      @id @default(autoincrement())
+  ratePerSeat Int // whole currency units per active user per month, e.g. 100
+  currency    String   @default("INR")
+  updatedAt   DateTime @updatedAt
+}
+
+/**
+ * A generated monthly billing snapshot — active user count and rate frozen at
+ * the moment it was generated, so past months stay accurate even after the
+ * rate changes or headcount moves. One per calendar month (period "YYYY-MM");
+ * generating again for the same month overwrites it (e.g. to correct a
+ * headcount change before finance has seen it).
+ */
+model BillingSnapshot {
+  id            Int      @id @default(autoincrement())
+  period        String   @unique // "2026-09"
+  activeUsers   Int
+  ratePerSeat   Int
+  currency      String
+  totalAmount   Int
+  generatedAt   DateTime @default(now())
+  generatedBy   User     @relation(fields: [generatedById], references: [id])
+  generatedById Int
 }

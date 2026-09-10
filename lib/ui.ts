@@ -105,6 +105,36 @@ export function fmtDateTime(d: Date | string | null | undefined) {
   });
 }
 
+/** Whole-currency-unit amount with grouping, e.g. fmtMoney(5000, "INR") → "₹5,000". */
+export function fmtMoney(amount: number, currency: string) {
+  try {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  } catch {
+    // Unknown/invalid currency code — fall back to a plain labeled number.
+    return `${amount.toLocaleString("en-IN")} ${currency}`;
+  }
+}
+
+/**
+ * Chat-list-style timestamp: just the clock time for something from today
+ * ("14:32"), "Yesterday" for the day before, or a short date further back —
+ * the WhatsApp convention, instead of always spelling out the full date.
+ */
+export function fmtChatListTime(d: Date | string | null | undefined) {
+  if (!d) return "";
+  const date = new Date(d);
+  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diffDays = Math.round((startOfDay(new Date()) - startOfDay(date)) / 86400000);
+  if (diffDays === 0) return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return date.toLocaleDateString("en-GB", { weekday: "short" });
+  return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
+}
+
 export function toInputDate(d: Date | string | null | undefined) {
   if (!d) return "";
   return new Date(d).toISOString().slice(0, 10);

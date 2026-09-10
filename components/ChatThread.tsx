@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import UserAvatar from "@/components/UserAvatar";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import ChatInfoPanel, { type PanelItem, type PanelLink } from "@/components/ChatInfoPanel";
 import { sendMessage, deleteMessage } from "@/lib/actions/messages";
 import { isOnline, lastSeenLabel } from "@/lib/ui";
 
@@ -114,6 +116,7 @@ export default function ChatThread({
   initialLastReadMyId: number;
   initialPartnerLastSeenAt: string | null;
 }) {
+  const router = useRouter();
   const [messages, setMessages] = useState<Msg[]>(initialMessages);
   const [lastReadMyId, setLastReadMyId] = useState(initialLastReadMyId);
   const [partnerLastSeen, setPartnerLastSeen] = useState<string | null>(initialPartnerLastSeenAt);
@@ -122,6 +125,7 @@ export default function ChatThread({
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
   const [uploading, setUploading] = useState(0);
   const [partnerTyping, setPartnerTyping] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
   const [, forceTick] = useState(0);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -144,6 +148,12 @@ export default function ChatThread({
 
   useEffect(() => {
     scrollToBottom();
+    // The page already marked this partner's messages read server-side by
+    // the time it rendered us — but the sidebar lives in a layout that
+    // persists across this navigation, so its unread badge won't pick that
+    // up on its own (layouts don't re-fetch just because a child page did).
+    // Nudge it now instead of leaving it stale until the next AutoRefresh tick.
+    router.refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -340,9 +350,30 @@ export default function ChatThread({
 
   const canSend = !!text.trim() || atts.length > 0;
 
+  // Everything for the "Media, links and docs" panel comes straight out of
+  // the message history already loaded here (up to 500 messages, same as
+  // the page that seeds this component) — no separate fetch needed.
+  const { media, docs, links } = useMemo(() => {
+    const media: PanelItem[] = [];
+    const docs: PanelItem[] = [];
+    const links: PanelLink[] = [];
+    const urlRe = /https?:\/\/[^\s]+/g;
+    for (const m of messages) {
+      if (m.deleted || m.pending || m.failed) continue;
+      for (const a of m.attachments ?? []) {
+        const item: PanelItem = { id: a.id, name: a.name, mimeType: a.mimeType, size: a.size, at: m.createdAt };
+        (isImage(a) ? media : docs).push(item);
+      }
+      const found = m.body.match(urlRe);
+      if (found) for (const url of found) links.push({ url, at: m.createdAt });
+    }
+    // Messages are oldest-first; show newest-first, like WhatsApp's panel.
+    return { media: media.reverse(), docs: docs.reverse(), links: links.reverse() };
+  }, [messages]);
+
   return (
     <div
-      className="mx-auto flex h-full max-w-3xl flex-col gap-3"
+      className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-slate-50 dark:bg-slate-900/30"
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         if (e.dataTransfer?.files?.length) {
@@ -352,8 +383,12 @@ export default function ChatThread({
       }}
     >
       {/* Header */}
-      <div className="card flex items-center gap-3 p-3">
-        <Link href="/messages" className="rounded-lg px-1.5 py-1 text-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">
+      <div className="flex items-center gap-3 border-b border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800">
+        {/* The sidebar is always visible on desktop, so "back" only makes sense on mobile. */}
+        <Link
+          href="/messages"
+          className="rounded-lg px-1.5 py-1 text-lg text-slate-500 hover:bg-slate-100 md:hidden dark:hover:bg-slate-700"
+        >
           ←
         </Link>
         <UserAvatar user={other} size={40} presence={partnerLastSeen} />
@@ -375,23 +410,41 @@ export default function ChatThread({
             </p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={startCall}
-          title="Start a video call"
-          aria-label="Start a video call"
-          className="ml-auto flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m23 7-7 5 7 5V7Z" />
-            <rect x="1" y="5" width="15" height="14" rx="2" />
-          </svg>
-          <span className="hidden sm:inline">Call</span>
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowInfo((s) => !s)}
+            title="Media, links and docs"
+            aria-label="Media, links and docs"
+            className={`flex h-9 w-9 items-center justify-center rounded-xl border text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700 ${
+              showInfo
+                ? "border-sky-500 bg-sky-50 text-sky-600 dark:border-sky-500 dark:bg-sky-900/30 dark:text-sky-400"
+                : "border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-800"
+            }`}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 16v-4M12 8h.01" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={startCall}
+            title="Start a video call"
+            aria-label="Start a video call"
+            className="flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m23 7-7 5 7 5V7Z" />
+              <rect x="1" y="5" width="15" height="14" rx="2" />
+            </svg>
+            <span className="hidden sm:inline">Call</span>
+          </button>
+        </div>
       </div>
 
       {/* Message list */}
-      <div ref={scrollRef} onScroll={onScroll} className="card flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
+      <div ref={scrollRef} onScroll={onScroll} className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
         {messages.length === 0 && (
           <p className="py-10 text-center text-sm text-slate-400">
             No messages yet. Say hello to {other.name.split(" ")[0]}.
@@ -480,7 +533,7 @@ export default function ChatThread({
       </div>
 
       {/* Composer */}
-      <div className="card p-2.5">
+      <div className="border-t border-slate-200 bg-white p-2.5 dark:border-slate-700 dark:bg-slate-800">
         {(atts.length > 0 || uploading > 0) && (
           <div className="mb-2 flex flex-wrap gap-2 border-b border-slate-100 pb-2 dark:border-slate-700">
             {atts.map((a) => (
@@ -560,6 +613,8 @@ export default function ChatThread({
           </button>
         </div>
       </div>
+
+      {showInfo && <ChatInfoPanel media={media} docs={docs} links={links} onClose={() => setShowInfo(false)} />}
 
       <ConfirmDialog
         open={pendingDelete !== null}

@@ -391,7 +391,11 @@ export default async function TaskDetailPage({
                   <form action={deleteTask}>
                     <input type="hidden" name="id" value={task.id} />
                     <ConfirmButton
-                      message="Delete this task? You can restore it from Trash."
+                      message={
+                        task.recurrence
+                          ? "Delete this task? It's the current occurrence of a recurring job — deleting it stops the whole series, not just today's copy. No new occurrences will be created until one is recreated with the same title, assignee and recurrence. You can restore this one from Trash."
+                          : "Delete this task? You can restore it from Trash."
+                      }
                       className="btn-danger"
                     >
                       Delete

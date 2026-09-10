@@ -42,6 +42,13 @@ export default async function ConversationPage({ params }: { params: { userId: s
 
   return (
     <ChatThread
+      // Force a full remount when switching between conversations — without
+      // it, React reuses this component instance across navigations (same
+      // position in the tree), so message/composer/panel state from the
+      // previous chat would leak into the next one, and the mount effect
+      // below (scroll-to-bottom, unread-badge refresh) would only ever fire
+      // once instead of on every chat switch.
+      key={other.id}
       meId={user.id}
       other={{
         id: other.id,
