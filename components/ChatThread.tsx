@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import UserAvatar from "@/components/UserAvatar";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { sendMessage, deleteMessage } from "@/lib/actions/messages";
@@ -114,6 +115,7 @@ export default function ChatThread({
   initialLastReadMyId: number;
   initialPartnerLastSeenAt: string | null;
 }) {
+  const router = useRouter();
   const [messages, setMessages] = useState<Msg[]>(initialMessages);
   const [lastReadMyId, setLastReadMyId] = useState(initialLastReadMyId);
   const [partnerLastSeen, setPartnerLastSeen] = useState<string | null>(initialPartnerLastSeenAt);
@@ -144,6 +146,12 @@ export default function ChatThread({
 
   useEffect(() => {
     scrollToBottom();
+    // The page already marked this partner's messages read server-side by
+    // the time it rendered us — but the sidebar lives in a layout that
+    // persists across this navigation, so its unread badge won't pick that
+    // up on its own (layouts don't re-fetch just because a child page did).
+    // Nudge it now instead of leaving it stale until the next AutoRefresh tick.
+    router.refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -342,7 +350,7 @@ export default function ChatThread({
 
   return (
     <div
-      className="mx-auto flex h-full max-w-3xl flex-col gap-3"
+      className="flex h-full min-w-0 flex-1 flex-col bg-slate-50 dark:bg-slate-900/30"
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         if (e.dataTransfer?.files?.length) {
@@ -352,8 +360,12 @@ export default function ChatThread({
       }}
     >
       {/* Header */}
-      <div className="card flex items-center gap-3 p-3">
-        <Link href="/messages" className="rounded-lg px-1.5 py-1 text-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">
+      <div className="flex items-center gap-3 border-b border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800">
+        {/* The sidebar is always visible on desktop, so "back" only makes sense on mobile. */}
+        <Link
+          href="/messages"
+          className="rounded-lg px-1.5 py-1 text-lg text-slate-500 hover:bg-slate-100 md:hidden dark:hover:bg-slate-700"
+        >
           ←
         </Link>
         <UserAvatar user={other} size={40} presence={partnerLastSeen} />
@@ -391,7 +403,7 @@ export default function ChatThread({
       </div>
 
       {/* Message list */}
-      <div ref={scrollRef} onScroll={onScroll} className="card flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
+      <div ref={scrollRef} onScroll={onScroll} className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
         {messages.length === 0 && (
           <p className="py-10 text-center text-sm text-slate-400">
             No messages yet. Say hello to {other.name.split(" ")[0]}.
@@ -480,7 +492,7 @@ export default function ChatThread({
       </div>
 
       {/* Composer */}
-      <div className="card p-2.5">
+      <div className="border-t border-slate-200 bg-white p-2.5 dark:border-slate-700 dark:bg-slate-800">
         {(atts.length > 0 || uploading > 0) && (
           <div className="mb-2 flex flex-wrap gap-2 border-b border-slate-100 pb-2 dark:border-slate-700">
             {atts.map((a) => (
