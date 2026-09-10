@@ -105,6 +105,20 @@ export function fmtDateTime(d: Date | string | null | undefined) {
   });
 }
 
+/** Whole-currency-unit amount with grouping, e.g. fmtMoney(5000, "INR") → "₹5,000". */
+export function fmtMoney(amount: number, currency: string) {
+  try {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  } catch {
+    // Unknown/invalid currency code — fall back to a plain labeled number.
+    return `${amount.toLocaleString("en-IN")} ${currency}`;
+  }
+}
+
 /**
  * Chat-list-style timestamp: just the clock time for something from today
  * ("14:32"), "Yesterday" for the day before, or a short date further back —

@@ -24,6 +24,7 @@ const MAIN_NAV: NavItem[] = [
 const ADMIN_NAV: NavItem[] = [
   { href: "/users", label: "Users", icon: "◉" },
   { href: "/departments", label: "Departments", icon: "⌂" },
+  { href: "/billing", label: "Billing", icon: "₹" },
 ];
 
 function NavLink({
