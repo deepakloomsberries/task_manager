@@ -19,7 +19,7 @@ export default async function ConversationPage({ params }: { params: { userId: s
     data: { read: true },
   });
 
-  const [messages, lastRead] = await Promise.all([
+  const [messages, lastRead, reactionRows] = await Promise.all([
     db.directMessage.findMany({
       where: {
         OR: [
@@ -31,6 +31,9 @@ export default async function ConversationPage({ params }: { params: { userId: s
       take: 500,
       include: {
         attachments: { select: { id: true, originalName: true, mimeType: true, size: true }, orderBy: { id: "asc" } },
+        replyTo: {
+          select: { id: true, body: true, senderId: true, deletedAt: true, attachments: { select: { id: true }, take: 1 } },
+        },
       },
     }),
     db.directMessage.findFirst({
@@ -38,7 +41,31 @@ export default async function ConversationPage({ params }: { params: { userId: s
       orderBy: { id: "desc" },
       select: { id: true },
     }),
+    db.messageReaction.findMany({
+      where: {
+        message: {
+          OR: [
+            { senderId: user.id, recipientId: otherId },
+            { senderId: otherId, recipientId: user.id },
+          ],
+        },
+      },
+      select: { messageId: true, userId: true, emoji: true },
+    }),
   ]);
+
+  const reactionsByMessage = new Map<number, { emoji: string; count: number; mine: boolean }[]>();
+  for (const r of reactionRows) {
+    const list = reactionsByMessage.get(r.messageId) ?? [];
+    const existing = list.find((x) => x.emoji === r.emoji);
+    if (existing) {
+      existing.count += 1;
+      if (r.userId === user.id) existing.mine = true;
+    } else {
+      list.push({ emoji: r.emoji, count: 1, mine: r.userId === user.id });
+    }
+    reactionsByMessage.set(r.messageId, list);
+  }
 
   return (
     <ChatThread
@@ -71,6 +98,16 @@ export default async function ConversationPage({ params }: { params: { userId: s
               mimeType: a.mimeType,
               size: a.size,
             })),
+        replyTo:
+          m.replyTo && !m.replyTo.deletedAt
+            ? {
+                id: m.replyTo.id,
+                body: m.replyTo.body,
+                senderId: m.replyTo.senderId,
+                hasAttachment: m.replyTo.attachments.length > 0,
+              }
+            : null,
+        reactions: reactionsByMessage.get(m.id) ?? [],
       }))}
       initialLastReadMyId={lastRead?.id ?? 0}
       initialPartnerLastSeenAt={other.lastSeenAt ? other.lastSeenAt.toISOString() : null}

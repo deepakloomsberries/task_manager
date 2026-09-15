@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation";
 import UserAvatar from "@/components/UserAvatar";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import ChatInfoPanel, { type PanelItem, type PanelLink } from "@/components/ChatInfoPanel";
-import { sendMessage, deleteMessage } from "@/lib/actions/messages";
+import { sendMessage, deleteMessage, toggleReaction } from "@/lib/actions/messages";
 import { isOnline, lastSeenLabel } from "@/lib/ui";
 
 type Att = { id: number; name: string; mimeType: string; size: number };
+type ReplyRef = { id: number; body: string; senderId: number; hasAttachment: boolean };
+type Reaction = { emoji: string; count: number; mine: boolean };
 
 type Msg = {
   id: number;
@@ -20,6 +22,8 @@ type Msg = {
   deleted?: boolean;
   pending?: boolean;
   failed?: boolean;
+  replyTo?: ReplyRef | null;
+  reactions?: Reaction[];
 };
 
 type Person = {
@@ -29,6 +33,20 @@ type Person = {
   email: string;
   avatarPath?: string | null;
 };
+
+// A curated, WhatsApp-flavoured emoji set — broad enough to cover reactions
+// and everyday chat without loading an emoji-data library just for this.
+const EMOJI_PICKER = [
+  "😀", "😁", "😂", "🤣", "😊", "😍", "😘", "😜", "🤔", "😐",
+  "😴", "😢", "😭", "😡", "😱", "🥳", "🤗", "🤝", "🙏", "👍",
+  "👎", "👏", "🙌", "💪", "👌", "✌️", "🤞", "🤟", "👋", "🖐️",
+  "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "💯", "🔥",
+  "✨", "🎉", "🎊", "✅", "❌", "⚠️", "❓", "❗", "⭐", "🌟",
+  "☀️", "🌧️", "☕", "🍕", "🎂", "🎁", "📅", "⏰", "📌", "📎",
+  "📊", "📈", "📉", "💻", "📱", "✉️", "📞", "🚀", "🏠", "🚗",
+];
+
+const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 
 function startOfDay(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
@@ -54,23 +72,44 @@ function fmtSize(b: number) {
 
 const isImage = (a: Att) => a.mimeType.startsWith("image/");
 
-/** Renders message text with any URLs turned into clickable links. */
-function linkify(text: string, mine: boolean) {
-  return text.split(/(https?:\/\/[^\s]+)/g).map((p, i) =>
-    /^https?:\/\//.test(p) ? (
-      <a
-        key={i}
-        href={p}
-        target="_blank"
-        rel="noreferrer"
-        className={`underline ${mine ? "text-white" : "text-sky-600 dark:text-sky-400"}`}
-      >
-        {p}
-      </a>
-    ) : (
-      <span key={i}>{p}</span>
-    )
-  );
+/** Renders message text with URLs linkified and, while a thread search is
+ *  active, its matches wrapped in <mark> — so results are visible in place,
+ *  not just jumped to. */
+function renderBody(text: string, mine: boolean, query: string) {
+  const urlParts = text.split(/(https?:\/\/[^\s]+)/g);
+  const q = query.trim().toLowerCase();
+  return urlParts.map((part, i) => {
+    if (/^https?:\/\//.test(part)) {
+      return (
+        <a
+          key={i}
+          href={part}
+          target="_blank"
+          rel="noreferrer"
+          className={`underline ${mine ? "text-white" : "text-sky-600 dark:text-sky-400"}`}
+        >
+          {part}
+        </a>
+      );
+    }
+    if (!q) return <span key={i}>{part}</span>;
+    const lower = part.toLowerCase();
+    const pieces: React.ReactNode[] = [];
+    let start = 0;
+    let idx: number;
+    let k = 0;
+    while ((idx = lower.indexOf(q, start)) !== -1) {
+      if (idx > start) pieces.push(part.slice(start, idx));
+      pieces.push(
+        <mark key={`${i}-${k++}`} className="rounded bg-amber-300 px-0.5 text-slate-900">
+          {part.slice(idx, idx + q.length)}
+        </mark>
+      );
+      start = idx + q.length;
+    }
+    if (start < part.length) pieces.push(part.slice(start));
+    return <span key={i}>{pieces}</span>;
+  });
 }
 
 function AttachmentList({ atts, mine }: { atts: Att[]; mine: boolean }) {
@@ -103,6 +142,82 @@ function AttachmentList({ atts, mine }: { atts: Att[]; mine: boolean }) {
   );
 }
 
+/** The reply/react (and, for your own messages, delete) icons that appear on
+ *  hover next to a bubble — grouped so both sides of the conversation share
+ *  the same three buttons instead of duplicating markup. */
+function MessageActions({
+  onReply,
+  onReact,
+  onDelete,
+}: {
+  onReply: () => void;
+  onReact: () => void;
+  onDelete?: () => void;
+}) {
+  return (
+    <div className="mb-4 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+      <button
+        type="button"
+        onClick={onReact}
+        title="React"
+        aria-label="React"
+        className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700"
+      >
+        <span className="text-sm leading-none">🙂</span>
+      </button>
+      <button
+        type="button"
+        onClick={onReply}
+        title="Reply"
+        aria-label="Reply"
+        className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 17l-5-5 5-5M4 12h11a4 4 0 0 1 4 4v1" />
+        </svg>
+      </button>
+      {onDelete && (
+        <button
+          type="button"
+          onClick={onDelete}
+          title="Delete message"
+          aria-label="Delete message"
+          className="rounded-lg p-1 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/30"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
+function QuickReactBar({ onPick, onClose }: { onPick: (emoji: string) => void; onClose: () => void }) {
+  return (
+    <div className="mb-4 flex items-center gap-0.5 rounded-full border border-slate-200 bg-white px-1 py-0.5 shadow-sm dark:border-slate-600 dark:bg-slate-800">
+      {QUICK_REACTIONS.map((e) => (
+        <button
+          key={e}
+          type="button"
+          onClick={() => onPick(e)}
+          className="rounded-full p-1 text-base hover:bg-slate-100 dark:hover:bg-slate-700"
+        >
+          {e}
+        </button>
+      ))}
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close"
+        className="rounded-full p-1 text-xs text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
 export default function ChatThread({
   meId,
   other,
@@ -126,18 +241,37 @@ export default function ChatThread({
   const [uploading, setUploading] = useState(0);
   const [partnerTyping, setPartnerTyping] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<Msg | null>(null);
+  const [reactingTo, setReactingTo] = useState<number | null>(null);
+  const [flashId, setFlashId] = useState<number | null>(null);
+  const [showEmoji, setShowEmoji] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchIndex, setSearchIndex] = useState(0);
   const [, forceTick] = useState(0);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const emojiBoxRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const atBottomRef = useRef(true);
   const lastTypingPing = useRef(0);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
+  const messageEls = useRef<Map<number, HTMLDivElement>>(new Map());
 
   const scrollToBottom = useCallback((smooth = false) => {
     const el = scrollRef.current;
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+  }, []);
+
+  const scrollToMessage = useCallback((id: number) => {
+    const el = messageEls.current.get(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setFlashId(id);
+    window.setTimeout(() => setFlashId((cur) => (cur === id ? null : cur)), 1200);
   }, []);
 
   const onScroll = () => {
@@ -156,6 +290,20 @@ export default function ChatThread({
     router.refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Close the emoji popover on an outside click.
+  useEffect(() => {
+    if (!showEmoji) return;
+    const onDown = (e: MouseEvent) => {
+      if (emojiBoxRef.current && !emojiBoxRef.current.contains(e.target as Node)) setShowEmoji(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [showEmoji]);
+
+  useEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus();
+  }, [searchOpen]);
 
   const mergeIncoming = useCallback((incoming: Msg[]) => {
     if (incoming.length === 0) return;
@@ -196,6 +344,14 @@ export default function ChatThread({
           const del = new Set<number>(data.deletedIds);
           setMessages((prev) =>
             prev.map((m) => (del.has(m.id) && !m.deleted ? { ...m, deleted: true, body: "", attachments: [] } : m))
+          );
+        }
+        // Reaction changes can land on messages well before `after`, so this
+        // is a full snapshot for the loaded window, not a delta.
+        if (Array.isArray(data.allReactions) && data.allReactions.length) {
+          const byId = new Map<number, Reaction[]>(data.allReactions.map((r: { messageId: number; reactions: Reaction[] }) => [r.messageId, r.reactions]));
+          setMessages((prev) =>
+            prev.map((m) => (byId.has(m.id) ? { ...m, reactions: byId.get(m.id) } : m.reactions?.length ? { ...m, reactions: [] } : m))
           );
         }
         setLastReadMyId((cur) => Math.max(cur, data.lastReadMyId ?? 0));
@@ -268,9 +424,10 @@ export default function ChatThread({
 
   // Shared optimistic send used by the composer and the "start video call" button.
   const sendBody = useCallback(
-    async (body: string, sending: Att[] = []) => {
+    async (body: string, sending: Att[] = [], replyToId?: number) => {
       if (!body && sending.length === 0) return;
       const tempId = -(Date.now() + Math.floor(Math.random() * 1000));
+      const replySnapshot = replyToId ? messagesRef.current.find((m) => m.id === replyToId) : undefined;
       const optimistic: Msg = {
         id: tempId,
         body,
@@ -278,12 +435,20 @@ export default function ChatThread({
         createdAt: new Date().toISOString(),
         attachments: sending,
         pending: true,
+        replyTo: replySnapshot
+          ? {
+              id: replySnapshot.id,
+              body: replySnapshot.body,
+              senderId: replySnapshot.senderId,
+              hasAttachment: !!replySnapshot.attachments?.length,
+            }
+          : null,
       };
       setMessages((prev) => [...prev, optimistic]);
       atBottomRef.current = true;
       requestAnimationFrame(() => scrollToBottom(true));
 
-      const res = await sendMessage(other.id, body, sending.map((a) => a.id));
+      const res = await sendMessage(other.id, body, sending.map((a) => a.id), replyToId ?? null);
       if ("error" in res) {
         setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, pending: false, failed: true } : m)));
         return;
@@ -292,7 +457,14 @@ export default function ChatThread({
         if (prev.some((m) => m.id === res.id)) return prev.filter((m) => m.id !== tempId);
         return prev.map((m) =>
           m.id === tempId
-            ? { id: res.id, body: res.body, senderId: res.senderId, createdAt: res.createdAt, attachments: res.attachments }
+            ? {
+                id: res.id,
+                body: res.body,
+                senderId: res.senderId,
+                createdAt: res.createdAt,
+                attachments: res.attachments,
+                replyTo: res.replyTo,
+              }
             : m
         );
       });
@@ -304,9 +476,11 @@ export default function ChatThread({
     const body = text.trim();
     if (!body && atts.length === 0) return;
     const sending = atts;
+    const replyId = replyingTo?.id;
     setText("");
     setAtts([]);
-    void sendBody(body, sending);
+    setReplyingTo(null);
+    void sendBody(body, sending, replyId);
   }
 
   function startCall() {
@@ -329,6 +503,48 @@ export default function ChatThread({
     void deleteMessage(id);
   }
 
+  const handleReact = useCallback(async (messageId: number, emoji: string) => {
+    setReactingTo(null);
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.id !== messageId) return m;
+        const list = m.reactions ?? [];
+        const mineExisting = list.find((r) => r.mine);
+        const turningOff = mineExisting?.emoji === emoji;
+
+        let next = list.map((r) => (r.mine ? { ...r, mine: false, count: r.count - 1 } : r)).filter((r) => r.count > 0);
+        if (!turningOff) {
+          const idx = next.findIndex((r) => r.emoji === emoji);
+          next = idx >= 0
+            ? next.map((r, i) => (i === idx ? { ...r, count: r.count + 1, mine: true } : r))
+            : [...next, { emoji, count: 1, mine: true }];
+        }
+        return { ...m, reactions: next };
+      })
+    );
+    const res = await toggleReaction(messageId, emoji);
+    if (!("error" in res)) {
+      setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, reactions: res.reactions } : m)));
+    }
+  }, []);
+
+  function insertEmoji(emoji: string) {
+    const el = textareaRef.current;
+    if (!el) {
+      setText((t) => t + emoji);
+      return;
+    }
+    const start = el.selectionStart ?? text.length;
+    const end = el.selectionEnd ?? text.length;
+    const next = text.slice(0, start) + emoji + text.slice(end);
+    setText(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + emoji.length;
+      el.setSelectionRange(pos, pos);
+    });
+  }
+
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -349,6 +565,39 @@ export default function ChatThread({
   }
 
   const canSend = !!text.trim() || atts.length > 0;
+
+  // In-thread search — plain text match over what's already loaded, oldest
+  // to newest. Re-opening or editing the query jumps to the most recent hit
+  // first (most likely to be what you're after), then ▲/▼ step through it.
+  const searchMatches = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [] as number[];
+    return messages.filter((m) => !m.deleted && m.body.toLowerCase().includes(q)).map((m) => m.id);
+  }, [messages, searchQuery]);
+
+  useEffect(() => {
+    setSearchIndex(searchQuery.trim() ? Math.max(0, searchMatches.length - 1) : 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (searchMatches.length) scrollToMessage(searchMatches[searchIndex] ?? searchMatches[searchMatches.length - 1]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchIndex, searchMatches.length]);
+
+  function stepSearch(dir: 1 | -1) {
+    if (!searchMatches.length) return;
+    setSearchIndex((i) => (i + dir + searchMatches.length) % searchMatches.length);
+  }
+
+  function jumpToDate(dateStr: string) {
+    if (!dateStr) return;
+    const target = new Date(dateStr).getTime();
+    const hit = messages.find((m) => !m.deleted && new Date(m.createdAt).getTime() >= target);
+    const fallback = messages[messages.length - 1];
+    const pick = hit ?? fallback;
+    if (pick) scrollToMessage(pick.id);
+  }
 
   // Everything for the "Media, links and docs" panel comes straight out of
   // the message history already loaded here (up to 500 messages, same as
@@ -413,6 +662,25 @@ export default function ChatThread({
         <div className="ml-auto flex items-center gap-2">
           <button
             type="button"
+            onClick={() => {
+              setSearchOpen((s) => !s);
+              setSearchQuery("");
+            }}
+            title="Search in conversation"
+            aria-label="Search in conversation"
+            className={`flex h-9 w-9 items-center justify-center rounded-xl border text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700 ${
+              searchOpen
+                ? "border-sky-500 bg-sky-50 text-sky-600 dark:border-sky-500 dark:bg-sky-900/30 dark:text-sky-400"
+                : "border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-800"
+            }`}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
+          </button>
+          <button
+            type="button"
             onClick={() => setShowInfo((s) => !s)}
             title="Media, links and docs"
             aria-label="Media, links and docs"
@@ -443,6 +711,68 @@ export default function ChatThread({
         </div>
       </div>
 
+      {/* Search bar — text search with match navigation, plus jump-to-date. */}
+      {searchOpen && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-slate-400">
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+          <input
+            ref={searchInputRef}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") stepSearch(e.shiftKey ? -1 : 1);
+              if (e.key === "Escape") setSearchOpen(false);
+            }}
+            placeholder="Search in this conversation"
+            className="input min-w-[10rem] flex-1 !py-1.5 text-sm"
+          />
+          {searchQuery.trim() && (
+            <span className="shrink-0 text-xs text-slate-400">
+              {searchMatches.length ? `${searchIndex + 1}/${searchMatches.length}` : "0/0"}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => stepSearch(-1)}
+            disabled={!searchMatches.length}
+            title="Previous match"
+            aria-label="Previous match"
+            className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30 dark:hover:bg-slate-700"
+          >
+            ▲
+          </button>
+          <button
+            type="button"
+            onClick={() => stepSearch(1)}
+            disabled={!searchMatches.length}
+            title="Next match"
+            aria-label="Next match"
+            className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30 dark:hover:bg-slate-700"
+          >
+            ▼
+          </button>
+          <div className="h-5 w-px shrink-0 bg-slate-200 dark:bg-slate-600" />
+          <input
+            type="date"
+            title="Jump to date"
+            aria-label="Jump to date"
+            onChange={(e) => jumpToDate(e.target.value)}
+            className="input shrink-0 !py-1.5 text-sm"
+          />
+          <button
+            type="button"
+            onClick={() => setSearchOpen(false)}
+            aria-label="Close search"
+            className="ml-auto shrink-0 rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Message list */}
       <div ref={scrollRef} onScroll={onScroll} className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
         {messages.length === 0 && (
@@ -472,31 +802,54 @@ export default function ChatThread({
                 );
               }
               const isLastMine = mine && m.id === lastMineKey;
+              const actions = (
+                <div key={`actions-${m.id}`}>
+                  {reactingTo === m.id ? (
+                    <QuickReactBar onPick={(e) => void handleReact(m.id, e)} onClose={() => setReactingTo(null)} />
+                  ) : (
+                    <MessageActions
+                      onReply={() => setReplyingTo(m)}
+                      onReact={() => setReactingTo(m.id)}
+                      onDelete={mine && !m.pending ? () => onDelete(m.id) : undefined}
+                    />
+                  )}
+                </div>
+              );
               return (
                 <div key={m.id} className={`group flex items-end gap-2 ${mine ? "justify-end" : "justify-start"}`}>
                   {!mine && <UserAvatar user={other} size={26} className="mb-4" />}
-                  {mine && !m.pending && (
-                    <button
-                      type="button"
-                      onClick={() => onDelete(m.id)}
-                      title="Delete message"
-                      className="mb-4 text-slate-300 opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
-                      aria-label="Delete message"
-                    >
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-                      </svg>
-                    </button>
-                  )}
+                  {mine && actions}
                   <div className={mine ? "flex flex-col items-end" : "flex flex-col items-start"}>
                     <div
-                      className={`max-w-[78vw] break-words rounded-2xl px-3.5 py-2 shadow-sm sm:max-w-md ${
+                      ref={(el) => {
+                        if (el) messageEls.current.set(m.id, el);
+                        else messageEls.current.delete(m.id);
+                      }}
+                      className={`max-w-[78vw] break-words rounded-2xl px-3.5 py-2 shadow-sm transition-shadow sm:max-w-md ${
                         mine
                           ? `rounded-br-md bg-sky-600 text-white ${m.failed ? "!bg-red-500" : ""} ${m.pending ? "opacity-70" : ""}`
                           : "rounded-bl-md bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-100"
-                      }`}
+                      } ${flashId === m.id ? "ring-2 ring-amber-400 ring-offset-2 ring-offset-slate-50 dark:ring-offset-slate-900" : ""}`}
                     >
-                      {m.body && <p className="whitespace-pre-wrap text-sm">{linkify(m.body, mine)}</p>}
+                      {m.replyTo && (
+                        <button
+                          type="button"
+                          onClick={() => scrollToMessage(m.replyTo!.id)}
+                          className={`mb-1.5 block w-full rounded-lg border-l-4 px-2 py-1 text-left text-xs ${
+                            mine
+                              ? "border-white/60 bg-white/10 text-white/90"
+                              : "border-sky-400 bg-slate-200/70 text-slate-600 dark:bg-slate-600/40 dark:text-slate-200"
+                          }`}
+                        >
+                          <span className="block font-semibold">
+                            {m.replyTo.senderId === meId ? "You" : other.name.split(" ")[0]}
+                          </span>
+                          <span className="block truncate">
+                            {m.replyTo.body || (m.replyTo.hasAttachment ? "📎 Attachment" : "")}
+                          </span>
+                        </button>
+                      )}
+                      {m.body && <p className="whitespace-pre-wrap text-sm">{renderBody(m.body, mine, searchOpen ? searchQuery : "")}</p>}
                       <AttachmentList atts={m.attachments ?? []} mine={mine} />
                     </div>
                     <div className="mt-0.5 flex items-center gap-1 px-1 text-[10px] text-slate-400">
@@ -513,7 +866,27 @@ export default function ChatThread({
                         </span>
                       )}
                     </div>
+                    {!!m.reactions?.length && (
+                      <div className={`mt-1 flex flex-wrap gap-1 ${mine ? "justify-end" : "justify-start"}`}>
+                        {m.reactions.map((r) => (
+                          <button
+                            key={r.emoji}
+                            type="button"
+                            onClick={() => void handleReact(m.id, r.emoji)}
+                            className={`flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs ${
+                              r.mine
+                                ? "border-sky-400 bg-sky-50 dark:border-sky-500 dark:bg-sky-900/30"
+                                : "border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-800"
+                            }`}
+                          >
+                            <span>{r.emoji}</span>
+                            {r.count > 1 && <span className="text-slate-500">{r.count}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
+                  {!mine && actions}
                 </div>
               );
             })}
@@ -534,6 +907,26 @@ export default function ChatThread({
 
       {/* Composer */}
       <div className="border-t border-slate-200 bg-white p-2.5 dark:border-slate-700 dark:bg-slate-800">
+        {replyingTo && (
+          <div className="mb-2 flex items-center gap-2 rounded-lg border-l-4 border-sky-500 bg-slate-100 px-3 py-1.5 text-xs dark:bg-slate-700">
+            <div className="min-w-0 flex-1">
+              <span className="block font-semibold text-sky-700 dark:text-sky-400">
+                Replying to {replyingTo.senderId === meId ? "yourself" : other.name.split(" ")[0]}
+              </span>
+              <span className="block truncate text-slate-500 dark:text-slate-300">
+                {replyingTo.body || (replyingTo.attachments?.length ? "📎 Attachment" : "")}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReplyingTo(null)}
+              aria-label="Cancel reply"
+              className="shrink-0 rounded-lg px-1.5 py-1 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600"
+            >
+              ✕
+            </button>
+          </div>
+        )}
         {(atts.length > 0 || uploading > 0) && (
           <div className="mb-2 flex flex-wrap gap-2 border-b border-slate-100 pb-2 dark:border-slate-700">
             {atts.map((a) => (
@@ -586,7 +979,35 @@ export default function ChatThread({
               <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
             </svg>
           </button>
+          <div ref={emojiBoxRef} className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowEmoji((s) => !s)}
+              title="Emoji"
+              aria-label="Emoji"
+              className={`btn-secondary !rounded-xl !px-3 ${showEmoji ? "!border-sky-500 !bg-sky-50 !text-sky-600 dark:!bg-sky-900/30" : ""}`}
+            >
+              <span className="text-base leading-none">🙂</span>
+            </button>
+            {showEmoji && (
+              <div className="absolute bottom-full left-0 z-30 mb-2 max-h-56 w-72 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-600 dark:bg-slate-800">
+                <div className="grid grid-cols-8 gap-1">
+                  {EMOJI_PICKER.map((e) => (
+                    <button
+                      key={e}
+                      type="button"
+                      onClick={() => insertEmoji(e)}
+                      className="rounded-lg p-1 text-xl hover:bg-slate-100 dark:hover:bg-slate-700"
+                    >
+                      {e}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
           <textarea
+            ref={textareaRef}
             value={text}
             onChange={(e) => {
               setText(e.target.value);

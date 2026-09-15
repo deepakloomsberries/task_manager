@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 export type PanelItem = { id: number; name: string; mimeType: string; size: number; at: string };
 export type PanelLink = { url: string; at: string };
@@ -34,8 +34,15 @@ export default function ChatInfoPanel({
   const [tab, setTab] = useState<"media" | "docs" | "links">(
     media.length ? "media" : docs.length ? "docs" : "links"
   );
+  const [query, setQuery] = useState("");
 
-  const counts = { media: media.length, docs: docs.length, links: links.length };
+  const q = query.trim().toLowerCase();
+  const filteredMedia = useMemo(() => (q ? media.filter((m) => m.name.toLowerCase().includes(q)) : media), [media, q]);
+  const filteredDocs = useMemo(() => (q ? docs.filter((d) => d.name.toLowerCase().includes(q)) : docs), [docs, q]);
+  const filteredLinks = useMemo(() => (q ? links.filter((l) => l.url.toLowerCase().includes(q)) : links), [links, q]);
+
+  const counts = { media: filteredMedia.length, docs: filteredDocs.length, links: filteredLinks.length };
+  const totalUnfiltered = media.length + docs.length + links.length;
 
   return (
     <div className="absolute inset-y-0 right-0 z-20 flex w-full flex-col border-l border-slate-200 bg-white shadow-xl sm:max-w-xs dark:border-slate-700 dark:bg-slate-800">
@@ -50,6 +57,17 @@ export default function ChatInfoPanel({
         </button>
         <h2 className="font-semibold">Media, links and docs</h2>
       </div>
+
+      {totalUnfiltered > 0 && (
+        <div className="border-b border-slate-200 p-2.5 dark:border-slate-700">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by file name or link"
+            className="input !py-1.5 text-sm"
+          />
+        </div>
+      )}
 
       <div className="flex border-b border-slate-200 dark:border-slate-700">
         {(["media", "docs", "links"] as const).map((t) => (
@@ -71,11 +89,13 @@ export default function ChatInfoPanel({
 
       <div className="flex-1 overflow-y-auto p-3">
         {tab === "media" &&
-          (media.length === 0 ? (
-            <p className="py-10 text-center text-sm text-slate-400">No media shared yet.</p>
+          (filteredMedia.length === 0 ? (
+            <p className="py-10 text-center text-sm text-slate-400">
+              {q ? "No media matches your search." : "No media shared yet."}
+            </p>
           ) : (
             <div className="grid grid-cols-3 gap-1.5">
-              {media.map((m) => (
+              {filteredMedia.map((m) => (
                 <a
                   key={m.id}
                   href={`/api/files/${m.id}`}
@@ -92,11 +112,13 @@ export default function ChatInfoPanel({
           ))}
 
         {tab === "docs" &&
-          (docs.length === 0 ? (
-            <p className="py-10 text-center text-sm text-slate-400">No documents shared yet.</p>
+          (filteredDocs.length === 0 ? (
+            <p className="py-10 text-center text-sm text-slate-400">
+              {q ? "No documents match your search." : "No documents shared yet."}
+            </p>
           ) : (
             <div className="space-y-1.5">
-              {docs.map((d) => (
+              {filteredDocs.map((d) => (
                 <a
                   key={d.id}
                   href={`/api/files/${d.id}?download=1`}
@@ -115,11 +137,13 @@ export default function ChatInfoPanel({
           ))}
 
         {tab === "links" &&
-          (links.length === 0 ? (
-            <p className="py-10 text-center text-sm text-slate-400">No links shared yet.</p>
+          (filteredLinks.length === 0 ? (
+            <p className="py-10 text-center text-sm text-slate-400">
+              {q ? "No links match your search." : "No links shared yet."}
+            </p>
           ) : (
             <div className="space-y-1.5">
-              {links.map((l, i) => (
+              {filteredLinks.map((l, i) => (
                 <a
                   key={i}
                   href={l.url}
