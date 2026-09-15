@@ -25,6 +25,46 @@ export async function uploadAttachment(formData: FormData) {
   redirect(back);
 }
 
+/**
+ * Attaches a link instead of a file — for something too large to upload
+ * (a designer's 100-500 MB source file, say): share it via Drive/Dropbox/
+ * WeTransfer and point to it here instead. Shows up alongside real
+ * attachments everywhere they're listed, but opens externally rather than
+ * being served from this app.
+ */
+export async function addAttachmentLink(formData: FormData) {
+  const user = await requireUser();
+  const taskId = formData.get("taskId") ? Number(formData.get("taskId")) : null;
+  const back = taskId ? `/tasks/${taskId}` : "/documents";
+
+  const rawUrl = String(formData.get("url") ?? "").trim();
+  const label = String(formData.get("label") ?? "").trim().slice(0, 200);
+
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    redirect(`${back}?error=badlink`);
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") redirect(`${back}?error=badlink`);
+  if (taskId && !(await db.task.findUnique({ where: { id: taskId } }))) redirect("/tasks");
+
+  await db.attachment.create({
+    data: {
+      storedName: null,
+      originalName: label || url.hostname + url.pathname,
+      mimeType: "text/uri-list",
+      size: 0,
+      externalUrl: url.toString(),
+      taskId,
+      uploadedById: user.id,
+    },
+  });
+
+  revalidatePath(back);
+  redirect(back);
+}
+
 export async function deleteAttachment(formData: FormData) {
   const user = await requireUser();
   const id = Number(formData.get("id"));

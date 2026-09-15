@@ -246,7 +246,13 @@ export default async function TaskDetailPage({
                   ? { text: "This task can't be completed yet — finish the tasks blocking it first.", error: true }
                   : searchParams.error === "needs-approval"
                     ? { text: "Send this task to Review — its owner will approve completion.", error: true }
-                    : null;
+                    : searchParams.error === "toobig"
+                      ? { text: "File is too large — maximum size is 50 MB. For a bigger file, use Add link instead.", error: true }
+                      : searchParams.error === "nofile"
+                        ? { text: "Please choose a file to upload.", error: true }
+                        : searchParams.error === "badlink"
+                          ? { text: "That doesn't look like a valid link — it should start with http:// or https://.", error: true }
+                          : null;
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
@@ -981,30 +987,35 @@ export default async function TaskDetailPage({
           <span className="text-sm font-normal text-slate-400">({task.attachments.length})</span>
         </h2>
         <div className="space-y-2">
-          {task.attachments.map((a) => (
+          {task.attachments.map((a) => {
+            const isLink = !a.storedName;
+            return (
             <div
               key={a.id}
               className="flex items-center gap-3 rounded-lg border border-slate-200 px-4 py-2.5"
             >
-              <span className="text-lg text-slate-400">⎘</span>
+              <span className="text-lg text-slate-400">{isLink ? "🔗" : "⎘"}</span>
               <div className="min-w-0 flex-1">
                 <a
-                  href={`/api/files/${a.id}`}
+                  href={isLink ? a.externalUrl! : `/api/files/${a.id}`}
                   target="_blank"
+                  rel={isLink ? "noreferrer" : undefined}
                   className="block truncate text-sm font-medium text-sky-700 hover:underline"
                 >
                   {a.originalName}
                 </a>
                 <div className="text-xs text-slate-400">
-                  {fmtSize(a.size)} · {a.uploadedBy.name} · {fmtDateTime(a.createdAt)}
+                  {isLink ? "External link" : fmtSize(a.size)} · {a.uploadedBy.name} · {fmtDateTime(a.createdAt)}
                 </div>
               </div>
-              <a
-                href={`/api/files/${a.id}?download=1`}
-                className="text-xs text-sky-600 hover:underline"
-              >
-                Download
-              </a>
+              {!isLink && (
+                <a
+                  href={`/api/files/${a.id}?download=1`}
+                  className="text-xs text-sky-600 hover:underline"
+                >
+                  Download
+                </a>
+              )}
               {(a.uploadedById === user.id || user.role === "ADMIN") && (
                 <form action={deleteAttachment}>
                   <input type="hidden" name="id" value={a.id} />
@@ -1017,7 +1028,8 @@ export default async function TaskDetailPage({
                 </form>
               )}
             </div>
-          ))}
+            );
+          })}
           {task.attachments.length === 0 && (
             <p className="text-sm text-slate-400">No files attached to this task.</p>
           )}

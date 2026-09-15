@@ -376,10 +376,11 @@ model MessageReaction {
 
 model Attachment {
   id                  Int                @id @default(autoincrement())
-  storedName          String             @unique // random name on disk inside UPLOAD_DIR
+  storedName          String?            @unique // random name on disk inside UPLOAD_DIR — null for a link attachment (externalUrl set instead)
   originalName        String
   mimeType            String
   size                Int
+  externalUrl         String? // set instead of storedName/uploading a file — for something too large to upload (e.g. a Drive link)
   task                Task?              @relation(fields: [taskId], references: [id], onDelete: Cascade)
   taskId              Int?
   message             DirectMessage?     @relation(fields: [messageId], references: [id], onDelete: Cascade)
