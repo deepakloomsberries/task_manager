@@ -48,11 +48,16 @@ export default async function MessagesLayout({ children }: { children: React.Rea
   const conversations = Array.from(convos.values()).sort((a, b) => b.lastAt.getTime() - a.lastAt.getTime());
 
   return (
-    <div className="mx-auto max-w-6xl">
+    // No wrapping max-width here (unlike a plain content page) — this
+    // two-pane layout is meant to fill whatever width main gives it, same as
+    // every other page. A leftover `mx-auto max-w-6xl` from before the
+    // WhatsApp-style redesign was capping it at 1152px and leaving a big
+    // empty gutter on wide screens.
+    <>
       <AutoRefresh />
       <MessagesShell sidebar={<MessagesSidebar conversations={conversations} users={users} />}>
         {children}
       </MessagesShell>
-    </div>
+    </>
   );
 }
