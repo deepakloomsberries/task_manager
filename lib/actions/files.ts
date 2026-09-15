@@ -4,26 +4,12 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { saveUpload, deleteUpload, MAX_FILE_SIZE } from "@/lib/storage";
+import { deleteUpload } from "@/lib/storage";
 
-export async function uploadAttachment(formData: FormData) {
-  const user = await requireUser();
-  const taskId = formData.get("taskId") ? Number(formData.get("taskId")) : null;
-  const back = taskId ? `/tasks/${taskId}` : "/documents";
-
-  // Accept one or many files (the picker allows multi-select).
-  const files = formData.getAll("file").filter((f): f is File => f instanceof File && f.size > 0);
-  if (files.length === 0) redirect(`${back}?error=nofile`);
-  if (files.some((f) => f.size > MAX_FILE_SIZE)) redirect(`${back}?error=toobig`);
-  if (taskId && !(await db.task.findUnique({ where: { id: taskId } }))) redirect("/tasks");
-
-  for (const file of files) {
-    const saved = await saveUpload(file);
-    await db.attachment.create({ data: { ...saved, taskId, uploadedById: user.id } });
-  }
-  revalidatePath(back);
-  redirect(back);
-}
+// File uploads themselves go through POST /api/attachments/upload (a plain
+// route, not a server action) — the client drives it with XMLHttpRequest to
+// get real upload-progress events, which fetch/server-actions can't report.
+// See PasteAttachment.tsx.
 
 /**
  * Attaches a link instead of a file — for something too large to upload

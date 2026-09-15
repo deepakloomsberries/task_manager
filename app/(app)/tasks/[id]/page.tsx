@@ -246,13 +246,9 @@ export default async function TaskDetailPage({
                   ? { text: "This task can't be completed yet — finish the tasks blocking it first.", error: true }
                   : searchParams.error === "needs-approval"
                     ? { text: "Send this task to Review — its owner will approve completion.", error: true }
-                    : searchParams.error === "toobig"
-                      ? { text: "File is too large — maximum size is 50 MB. For a bigger file, use Add link instead.", error: true }
-                      : searchParams.error === "nofile"
-                        ? { text: "Please choose a file to upload.", error: true }
-                        : searchParams.error === "badlink"
-                          ? { text: "That doesn't look like a valid link — it should start with http:// or https://.", error: true }
-                          : null;
+                    : searchParams.error === "badlink"
+                      ? { text: "That doesn't look like a valid link — it should start with http:// or https://.", error: true }
+                      : null;
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
@@ -1034,7 +1030,9 @@ export default async function TaskDetailPage({
             <p className="text-sm text-slate-400">No files attached to this task.</p>
           )}
         </div>
-        <PasteAttachment taskId={task.id} />
+        <div className="mt-4">
+          <PasteAttachment taskId={task.id} />
+        </div>
       </div>
 
       <div className="card p-6">
