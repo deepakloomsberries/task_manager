@@ -69,6 +69,7 @@ model User {
   taskWatches          TaskWatcher[]
   billingSnapshots     BillingSnapshot[]
   messageReactions     MessageReaction[]
+  messageStars         MessageStar[]
 }
 
 /**
@@ -332,9 +333,27 @@ model DirectMessage {
   replyToId   Int?
   replies     DirectMessage[]   @relation("dmReplyTo")
   reactions   MessageReaction[]
+  stars       MessageStar[]
 
   @@index([senderId, recipientId])
   @@index([recipientId, senderId])
+}
+
+/**
+ * A private bookmark — WhatsApp-style "star" — on a message. Visible only to
+ * the user who starred it (there's no notion of "who else starred this");
+ * unique per (message, user) so starring is a plain on/off toggle.
+ */
+model MessageStar {
+  id        Int           @id @default(autoincrement())
+  message   DirectMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId Int
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  createdAt DateTime      @default(now())
+
+  @@unique([messageId, userId])
+  @@index([messageId])
 }
 
 /**

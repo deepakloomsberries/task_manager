@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import UserAvatar from "@/components/UserAvatar";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import ChatInfoPanel, { type PanelItem, type PanelLink } from "@/components/ChatInfoPanel";
-import { sendMessage, deleteMessage, toggleReaction } from "@/lib/actions/messages";
+import DatePicker from "@/components/DatePicker";
+import ChatInfoPanel, { type PanelItem, type PanelLink, type PanelStarred } from "@/components/ChatInfoPanel";
+import { sendMessage, deleteMessage, toggleReaction, toggleStar } from "@/lib/actions/messages";
 import { isOnline, lastSeenLabel } from "@/lib/ui";
 
 type Att = { id: number; name: string; mimeType: string; size: number };
@@ -24,6 +25,7 @@ type Msg = {
   failed?: boolean;
   replyTo?: ReplyRef | null;
   reactions?: Reaction[];
+  starred?: boolean;
 };
 
 type Person = {
@@ -142,16 +144,20 @@ function AttachmentList({ atts, mine }: { atts: Att[]; mine: boolean }) {
   );
 }
 
-/** The reply/react (and, for your own messages, delete) icons that appear on
- *  hover next to a bubble — grouped so both sides of the conversation share
- *  the same three buttons instead of duplicating markup. */
+/** The react/reply/star (and, for your own messages, delete) icons that
+ *  appear on hover next to a bubble — grouped so both sides of the
+ *  conversation share the same buttons instead of duplicating markup. */
 function MessageActions({
   onReply,
   onReact,
+  onStar,
+  starred,
   onDelete,
 }: {
   onReply: () => void;
   onReact: () => void;
+  onStar: () => void;
+  starred?: boolean;
   onDelete?: () => void;
 }) {
   return (
@@ -174,6 +180,17 @@ function MessageActions({
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M9 17l-5-5 5-5M4 12h11a4 4 0 0 1 4 4v1" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        onClick={onStar}
+        title={starred ? "Unstar message" : "Star message"}
+        aria-label={starred ? "Unstar message" : "Star message"}
+        className={`rounded-lg p-1 hover:bg-slate-100 dark:hover:bg-slate-700 ${starred ? "text-amber-500" : "text-slate-400 hover:text-slate-600"}`}
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill={starred ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6-5.9-3.3-5.9 3.3 1.3-6.6-4.9-4.6 6.6-.8Z" />
         </svg>
       </button>
       {onDelete && (
@@ -248,6 +265,8 @@ export default function ChatThread({
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchIndex, setSearchIndex] = useState(0);
+  const [showJumpToBottom, setShowJumpToBottom] = useState(false);
+  const [newWhileAway, setNewWhileAway] = useState(0);
   const [, forceTick] = useState(0);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -277,7 +296,10 @@ export default function ChatThread({
   const onScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
-    atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    atBottomRef.current = atBottom;
+    setShowJumpToBottom(!atBottom);
+    if (atBottom) setNewWhileAway(0);
   };
 
   useEffect(() => {
@@ -339,19 +361,37 @@ export default function ChatThread({
         const res = await fetch(`/api/messages/${other.id}?after=${after}`, { cache: "no-store" });
         if (!res.ok || !active) return;
         const data = await res.json();
-        mergeIncoming(data.messages as Msg[]);
+        const incoming = data.messages as Msg[];
+        mergeIncoming(incoming);
+        // Scrolled up reading history and the other person sent something new
+        // — badge the "jump to latest" button instead of yanking the view.
+        const fromOther = incoming.filter((m) => m.senderId === other.id).length;
+        if (fromOther > 0 && !atBottomRef.current) setNewWhileAway((n) => n + fromOther);
         if (Array.isArray(data.deletedIds) && data.deletedIds.length) {
           const del = new Set<number>(data.deletedIds);
           setMessages((prev) =>
             prev.map((m) => (del.has(m.id) && !m.deleted ? { ...m, deleted: true, body: "", attachments: [] } : m))
           );
         }
-        // Reaction changes can land on messages well before `after`, so this
-        // is a full snapshot for the loaded window, not a delta.
-        if (Array.isArray(data.allReactions) && data.allReactions.length) {
+        // Reaction/star changes can land on messages well before `after`, so
+        // these are full snapshots for the loaded window, not deltas — always
+        // applied (even when empty), otherwise the last reaction/star being
+        // removed anywhere would never clear for a viewer who already has it
+        // cached, since an empty array would look like "nothing to update".
+        if (Array.isArray(data.allReactions)) {
           const byId = new Map<number, Reaction[]>(data.allReactions.map((r: { messageId: number; reactions: Reaction[] }) => [r.messageId, r.reactions]));
           setMessages((prev) =>
-            prev.map((m) => (byId.has(m.id) ? { ...m, reactions: byId.get(m.id) } : m.reactions?.length ? { ...m, reactions: [] } : m))
+            prev.map((m) => {
+              const next = byId.get(m.id) ?? [];
+              const cur = m.reactions ?? [];
+              return next.length === 0 && cur.length === 0 ? m : { ...m, reactions: next };
+            })
+          );
+        }
+        if (Array.isArray(data.myStarredIds)) {
+          const starredSet = new Set<number>(data.myStarredIds);
+          setMessages((prev) =>
+            prev.map((m) => (!!m.starred === starredSet.has(m.id) ? m : { ...m, starred: starredSet.has(m.id) }))
           );
         }
         setLastReadMyId((cur) => Math.max(cur, data.lastReadMyId ?? 0));
@@ -528,6 +568,14 @@ export default function ChatThread({
     }
   }, []);
 
+  const handleStar = useCallback(async (messageId: number) => {
+    setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, starred: !m.starred } : m)));
+    const res = await toggleStar(messageId);
+    if (!("error" in res)) {
+      setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, starred: res.starred } : m)));
+    }
+  }, []);
+
   function insertEmoji(emoji: string) {
     const el = textareaRef.current;
     if (!el) {
@@ -602,10 +650,11 @@ export default function ChatThread({
   // Everything for the "Media, links and docs" panel comes straight out of
   // the message history already loaded here (up to 500 messages, same as
   // the page that seeds this component) — no separate fetch needed.
-  const { media, docs, links } = useMemo(() => {
+  const { media, docs, links, starred } = useMemo(() => {
     const media: PanelItem[] = [];
     const docs: PanelItem[] = [];
     const links: PanelLink[] = [];
+    const starred: PanelStarred[] = [];
     const urlRe = /https?:\/\/[^\s]+/g;
     for (const m of messages) {
       if (m.deleted || m.pending || m.failed) continue;
@@ -615,9 +664,18 @@ export default function ChatThread({
       }
       const found = m.body.match(urlRe);
       if (found) for (const url of found) links.push({ url, at: m.createdAt });
+      if (m.starred) {
+        starred.push({
+          id: m.id,
+          body: m.body,
+          senderId: m.senderId,
+          at: m.createdAt,
+          hasAttachment: !!m.attachments?.length,
+        });
+      }
     }
     // Messages are oldest-first; show newest-first, like WhatsApp's panel.
-    return { media: media.reverse(), docs: docs.reverse(), links: links.reverse() };
+    return { media: media.reverse(), docs: docs.reverse(), links: links.reverse(), starred: starred.reverse() };
   }, [messages]);
 
   return (
@@ -755,13 +813,7 @@ export default function ChatThread({
             ▼
           </button>
           <div className="h-5 w-px shrink-0 bg-slate-200 dark:bg-slate-600" />
-          <input
-            type="date"
-            title="Jump to date"
-            aria-label="Jump to date"
-            onChange={(e) => jumpToDate(e.target.value)}
-            className="input shrink-0 !py-1.5 text-sm"
-          />
+          <DatePicker compact title="Jump to date" onPick={jumpToDate} />
           <button
             type="button"
             onClick={() => setSearchOpen(false)}
@@ -810,6 +862,8 @@ export default function ChatThread({
                     <MessageActions
                       onReply={() => setReplyingTo(m)}
                       onReact={() => setReactingTo(m.id)}
+                      onStar={() => void handleStar(m.id)}
+                      starred={m.starred}
                       onDelete={mine && !m.pending ? () => onDelete(m.id) : undefined}
                     />
                   )}
@@ -853,6 +907,7 @@ export default function ChatThread({
                       <AttachmentList atts={m.attachments ?? []} mine={mine} />
                     </div>
                     <div className="mt-0.5 flex items-center gap-1 px-1 text-[10px] text-slate-400">
+                      {m.starred && <span title="Starred" className="text-amber-500">★</span>}
                       <span>{timeLabel(m.createdAt)}</span>
                       {isLastMine && (
                         <span>
@@ -901,6 +956,30 @@ export default function ChatThread({
               <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: "150ms" }} />
               <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: "300ms" }} />
             </div>
+          </div>
+        )}
+
+        {/* Sticks to the bottom of the scroll viewport once you've scrolled
+            up, instead of scrolling away with the content — a normal sticky
+            child does exactly that inside a scrolling container. */}
+        {showJumpToBottom && (
+          <div className="pointer-events-none sticky bottom-1 z-10 flex justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                scrollToBottom(true);
+                setNewWhileAway(0);
+              }}
+              title="Jump to latest"
+              className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-lg hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            >
+              {newWhileAway > 0 && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-sky-600 px-1 text-[10px] font-semibold text-white">
+                  {newWhileAway > 99 ? "99+" : newWhileAway}
+                </span>
+              )}
+              <span>↓ Jump to latest</span>
+            </button>
           </div>
         )}
       </div>
@@ -1035,7 +1114,21 @@ export default function ChatThread({
         </div>
       </div>
 
-      {showInfo && <ChatInfoPanel media={media} docs={docs} links={links} onClose={() => setShowInfo(false)} />}
+      {showInfo && (
+        <ChatInfoPanel
+          media={media}
+          docs={docs}
+          links={links}
+          starred={starred}
+          meId={meId}
+          otherName={other.name}
+          onJump={(id) => {
+            setShowInfo(false);
+            scrollToMessage(id);
+          }}
+          onClose={() => setShowInfo(false)}
+        />
+      )}
 
       <ConfirmDialog
         open={pendingDelete !== null}

@@ -34,7 +34,7 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
     ],
   };
 
-  const [messages, lastRead, partner, deleted, reactionRows] = await Promise.all([
+  const [messages, lastRead, partner, deleted, reactionRows, starRows] = await Promise.all([
     db.directMessage.findMany({
       where: { id: { gt: after }, ...conversationWhere },
       orderBy: { createdAt: "asc" },
@@ -65,7 +65,14 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
       where: { message: conversationWhere },
       select: { messageId: true, userId: true, emoji: true },
     }),
+    // Stars are private to the current user — only fetch mine, so this also
+    // stays in sync if you star a message from another tab/device.
+    db.messageStar.findMany({
+      where: { userId: meId, message: conversationWhere },
+      select: { messageId: true },
+    }),
   ]);
+  const myStarredIds = new Set(starRows.map((s) => s.messageId));
 
   const reactionsByMessage = new Map<number, { emoji: string; count: number; mine: boolean }[]>();
   for (const r of reactionRows) {
@@ -102,12 +109,16 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
               }
             : null,
         reactions: reactionsByMessage.get(m.id) ?? [],
+        starred: myStarredIds.has(m.id),
       };
     }),
     // Full reaction snapshot for every message currently in the loaded window
     // (not just newly-fetched ones) — a reaction on an older message wouldn't
     // otherwise be "newer than after", so this is how it reaches the client.
     allReactions: Array.from(reactionsByMessage.entries()).map(([messageId, reactions]) => ({ messageId, reactions })),
+    // Same idea for stars: the full set of my starred ids in the loaded
+    // window, so starring from another tab/device is reflected here too.
+    myStarredIds: Array.from(myStarredIds),
     lastReadMyId: lastRead?.id ?? 0,
     partnerLastSeenAt: partner?.lastSeenAt ? partner.lastSeenAt.toISOString() : null,
     partnerTyping: isTyping(otherId, meId),

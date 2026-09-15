@@ -19,14 +19,16 @@ export default async function ConversationPage({ params }: { params: { userId: s
     data: { read: true },
   });
 
-  const [messages, lastRead, reactionRows] = await Promise.all([
+  const conversationWhere = {
+    OR: [
+      { senderId: user.id, recipientId: otherId },
+      { senderId: otherId, recipientId: user.id },
+    ],
+  };
+
+  const [messages, lastRead, reactionRows, starRows] = await Promise.all([
     db.directMessage.findMany({
-      where: {
-        OR: [
-          { senderId: user.id, recipientId: otherId },
-          { senderId: otherId, recipientId: user.id },
-        ],
-      },
+      where: conversationWhere,
       orderBy: { createdAt: "asc" },
       take: 500,
       include: {
@@ -42,17 +44,15 @@ export default async function ConversationPage({ params }: { params: { userId: s
       select: { id: true },
     }),
     db.messageReaction.findMany({
-      where: {
-        message: {
-          OR: [
-            { senderId: user.id, recipientId: otherId },
-            { senderId: otherId, recipientId: user.id },
-          ],
-        },
-      },
+      where: { message: conversationWhere },
       select: { messageId: true, userId: true, emoji: true },
     }),
+    db.messageStar.findMany({
+      where: { userId: user.id, message: conversationWhere },
+      select: { messageId: true },
+    }),
   ]);
+  const myStarredIds = new Set(starRows.map((s) => s.messageId));
 
   const reactionsByMessage = new Map<number, { emoji: string; count: number; mine: boolean }[]>();
   for (const r of reactionRows) {
@@ -108,6 +108,7 @@ export default async function ConversationPage({ params }: { params: { userId: s
               }
             : null,
         reactions: reactionsByMessage.get(m.id) ?? [],
+        starred: myStarredIds.has(m.id),
       }))}
       initialLastReadMyId={lastRead?.id ?? 0}
       initialPartnerLastSeenAt={other.lastSeenAt ? other.lastSeenAt.toISOString() : null}

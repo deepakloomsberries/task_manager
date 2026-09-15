@@ -221,3 +221,28 @@ export async function toggleReaction(
 
   return { reactions: Array.from(byEmoji.values()) };
 }
+
+/**
+ * Toggles a private "star" (bookmark) on a message for the current user only
+ * — WhatsApp-style. Nobody else can see who starred what.
+ */
+export async function toggleStar(messageId: number): Promise<{ starred: boolean } | { error: string }> {
+  const user = await requireUser();
+
+  const msg = await db.directMessage.findUnique({
+    where: { id: messageId },
+    select: { senderId: true, recipientId: true, deletedAt: true },
+  });
+  if (!msg || msg.deletedAt) return { error: "not found" };
+  if (msg.senderId !== user.id && msg.recipientId !== user.id) return { error: "forbidden" };
+
+  const existing = await db.messageStar.findUnique({
+    where: { messageId_userId: { messageId, userId: user.id } },
+  });
+  if (existing) {
+    await db.messageStar.delete({ where: { id: existing.id } });
+    return { starred: false };
+  }
+  await db.messageStar.create({ data: { messageId, userId: user.id } });
+  return { starred: true };
+}
