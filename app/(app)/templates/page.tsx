@@ -63,15 +63,15 @@ export default async function TemplatesPage({
 
       <div className="card p-5">
         <form action={createTemplate} className="flex flex-wrap items-end gap-3">
-          <div className="flex-1">
+          <div className="min-w-[10rem] flex-1">
             <label className="label">Template name *</label>
             <input name="name" required className="input" placeholder="e.g. New product launch" />
           </div>
-          <div className="flex-1">
+          <div className="min-w-[10rem] flex-1">
             <label className="label">Description</label>
             <input name="description" className="input" />
           </div>
-          <button type="submit" className="btn-primary">
+          <button type="submit" className="btn-primary shrink-0">
             Create template
           </button>
         </form>
@@ -88,8 +88,8 @@ export default async function TemplatesPage({
         const open = openId === t.id;
         return (
           <div key={t.id} className="card">
-            <div className="flex items-center justify-between px-5 py-4">
-              <div>
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+              <div className="min-w-0">
                 <Link
                   href={open ? "/templates" : `/templates?open=${t.id}`}
                   className="font-semibold hover:text-sky-700"
@@ -101,7 +101,7 @@ export default async function TemplatesPage({
                   {t.description ? ` · ${t.description}` : ""}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2">
                 <Link
                   href={open ? "/templates" : `/templates?open=${t.id}`}
                   className="btn-secondary !py-1.5 text-xs"
@@ -123,15 +123,17 @@ export default async function TemplatesPage({
                   {t.items.map((item) => {
                     const priority = lookup(TASK_PRIORITIES, item.priority);
                     return (
-                      <div key={item.id} className="flex items-center gap-3 py-2.5">
-                        <span className="flex-1 text-sm font-medium">{item.title}</span>
-                        <span className={`badge ${priority.badge}`}>{priority.label}</span>
-                        <span className="w-32 text-right text-xs text-slate-500">
+                      <div key={item.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2.5">
+                        <span className="min-w-0 flex-1 basis-full text-sm font-medium sm:basis-auto">
+                          {item.title}
+                        </span>
+                        <span className={`badge shrink-0 ${priority.badge}`}>{priority.label}</span>
+                        <span className="shrink-0 text-right text-xs text-slate-500 sm:w-32">
                           {item.dueOffsetDays != null
                             ? `due day ${item.dueOffsetDays}`
                             : "no due date"}
                         </span>
-                        <form action={deleteTemplateItem}>
+                        <form action={deleteTemplateItem} className="shrink-0">
                           <input type="hidden" name="id" value={item.id} />
                           <button type="submit" className="text-xs text-red-600 hover:underline">
                             Remove
@@ -146,11 +148,11 @@ export default async function TemplatesPage({
                 </div>
                 <form action={addTemplateItem} className="mt-3 flex flex-wrap items-end gap-3">
                   <input type="hidden" name="templateId" value={t.id} />
-                  <div className="flex-1">
+                  <div className="min-w-[10rem] flex-1">
                     <label className="label">Task title *</label>
                     <input name="title" required className="input" />
                   </div>
-                  <div>
+                  <div className="w-40">
                     <label className="label">Priority</label>
                     <SearchSelect name="priority" defaultValue="MEDIUM" options={TASK_PRIORITIES.map((p) => ({ value: p.value, label: p.label }))} />
                   </div>
@@ -158,7 +160,7 @@ export default async function TemplatesPage({
                     <label className="label">Due (days after start)</label>
                     <input name="dueOffsetDays" type="number" min="0" max="365" className="input" placeholder="optional" />
                   </div>
-                  <button type="submit" className="btn-secondary">
+                  <button type="submit" className="btn-secondary shrink-0">
                     Add task
                   </button>
                 </form>

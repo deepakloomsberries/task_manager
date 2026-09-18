@@ -205,8 +205,12 @@ export default function BulkTaskTable({
                     ))}
                   </div>
                 </td>
-                <td className="td text-slate-600">{t.projectName ?? "—"}</td>
-                <td className="td text-slate-600">{t.assigneeName ?? "—"}</td>
+                <td className="td max-w-[9rem] truncate text-slate-600" title={t.projectName ?? undefined}>
+                  {t.projectName ?? "—"}
+                </td>
+                <td className="td max-w-[7rem] truncate text-slate-600" title={t.assigneeName ?? undefined}>
+                  {t.assigneeName ?? "—"}
+                </td>
                 <td className="td"><span className={`badge ${t.priorityBadge}`}>{t.priorityLabel}</span></td>
                 <td className="td"><span className={`badge ${t.statusBadge}`}>{t.statusLabel}</span></td>
                 <td className={`td ${t.overdue ? "font-semibold text-red-600" : "text-slate-600"}`}>

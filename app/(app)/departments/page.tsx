@@ -44,11 +44,11 @@ export default async function DepartmentsPage({
 
       <div className="card p-5">
         <form action={createDepartment} className="flex flex-wrap items-end gap-3">
-          <div className="flex-1">
+          <div className="min-w-[10rem] flex-1">
             <label className="label">Department name *</label>
             <input name="name" required className="input" placeholder="e.g. Sales, Production, Accounts" />
           </div>
-          <div>
+          <div className="w-full sm:w-56">
             <label className="label">Company *</label>
             <SearchSelect
               name="companyId"
@@ -58,7 +58,7 @@ export default async function DepartmentsPage({
               options={companies.map((c) => ({ value: String(c.id), label: c.name }))}
             />
           </div>
-          <button type="submit" className="btn-primary">
+          <button type="submit" className="btn-primary shrink-0">
             Add
           </button>
         </form>

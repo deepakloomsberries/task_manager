@@ -119,9 +119,9 @@ export default async function ProjectDetailPage({
 
       <div className="card p-6">
         {!editing ? (
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-3">
                 <h1 className="text-xl font-bold">{project.name}</h1>
                 <span className={`badge ${status.badge}`}>{status.label}</span>
               </div>
@@ -134,7 +134,7 @@ export default async function ProjectDetailPage({
               </p>
             </div>
             {canManage && (
-              <div className="flex shrink-0 gap-2">
+              <div className="flex flex-wrap gap-2">
                 <form action={saveProjectAsTemplate}>
                   <input type="hidden" name="projectId" value={project.id} />
                   <button type="submit" className="btn-secondary" title="Copy this project's tasks into a reusable template">
@@ -199,8 +199,8 @@ export default async function ProjectDetailPage({
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="card lg:col-span-2">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-3">
+        <div className="card min-w-0 lg:col-span-2">
           <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
             <h2 className="font-semibold">Tasks</h2>
             {canManage ? (
@@ -301,16 +301,16 @@ export default async function ProjectDetailPage({
                 <Link
                   key={t.id}
                   href={`/tasks/${t.id}`}
-                  className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50"
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-3 hover:bg-slate-50"
                 >
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 basis-full sm:basis-auto">
                     <div className="truncate text-sm font-medium">{t.title}</div>
                     <div className="text-xs text-slate-500">{t.assignee?.name ?? "Unassigned"}</div>
                   </div>
-                  <span className={`badge ${tp.badge}`}>{tp.label}</span>
-                  <span className={`badge ${ts.badge}`}>{ts.label}</span>
+                  <span className={`badge shrink-0 ${tp.badge}`}>{tp.label}</span>
+                  <span className={`badge shrink-0 ${ts.badge}`}>{ts.label}</span>
                   <span
-                    className={`w-24 text-right text-xs ${
+                    className={`shrink-0 text-right text-xs sm:w-24 ${
                       isOverdue(t) ? "font-semibold text-red-600" : "text-slate-500"
                     }`}
                   >
@@ -322,7 +322,7 @@ export default async function ProjectDetailPage({
           </div>
         </div>
 
-        <div className="card">
+        <div className="card min-w-0">
           <div className="border-b border-slate-200 px-5 py-4">
             <h2 className="font-semibold">Members ({project.members.length})</h2>
           </div>

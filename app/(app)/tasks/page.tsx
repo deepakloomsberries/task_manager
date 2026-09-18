@@ -166,8 +166,8 @@ export default async function TasksPage({
       <RememberTaskView view={viewParam} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Tasks</h1>
-        <div className="flex items-center gap-2">
-          <div className="flex rounded-lg border border-slate-300 p-0.5 text-sm dark:border-slate-600">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex shrink-0 rounded-lg border border-slate-300 p-0.5 text-sm dark:border-slate-600">
             <Link
               href={listHref}
               className={`rounded-md px-3 py-1 ${!boardView ? "bg-sky-600 text-white" : "text-slate-600 hover:bg-slate-100 dark:text-slate-300"}`}
@@ -182,12 +182,12 @@ export default async function TasksPage({
             </Link>
           </div>
           {canManage && (
-            <form action={setRecurringVisibility}>
+            <form action={setRecurringVisibility} className="shrink-0">
               <input type="hidden" name="show" value={showRecurring ? "0" : "1"} />
               <input type="hidden" name="back" value={currentHref} />
               <button
                 type="submit"
-                className="btn-secondary"
+                className="btn-secondary whitespace-nowrap"
                 title={showRecurring ? "Hide the daily recurring tasks from this list" : "Show the daily recurring tasks in this list"}
               >
                 {showRecurring ? "↻ Hide recurring" : "↻ Show recurring"}
@@ -195,11 +195,11 @@ export default async function TasksPage({
             </form>
           )}
           {canManage && (
-            <Link href={showImport ? listHref : "/tasks?import=1"} className="btn-secondary">
+            <Link href={showImport ? listHref : "/tasks?import=1"} className="btn-secondary shrink-0 whitespace-nowrap">
               {showImport ? "Close" : "⇧ Import"}
             </Link>
           )}
-          <Link href={showNew ? listHref : "/tasks?new=1"} className="btn-primary">
+          <Link href={showNew ? listHref : "/tasks?new=1"} className="btn-primary shrink-0 whitespace-nowrap">
             {showNew ? "Close" : "+ New Task"}
           </Link>
         </div>
