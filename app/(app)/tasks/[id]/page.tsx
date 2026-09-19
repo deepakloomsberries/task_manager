@@ -165,6 +165,7 @@ export default async function TaskDetailPage({
   const isBlocked = openBlockers.length > 0;
   const blockerIds = new Set(blockers.map((b) => b.id));
   const dependencyOptions = allTasks.filter((t) => !blockerIds.has(t.id));
+  const openSubtasksCount = task.subtasks.filter((s) => s.status !== "DONE").length;
 
   // Roll up who has logged how much time on this task, biggest contributor first.
   const timeByUser = new Map<number, { user: { id: number; name: string; avatarPath: string | null }; hours: number }>();
@@ -246,9 +247,11 @@ export default async function TaskDetailPage({
                   ? { text: "This task can't be completed yet — finish the tasks blocking it first.", error: true }
                   : searchParams.error === "needs-approval"
                     ? { text: "Send this task to Review — its owner will approve completion.", error: true }
-                    : searchParams.error === "badlink"
-                      ? { text: "That doesn't look like a valid link — it should start with http:// or https://.", error: true }
-                      : null;
+                    : searchParams.error === "subtasks"
+                      ? { text: "This task can't be marked Done yet — finish all of its subtasks first.", error: true }
+                      : searchParams.error === "badlink"
+                        ? { text: "That doesn't look like a valid link — it should start with http:// or https://.", error: true }
+                        : null;
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
@@ -530,14 +533,16 @@ export default async function TaskDetailPage({
                     const style = STATUS_PILL[s.value];
                     const isCurrent = s.value === task.status;
                     const isDone = s.value === "DONE";
-                    const locked = isDone && (!canCompleteDone || isBlocked);
+                    const locked = isDone && (!canCompleteDone || isBlocked || openSubtasksCount > 0);
                     const lockTitle = isDone && !canCompleteDone
                       ? task.reviewRequired
                         ? "This task needs the owner's review — send it to In Review and they'll approve it."
                         : "Only the task owner can mark this Done — send it to Review for approval."
-                      : isBlocked
-                        ? `Blocked by ${openBlockers.length} unfinished task(s)`
-                        : "";
+                      : isDone && openSubtasksCount > 0
+                        ? `Finish ${openSubtasksCount} unfinished subtask(s) first`
+                        : isBlocked
+                          ? `Blocked by ${openBlockers.length} unfinished task(s)`
+                          : "";
                     const label = isDone && task.status === "REVIEW" && canEdit ? "Approve" : s.label;
 
                     // Moving to an earlier stage is a revert (e.g. reopening a

@@ -291,12 +291,20 @@ async function hasOpenBlockers(taskId: number) {
   return open > 0;
 }
 
+/** True when the task still has at least one unfinished (non-deleted) subtask. */
+async function hasOpenSubtasks(taskId: number) {
+  const open = await db.task.count({
+    where: { parentId: taskId, deletedAt: null, status: { not: "DONE" } },
+  });
+  return open > 0;
+}
+
 async function changeStatus(
   user: { id: number; name: string; role: string; requiresApproval?: boolean },
   taskId: number,
   status: string,
   autoTimer = false
-): Promise<"ok" | "noop" | "blocked" | "needs-approval"> {
+): Promise<"ok" | "noop" | "blocked" | "needs-approval" | "subtasks"> {
   if (!STATUSES.includes(status)) return "noop";
   const task = await db.task.findUnique({
     where: { id: taskId },
@@ -316,6 +324,8 @@ async function changeStatus(
     if (!isOwnerOrManager && (user.requiresApproval || task.reviewRequired)) return "needs-approval";
     // Can't complete a task while something it depends on is still open.
     if (await hasOpenBlockers(taskId)) return "blocked";
+    // Can't complete a task while any of its subtasks are still open.
+    if (await hasOpenSubtasks(taskId)) return "subtasks";
   }
 
   await db.task.update({
@@ -407,7 +417,7 @@ export async function setTaskStatus(formData: FormData) {
   const result = await changeStatus(user, id, status, true);
   await revalidateTaskViews(id);
   const sep = back.includes("?") ? "&" : "?";
-  if (result === "blocked" || result === "needs-approval") {
+  if (result === "blocked" || result === "needs-approval" || result === "subtasks") {
     redirect(`${back}${sep}error=${result}`);
   }
   // A quiet toast confirms the change (no dialog for forward moves).

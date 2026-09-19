@@ -11,11 +11,20 @@ export default function LiveElapsed({
   startedAt: string;
   className?: string;
 }) {
-  const [now, setNow] = useState(() => Date.now());
+  // Starts null so the server-rendered markup and the client's pre-hydration
+  // render agree (both show the placeholder) — computing Date.now() in the
+  // initializer instead runs once on the server and again on the client,
+  // producing two different elapsed values and a hydration mismatch.
+  const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
+    setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
-  const elapsed = (now - new Date(startedAt).getTime()) / 1000;
-  return <span className={`font-mono tabular-nums ${className}`}>{fmtDuration(elapsed)}</span>;
+  const elapsed = now === null ? null : (now - new Date(startedAt).getTime()) / 1000;
+  return (
+    <span className={`font-mono tabular-nums ${className}`}>
+      {elapsed === null ? "—" : fmtDuration(elapsed)}
+    </span>
+  );
 }

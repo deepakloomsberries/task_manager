@@ -12,6 +12,7 @@ import {
 import { createTask } from "@/lib/actions/tasks";
 import { saveProjectAsTemplate } from "@/lib/actions/templates";
 import UserAvatar from "@/components/UserAvatar";
+import { ActiveTimersProvider, WorkingCell } from "@/components/ActiveTimers";
 import ProjectTimeline from "@/components/ProjectTimeline";
 import SearchSelect from "@/components/SearchSelect";
 import DatePicker from "@/components/DatePicker";
@@ -100,6 +101,58 @@ export default async function ProjectDetailPage({
   for (const d of deps) {
     (blockersByTask[d.taskId] ??= []).push(d.blocker);
   }
+
+  // Per-assignee breakdown: how many of this project's tasks each person has
+  // in each status, plus (via the live timer) what they're working on right
+  // now. Seeded from the project's members so everyone shows up even with 0
+  // tasks, then filled in from the task list (an assignee doesn't have to be
+  // a formal member to show up here).
+  type AssigneeRow = {
+    user: typeof project.members[number]["user"];
+    counts: Record<string, number>;
+    total: number;
+  };
+  const assigneeMap = new Map<number, AssigneeRow>();
+  for (const m of project.members) {
+    assigneeMap.set(m.userId, { user: m.user, counts: {}, total: 0 });
+  }
+  for (const t of project.tasks) {
+    if (!t.assigneeId || !t.assignee) continue;
+    let row = assigneeMap.get(t.assigneeId);
+    if (!row) {
+      row = { user: t.assignee, counts: {}, total: 0 };
+      assigneeMap.set(t.assigneeId, row);
+    }
+    row.counts[t.status] = (row.counts[t.status] ?? 0) + 1;
+    row.total += 1;
+  }
+  const assigneeRows = Array.from(assigneeMap.values()).sort(
+    (a, b) => b.total - a.total || a.user.name.localeCompare(b.user.name)
+  );
+
+  // Anyone in the summary currently running a task timer — shown live on
+  // their row via WorkingCell, wherever the task actually lives.
+  const runningTimers = assigneeRows.length
+    ? await db.taskTimer.findMany({
+        where: { userId: { in: assigneeRows.map((r) => r.user.id) } },
+        include: {
+          user: { select: { id: true, name: true, avatarPath: true } },
+          task: { select: { id: true, title: true, estimateHours: true, deletedAt: true } },
+        },
+      })
+    : [];
+  const activeTimers = runningTimers
+    .filter((t) => t.task && !t.task.deletedAt)
+    .map((t) => ({
+      id: t.id,
+      userId: t.userId,
+      userName: t.user.name,
+      avatarPath: t.user.avatarPath,
+      taskId: t.task!.id,
+      taskTitle: t.task!.title,
+      estimateHours: t.task!.estimateHours,
+      startedAt: t.startedAt.toISOString(),
+    }));
 
   const canManage = isManagerOrAdmin(user.role);
   const editing = searchParams.edit === "1" && canManage;
@@ -372,6 +425,58 @@ export default async function ProjectDetailPage({
           )}
         </div>
       </div>
+
+      {assigneeRows.length > 0 && (
+        <div className="card p-6">
+          <h2 className="mb-4 font-semibold">Team summary</h2>
+          <ActiveTimersProvider initial={activeTimers}>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px]">
+                <thead className="border-b border-slate-200 bg-slate-50">
+                  <tr>
+                    <th className="th">Person</th>
+                    {TASK_STATUSES.map((s) => (
+                      <th key={s.value} className="th text-center">
+                        {s.label}
+                      </th>
+                    ))}
+                    <th className="th text-center">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {assigneeRows.map((r) => (
+                    <tr key={r.user.id} className="hover:bg-slate-50">
+                      <td className="td">
+                        <Link
+                          href={`/people/${r.user.id}`}
+                          className="flex items-center gap-2 hover:text-sky-700"
+                          title="View profile"
+                        >
+                          <UserAvatar user={r.user} size={28} presence={r.user.lastSeenAt} />
+                          <span className="font-medium">{r.user.name}</span>
+                        </Link>
+                        <WorkingCell userId={r.user.id} />
+                      </td>
+                      {TASK_STATUSES.map((s) => (
+                        <td key={s.value} className="td text-center">
+                          {r.counts[s.value] ? (
+                            <span className={s.value === "DONE" ? "font-medium text-green-700" : "font-medium"}>
+                              {r.counts[s.value]}
+                            </span>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </td>
+                      ))}
+                      <td className="td text-center font-semibold">{r.total}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </ActiveTimersProvider>
+        </div>
+      )}
 
       <div className="card p-6">
         <h2 className="mb-4 font-semibold">Timeline</h2>
