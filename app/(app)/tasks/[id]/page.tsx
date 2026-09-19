@@ -165,6 +165,7 @@ export default async function TaskDetailPage({
   const isBlocked = openBlockers.length > 0;
   const blockerIds = new Set(blockers.map((b) => b.id));
   const dependencyOptions = allTasks.filter((t) => !blockerIds.has(t.id));
+  const openSubtasksCount = task.subtasks.filter((s) => s.status !== "DONE").length;
 
   // Roll up who has logged how much time on this task, biggest contributor first.
   const timeByUser = new Map<number, { user: { id: number; name: string; avatarPath: string | null }; hours: number }>();
@@ -246,7 +247,11 @@ export default async function TaskDetailPage({
                   ? { text: "This task can't be completed yet — finish the tasks blocking it first.", error: true }
                   : searchParams.error === "needs-approval"
                     ? { text: "Send this task to Review — its owner will approve completion.", error: true }
-                    : null;
+                    : searchParams.error === "subtasks"
+                      ? { text: "This task can't be marked Done yet — finish all of its subtasks first.", error: true }
+                      : searchParams.error === "badlink"
+                        ? { text: "That doesn't look like a valid link — it should start with http:// or https://.", error: true }
+                        : null;
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
@@ -391,7 +396,11 @@ export default async function TaskDetailPage({
                   <form action={deleteTask}>
                     <input type="hidden" name="id" value={task.id} />
                     <ConfirmButton
-                      message="Delete this task? You can restore it from Trash."
+                      message={
+                        task.recurrence
+                          ? "Delete this task? It's the current occurrence of a recurring job — deleting it stops the whole series, not just today's copy. No new occurrences will be created until one is recreated with the same title, assignee and recurrence. You can restore this one from Trash."
+                          : "Delete this task? You can restore it from Trash."
+                      }
                       className="btn-danger"
                     >
                       Delete
@@ -524,14 +533,16 @@ export default async function TaskDetailPage({
                     const style = STATUS_PILL[s.value];
                     const isCurrent = s.value === task.status;
                     const isDone = s.value === "DONE";
-                    const locked = isDone && (!canCompleteDone || isBlocked);
+                    const locked = isDone && (!canCompleteDone || isBlocked || openSubtasksCount > 0);
                     const lockTitle = isDone && !canCompleteDone
                       ? task.reviewRequired
                         ? "This task needs the owner's review — send it to In Review and they'll approve it."
                         : "Only the task owner can mark this Done — send it to Review for approval."
-                      : isBlocked
-                        ? `Blocked by ${openBlockers.length} unfinished task(s)`
-                        : "";
+                      : isDone && openSubtasksCount > 0
+                        ? `Finish ${openSubtasksCount} unfinished subtask(s) first`
+                        : isBlocked
+                          ? `Blocked by ${openBlockers.length} unfinished task(s)`
+                          : "";
                     const label = isDone && task.status === "REVIEW" && canEdit ? "Approve" : s.label;
 
                     // Moving to an earlier stage is a revert (e.g. reopening a
@@ -977,30 +988,35 @@ export default async function TaskDetailPage({
           <span className="text-sm font-normal text-slate-400">({task.attachments.length})</span>
         </h2>
         <div className="space-y-2">
-          {task.attachments.map((a) => (
+          {task.attachments.map((a) => {
+            const isLink = !a.storedName;
+            return (
             <div
               key={a.id}
               className="flex items-center gap-3 rounded-lg border border-slate-200 px-4 py-2.5"
             >
-              <span className="text-lg text-slate-400">⎘</span>
+              <span className="text-lg text-slate-400">{isLink ? "🔗" : "⎘"}</span>
               <div className="min-w-0 flex-1">
                 <a
-                  href={`/api/files/${a.id}`}
+                  href={isLink ? a.externalUrl! : `/api/files/${a.id}`}
                   target="_blank"
+                  rel={isLink ? "noreferrer" : undefined}
                   className="block truncate text-sm font-medium text-sky-700 hover:underline"
                 >
                   {a.originalName}
                 </a>
                 <div className="text-xs text-slate-400">
-                  {fmtSize(a.size)} · {a.uploadedBy.name} · {fmtDateTime(a.createdAt)}
+                  {isLink ? "External link" : fmtSize(a.size)} · {a.uploadedBy.name} · {fmtDateTime(a.createdAt)}
                 </div>
               </div>
-              <a
-                href={`/api/files/${a.id}?download=1`}
-                className="text-xs text-sky-600 hover:underline"
-              >
-                Download
-              </a>
+              {!isLink && (
+                <a
+                  href={`/api/files/${a.id}?download=1`}
+                  className="text-xs text-sky-600 hover:underline"
+                >
+                  Download
+                </a>
+              )}
               {(a.uploadedById === user.id || user.role === "ADMIN") && (
                 <form action={deleteAttachment}>
                   <input type="hidden" name="id" value={a.id} />
@@ -1013,12 +1029,15 @@ export default async function TaskDetailPage({
                 </form>
               )}
             </div>
-          ))}
+            );
+          })}
           {task.attachments.length === 0 && (
             <p className="text-sm text-slate-400">No files attached to this task.</p>
           )}
         </div>
-        <PasteAttachment taskId={task.id} />
+        <div className="mt-4">
+          <PasteAttachment taskId={task.id} />
+        </div>
       </div>
 
       <div className="card p-6">

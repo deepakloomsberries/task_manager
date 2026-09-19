@@ -19,18 +19,23 @@ export default async function ConversationPage({ params }: { params: { userId: s
     data: { read: true },
   });
 
-  const [messages, lastRead] = await Promise.all([
+  const conversationWhere = {
+    OR: [
+      { senderId: user.id, recipientId: otherId },
+      { senderId: otherId, recipientId: user.id },
+    ],
+  };
+
+  const [messages, lastRead, reactionRows, starRows] = await Promise.all([
     db.directMessage.findMany({
-      where: {
-        OR: [
-          { senderId: user.id, recipientId: otherId },
-          { senderId: otherId, recipientId: user.id },
-        ],
-      },
+      where: conversationWhere,
       orderBy: { createdAt: "asc" },
       take: 500,
       include: {
         attachments: { select: { id: true, originalName: true, mimeType: true, size: true }, orderBy: { id: "asc" } },
+        replyTo: {
+          select: { id: true, body: true, senderId: true, deletedAt: true, attachments: { select: { id: true }, take: 1 } },
+        },
       },
     }),
     db.directMessage.findFirst({
@@ -38,10 +43,39 @@ export default async function ConversationPage({ params }: { params: { userId: s
       orderBy: { id: "desc" },
       select: { id: true },
     }),
+    db.messageReaction.findMany({
+      where: { message: conversationWhere },
+      select: { messageId: true, userId: true, emoji: true },
+    }),
+    db.messageStar.findMany({
+      where: { userId: user.id, message: conversationWhere },
+      select: { messageId: true },
+    }),
   ]);
+  const myStarredIds = new Set(starRows.map((s) => s.messageId));
+
+  const reactionsByMessage = new Map<number, { emoji: string; count: number; mine: boolean }[]>();
+  for (const r of reactionRows) {
+    const list = reactionsByMessage.get(r.messageId) ?? [];
+    const existing = list.find((x) => x.emoji === r.emoji);
+    if (existing) {
+      existing.count += 1;
+      if (r.userId === user.id) existing.mine = true;
+    } else {
+      list.push({ emoji: r.emoji, count: 1, mine: r.userId === user.id });
+    }
+    reactionsByMessage.set(r.messageId, list);
+  }
 
   return (
     <ChatThread
+      // Force a full remount when switching between conversations — without
+      // it, React reuses this component instance across navigations (same
+      // position in the tree), so message/composer/panel state from the
+      // previous chat would leak into the next one, and the mount effect
+      // below (scroll-to-bottom, unread-badge refresh) would only ever fire
+      // once instead of on every chat switch.
+      key={other.id}
       meId={user.id}
       other={{
         id: other.id,
@@ -64,6 +98,17 @@ export default async function ConversationPage({ params }: { params: { userId: s
               mimeType: a.mimeType,
               size: a.size,
             })),
+        replyTo:
+          m.replyTo && !m.replyTo.deletedAt
+            ? {
+                id: m.replyTo.id,
+                body: m.replyTo.body,
+                senderId: m.replyTo.senderId,
+                hasAttachment: m.replyTo.attachments.length > 0,
+              }
+            : null,
+        reactions: reactionsByMessage.get(m.id) ?? [],
+        starred: myStarredIds.has(m.id),
       }))}
       initialLastReadMyId={lastRead?.id ?? 0}
       initialPartnerLastSeenAt={other.lastSeenAt ? other.lastSeenAt.toISOString() : null}

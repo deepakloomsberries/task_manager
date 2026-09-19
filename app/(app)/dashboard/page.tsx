@@ -59,7 +59,7 @@ export default async function DashboardPage() {
   const monthStart = new Date(todayStart.getTime() - (localDayOfMonth - 1) * DAY);
   const onlineSince = new Date(Date.now() - ONLINE_WINDOW_MS);
 
-  const [openTasks, doneThisWeek, doneThisMonth, timer, weekEntries, activeProjects, activeUsers, notifications] =
+  const [openTasks, doneThisWeek, doneThisMonth, needsReview, timer, weekEntries, activeProjects, activeUsers, notifications] =
     await Promise.all([
       db.task.findMany({
         where: {
@@ -72,6 +72,10 @@ export default async function DashboardPage() {
       }),
       db.task.count({ where: { assigneeId: user.id, status: "DONE", deletedAt: null, completedAt: { gte: weekStart, lt: weekEnd } } }),
       db.task.count({ where: { assigneeId: user.id, status: "DONE", deletedAt: null, completedAt: { gte: monthStart } } }),
+      // Tasks this person assigned/owns that the assignee has sent back for
+      // approval — this is what "needs your review" means, not any task that
+      // merely happens to be in the Review column.
+      db.task.count({ where: { createdById: user.id, status: "REVIEW", deletedAt: null } }),
       db.taskTimer.findUnique({ where: { userId: user.id }, include: { task: { select: { id: true, title: true } } } }),
       db.timeEntry.findMany({ where: { userId: user.id, date: { gte: weekStart, lt: weekEnd } }, select: { date: true, hours: true } }),
       db.project.findMany({
@@ -122,6 +126,9 @@ export default async function DashboardPage() {
     { label: "Overdue", value: overdue.length, href: "/tasks?assignee=me&overdue=1" },
     { label: "Due today", value: dueToday.length, href: "/my-tasks" },
     { label: "Done this week", value: doneThisWeek, href: "/tasks?assignee=me&status=DONE" },
+    // Tasks THIS person assigned that have been sent back for their approval —
+    // distinct from anyone's generic "in review" work.
+    { label: "To review", value: needsReview, href: "/tasks?status=REVIEW&owner=me" },
   ];
 
   return (
@@ -146,7 +153,7 @@ export default async function DashboardPage() {
             + New task
           </Link>
         </div>
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {chips.map((c) => (
             <Link
               key={c.label}
@@ -160,9 +167,9 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-3">
         {/* Left: focus + agenda */}
-        <div className="space-y-6 lg:col-span-2">
+        <div className="min-w-0 space-y-6 lg:col-span-2">
           <QuickAdd />
 
           {/* Focus now */}

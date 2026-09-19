@@ -59,6 +59,13 @@ export type MessageAttachment = {
   size: number;
 };
 
+export type ReplyPreview = {
+  id: number;
+  body: string;
+  senderId: number;
+  hasAttachment: boolean;
+};
+
 export type SentMessage = {
   id: number;
   body: string;
@@ -66,18 +73,20 @@ export type SentMessage = {
   recipientId: number;
   createdAt: string;
   attachments: MessageAttachment[];
+  replyTo: ReplyPreview | null;
 };
 
 /**
- * Sends a direct message (optionally with already-uploaded attachments) and
- * returns it so the chat UI can reconcile the optimistic bubble it already
- * drew. Unlike `sendDirectMessage`, this does not redirect — the client stays
- * put and keeps the conversation feeling live.
+ * Sends a direct message (optionally with already-uploaded attachments and/or
+ * quoting an earlier message) and returns it so the chat UI can reconcile the
+ * optimistic bubble it already drew. Unlike `sendDirectMessage`, this does not
+ * redirect — the client stays put and keeps the conversation feeling live.
  */
 export async function sendMessage(
   recipientId: number,
   rawBody: string,
-  attachmentIds: number[] = []
+  attachmentIds: number[] = [],
+  replyToId?: number | null
 ): Promise<SentMessage | { error: string }> {
   const user = await requireUser();
   const body = String(rawBody ?? "").trim();
@@ -90,8 +99,40 @@ export async function sendMessage(
   const recipient = await db.user.findUnique({ where: { id: recipientId } });
   if (!recipient || !recipient.active) return { error: "recipient unavailable" };
 
+  // A reply target only counts if it's a real, non-deleted message in this
+  // same conversation — otherwise silently send without the quote rather
+  // than erroring the whole send over a stale/removed reference.
+  let replyToRow: (ReplyPreview & { deletedAt: Date | null }) | null = null;
+  if (replyToId) {
+    const parent = await db.directMessage.findUnique({
+      where: { id: replyToId },
+      select: {
+        id: true,
+        body: true,
+        senderId: true,
+        recipientId: true,
+        deletedAt: true,
+        attachments: { select: { id: true }, take: 1 },
+      },
+    });
+    if (
+      parent &&
+      !parent.deletedAt &&
+      ((parent.senderId === user.id && parent.recipientId === recipientId) ||
+        (parent.recipientId === user.id && parent.senderId === recipientId))
+    ) {
+      replyToRow = {
+        id: parent.id,
+        body: parent.body,
+        senderId: parent.senderId,
+        hasAttachment: parent.attachments.length > 0,
+        deletedAt: null,
+      };
+    }
+  }
+
   const msg = await db.directMessage.create({
-    data: { body, senderId: user.id, recipientId },
+    data: { body, senderId: user.id, recipientId, replyToId: replyToRow?.id ?? null },
   });
 
   // Link the sender's freshly uploaded, not-yet-attached files to this message.
@@ -124,5 +165,84 @@ export async function sendMessage(
       mimeType: a.mimeType,
       size: a.size,
     })),
+    replyTo: replyToRow
+      ? { id: replyToRow.id, body: replyToRow.body, senderId: replyToRow.senderId, hasAttachment: replyToRow.hasAttachment }
+      : null,
   };
+}
+
+export type ReactionSummary = { emoji: string; count: number; mine: boolean };
+
+/**
+ * Tap-to-react, WhatsApp-style: picking an emoji sets/replaces your own
+ * reaction on that message, picking the same one again removes it. Returns
+ * the message's full reaction summary so the caller can update optimistically
+ * without waiting for the next poll.
+ */
+export async function toggleReaction(
+  messageId: number,
+  emoji: string
+): Promise<{ reactions: ReactionSummary[] } | { error: string }> {
+  const user = await requireUser();
+  const cleanEmoji = String(emoji ?? "").trim().slice(0, 8);
+  if (!cleanEmoji) return { error: "invalid emoji" };
+
+  const msg = await db.directMessage.findUnique({
+    where: { id: messageId },
+    select: { senderId: true, recipientId: true, deletedAt: true },
+  });
+  if (!msg || msg.deletedAt) return { error: "not found" };
+  if (msg.senderId !== user.id && msg.recipientId !== user.id) return { error: "forbidden" };
+
+  const existing = await db.messageReaction.findUnique({
+    where: { messageId_userId: { messageId, userId: user.id } },
+  });
+  if (existing && existing.emoji === cleanEmoji) {
+    await db.messageReaction.delete({ where: { id: existing.id } });
+  } else {
+    await db.messageReaction.upsert({
+      where: { messageId_userId: { messageId, userId: user.id } },
+      create: { messageId, userId: user.id, emoji: cleanEmoji },
+      update: { emoji: cleanEmoji },
+    });
+  }
+
+  const rows = await db.messageReaction.findMany({ where: { messageId } });
+  const byEmoji = new Map<string, ReactionSummary>();
+  for (const r of rows) {
+    const cur = byEmoji.get(r.emoji) ?? { emoji: r.emoji, count: 0, mine: false };
+    cur.count += 1;
+    if (r.userId === user.id) cur.mine = true;
+    byEmoji.set(r.emoji, cur);
+  }
+
+  const otherId = msg.senderId === user.id ? msg.recipientId : msg.senderId;
+  revalidatePath(`/messages/${otherId}`);
+
+  return { reactions: Array.from(byEmoji.values()) };
+}
+
+/**
+ * Toggles a private "star" (bookmark) on a message for the current user only
+ * — WhatsApp-style. Nobody else can see who starred what.
+ */
+export async function toggleStar(messageId: number): Promise<{ starred: boolean } | { error: string }> {
+  const user = await requireUser();
+
+  const msg = await db.directMessage.findUnique({
+    where: { id: messageId },
+    select: { senderId: true, recipientId: true, deletedAt: true },
+  });
+  if (!msg || msg.deletedAt) return { error: "not found" };
+  if (msg.senderId !== user.id && msg.recipientId !== user.id) return { error: "forbidden" };
+
+  const existing = await db.messageStar.findUnique({
+    where: { messageId_userId: { messageId, userId: user.id } },
+  });
+  if (existing) {
+    await db.messageStar.delete({ where: { id: existing.id } });
+    return { starred: false };
+  }
+  await db.messageStar.create({ data: { messageId, userId: user.id } });
+  return { starred: true };
 }

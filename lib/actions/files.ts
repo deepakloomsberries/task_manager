@@ -4,23 +4,49 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { saveUpload, deleteUpload, MAX_FILE_SIZE } from "@/lib/storage";
+import { deleteUpload } from "@/lib/storage";
 
-export async function uploadAttachment(formData: FormData) {
+// File uploads themselves go through POST /api/attachments/upload (a plain
+// route, not a server action) — the client drives it with XMLHttpRequest to
+// get real upload-progress events, which fetch/server-actions can't report.
+// See PasteAttachment.tsx.
+
+/**
+ * Attaches a link instead of a file — for something too large to upload
+ * (a designer's 100-500 MB source file, say): share it via Drive/Dropbox/
+ * WeTransfer and point to it here instead. Shows up alongside real
+ * attachments everywhere they're listed, but opens externally rather than
+ * being served from this app.
+ */
+export async function addAttachmentLink(formData: FormData) {
   const user = await requireUser();
   const taskId = formData.get("taskId") ? Number(formData.get("taskId")) : null;
   const back = taskId ? `/tasks/${taskId}` : "/documents";
 
-  // Accept one or many files (the picker allows multi-select).
-  const files = formData.getAll("file").filter((f): f is File => f instanceof File && f.size > 0);
-  if (files.length === 0) redirect(`${back}?error=nofile`);
-  if (files.some((f) => f.size > MAX_FILE_SIZE)) redirect(`${back}?error=toobig`);
+  const rawUrl = String(formData.get("url") ?? "").trim();
+  const label = String(formData.get("label") ?? "").trim().slice(0, 200);
+
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    redirect(`${back}?error=badlink`);
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") redirect(`${back}?error=badlink`);
   if (taskId && !(await db.task.findUnique({ where: { id: taskId } }))) redirect("/tasks");
 
-  for (const file of files) {
-    const saved = await saveUpload(file);
-    await db.attachment.create({ data: { ...saved, taskId, uploadedById: user.id } });
-  }
+  await db.attachment.create({
+    data: {
+      storedName: null,
+      originalName: label || url.hostname + url.pathname,
+      mimeType: "text/uri-list",
+      size: 0,
+      externalUrl: url.toString(),
+      taskId,
+      uploadedById: user.id,
+    },
+  });
+
   revalidatePath(back);
   redirect(back);
 }

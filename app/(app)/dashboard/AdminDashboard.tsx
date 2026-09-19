@@ -215,9 +215,9 @@ export default async function AdminDashboard({ user }: { user: AdminUser }) {
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-3">
         {/* Left */}
-        <div className="space-y-6 lg:col-span-2">
+        <div className="min-w-0 space-y-6 lg:col-span-2">
           {/* Needs your attention */}
           <div className="card">
             <div className="border-b border-slate-200 px-5 py-4">

@@ -58,18 +58,18 @@ export default async function UsersPage({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Users</h1>
           <p className="text-sm text-slate-500">
             {users.filter((u) => u.active).length} active of {users.length} total
           </p>
         </div>
-        <div className="flex gap-2">
-          <Link href={showImport ? "/users" : "/users?import=1"} className="btn-secondary">
+        <div className="flex flex-wrap gap-2">
+          <Link href={showImport ? "/users" : "/users?import=1"} className="btn-secondary shrink-0 whitespace-nowrap">
             {showImport ? "Close" : "⇪ Bulk import"}
           </Link>
-          <Link href={showNew ? "/users" : "/users?new=1"} className="btn-primary">
+          <Link href={showNew ? "/users" : "/users?new=1"} className="btn-primary shrink-0 whitespace-nowrap">
             {showNew ? "Close" : "+ Add User"}
           </Link>
         </div>

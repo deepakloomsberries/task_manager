@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import ChunkErrorRecovery from "@/components/ChunkErrorRecovery";
 
 export const metadata: Metadata = {
   title: "Looms & Berries Tasks",
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="font-sans">
+        <ChunkErrorRecovery />
         {children}
         <script
           dangerouslySetInnerHTML={{

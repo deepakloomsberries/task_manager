@@ -12,7 +12,7 @@ type Person = {
   lastSeenAt?: Date | string | null;
 };
 
-export default function StartChat({ users }: { users: Person[] }) {
+export default function StartChat({ users, onSelect }: { users: Person[]; onSelect?: () => void }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
 
@@ -36,7 +36,10 @@ export default function StartChat({ users }: { users: Person[] }) {
           <button
             key={u.id}
             type="button"
-            onClick={() => router.push(`/messages/${u.id}`)}
+            onClick={() => {
+              onSelect?.();
+              router.push(`/messages/${u.id}`);
+            }}
             className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700/50"
           >
             <UserAvatar user={u} size={36} presence={u.lastSeenAt ?? null} />

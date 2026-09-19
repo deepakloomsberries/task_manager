@@ -31,6 +31,15 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     return new NextResponse("Forbidden", { status: 403 });
   }
 
+  // A link attachment has nothing stored here — send the browser straight to
+  // the external URL. The UI links directly to it and shouldn't normally hit
+  // this route at all, but handle it in case of a stale bookmark or a direct
+  // navigation to this URL.
+  if (!attachment.storedName) {
+    if (!attachment.externalUrl) return new NextResponse("Not found", { status: 404 });
+    return NextResponse.redirect(attachment.externalUrl);
+  }
+
   let data: Buffer;
   try {
     data = await fs.readFile(path.join(UPLOAD_DIR, attachment.storedName));

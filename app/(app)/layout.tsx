@@ -69,7 +69,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <CommandPalette users={paletteUsers} projects={paletteProjects} />
       <DesktopSidebar isAdmin={isAdmin} isManager={isManager} badges={navBadges} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 sm:gap-4 sm:px-6 dark:border-slate-700 dark:bg-slate-800">
+        <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 print:hidden sm:gap-4 sm:px-6 dark:border-slate-700 dark:bg-slate-800">
           <SidebarToggle />
           <MobileSidebar isAdmin={isAdmin} isManager={isManager} badges={navBadges} />
           <CommandButton />

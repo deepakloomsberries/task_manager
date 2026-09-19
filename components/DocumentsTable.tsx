@@ -9,6 +9,8 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 export type DocRow = {
   id: number;
   originalName: string;
+  isLink: boolean;
+  externalUrl: string | null;
   sizeLabel: string;
   dateLabel: string;
   uploadedByName: string;
@@ -117,14 +119,16 @@ export default function DocumentsTable({ rows }: { rows: DocRow[] }) {
                   </td>
                   <td className="td">
                     <a
-                      href={`/api/files/${a.id}`}
+                      href={a.isLink ? a.externalUrl! : `/api/files/${a.id}`}
                       target="_blank"
+                      rel={a.isLink ? "noreferrer" : undefined}
                       className="font-medium text-sky-700 hover:underline"
                     >
+                      {a.isLink && "🔗 "}
                       {a.originalName}
                     </a>
                   </td>
-                  <td className="td text-slate-600">{a.sizeLabel}</td>
+                  <td className="td text-slate-600">{a.isLink ? "Link" : a.sizeLabel}</td>
                   <td className="td text-slate-600">
                     {a.taskId ? (
                       <Link href={`/tasks/${a.taskId}`} className="text-sky-700 hover:underline">
@@ -138,9 +142,15 @@ export default function DocumentsTable({ rows }: { rows: DocRow[] }) {
                   <td className="td text-slate-600">{a.dateLabel}</td>
                   <td className="td text-right">
                     <div className="flex justify-end gap-3 text-xs">
-                      <a href={`/api/files/${a.id}?download=1`} className="text-sky-600 hover:underline">
-                        Download
-                      </a>
+                      {a.isLink ? (
+                        <a href={a.externalUrl!} target="_blank" rel="noreferrer" className="text-sky-600 hover:underline">
+                          Open
+                        </a>
+                      ) : (
+                        <a href={`/api/files/${a.id}?download=1`} className="text-sky-600 hover:underline">
+                          Download
+                        </a>
+                      )}
                       {a.canDelete && (
                         <form action={deleteAttachment}>
                           <input type="hidden" name="id" value={a.id} />

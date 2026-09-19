@@ -71,6 +71,23 @@ export async function updateProject(formData: FormData) {
   redirect(`/projects/${id}`);
 }
 
+/** Attaches an existing, project-less task to this project (from the "Add
+ *  task → existing" picker) instead of always creating a brand new one. */
+export async function linkTaskToProject(formData: FormData) {
+  const user = await requireUser();
+  if (!isManagerOrAdmin(user.role)) redirect("/projects");
+
+  const projectId = Number(formData.get("projectId"));
+  const taskId = Number(formData.get("taskId"));
+  if (!projectId) redirect("/projects");
+  if (!taskId) redirect(`/projects/${projectId}?error=pick-a-task`);
+
+  await db.task.update({ where: { id: taskId }, data: { projectId } });
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/tasks");
+  redirect(`/projects/${projectId}`);
+}
+
 export async function addProjectMember(formData: FormData) {
   const user = await requireUser();
   if (!isManagerOrAdmin(user.role)) redirect("/projects");

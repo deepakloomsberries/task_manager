@@ -67,6 +67,9 @@ model User {
   passwordReset        PasswordReset?
   savedViews           SavedView[]
   taskWatches          TaskWatcher[]
+  billingSnapshots     BillingSnapshot[]
+  messageReactions     MessageReaction[]
+  messageStars         MessageStar[]
 }
 
 /**
@@ -316,27 +319,68 @@ model NoteShare {
 }
 
 model DirectMessage {
-  id          Int          @id @default(autoincrement())
+  id          Int               @id @default(autoincrement())
   body        String
-  sender      User         @relation("dmSender", fields: [senderId], references: [id], onDelete: Cascade)
+  sender      User              @relation("dmSender", fields: [senderId], references: [id], onDelete: Cascade)
   senderId    Int
-  recipient   User         @relation("dmRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  recipient   User              @relation("dmRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
   recipientId Int
-  read        Boolean      @default(false)
-  createdAt   DateTime     @default(now())
+  read        Boolean           @default(false)
+  createdAt   DateTime          @default(now())
   deletedAt   DateTime?
   attachments Attachment[]
+  replyTo     DirectMessage?    @relation("dmReplyTo", fields: [replyToId], references: [id], onDelete: SetNull)
+  replyToId   Int?
+  replies     DirectMessage[]   @relation("dmReplyTo")
+  reactions   MessageReaction[]
+  stars       MessageStar[]
 
   @@index([senderId, recipientId])
   @@index([recipientId, senderId])
 }
 
+/**
+ * A private bookmark — WhatsApp-style "star" — on a message. Visible only to
+ * the user who starred it (there's no notion of "who else starred this");
+ * unique per (message, user) so starring is a plain on/off toggle.
+ */
+model MessageStar {
+  id        Int           @id @default(autoincrement())
+  message   DirectMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId Int
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  createdAt DateTime      @default(now())
+
+  @@unique([messageId, userId])
+  @@index([messageId])
+}
+
+/**
+ * One emoji reaction from one user on one message — WhatsApp-style tap-to-react.
+ * Unique per (message, user) so picking a new emoji replaces your old one on
+ * that message rather than stacking; toggling the same emoji again removes it.
+ */
+model MessageReaction {
+  id        Int           @id @default(autoincrement())
+  message   DirectMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId Int
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  emoji     String
+  createdAt DateTime      @default(now())
+
+  @@unique([messageId, userId])
+  @@index([messageId])
+}
+
 model Attachment {
   id                  Int                @id @default(autoincrement())
-  storedName          String             @unique // random name on disk inside UPLOAD_DIR
+  storedName          String?            @unique // random name on disk inside UPLOAD_DIR — null for a link attachment (externalUrl set instead)
   originalName        String
   mimeType            String
   size                Int
+  externalUrl         String? // set instead of storedName/uploading a file — for something too large to upload (e.g. a Drive link)
   task                Task?              @relation(fields: [taskId], references: [id], onDelete: Cascade)
   taskId              Int?
   message             DirectMessage?     @relation(fields: [messageId], references: [id], onDelete: Cascade)
@@ -439,4 +483,35 @@ model TaskTimer {
   taskId    Int
   note      String?
   startedAt DateTime @default(now())
+}
+
+/**
+ * The per-seat rate an admin has set for internal cost-recovery billing (see
+ * /billing). Always exactly one row (id 1) — a singleton settings record, not
+ * a history; BillingSnapshot below is what preserves history month to month.
+ */
+model BillingSetting {
+  id          Int      @id @default(autoincrement())
+  ratePerSeat Int // whole currency units per active user per month, e.g. 100
+  currency    String   @default("INR")
+  updatedAt   DateTime @updatedAt
+}
+
+/**
+ * A generated monthly billing snapshot — active user count and rate frozen at
+ * the moment it was generated, so past months stay accurate even after the
+ * rate changes or headcount moves. One per calendar month (period "YYYY-MM");
+ * generating again for the same month overwrites it (e.g. to correct a
+ * headcount change before finance has seen it).
+ */
+model BillingSnapshot {
+  id            Int      @id @default(autoincrement())
+  period        String   @unique // "2026-09"
+  activeUsers   Int
+  ratePerSeat   Int
+  currency      String
+  totalAmount   Int
+  generatedAt   DateTime @default(now())
+  generatedBy   User     @relation(fields: [generatedById], references: [id])
+  generatedById Int
 }

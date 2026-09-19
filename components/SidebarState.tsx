@@ -60,7 +60,7 @@ export function DesktopSidebar({
   const { collapsed } = useContext(SidebarCtx);
   return (
     <aside
-      className={`hidden shrink-0 flex-col border-slate-200 bg-white transition-[width] duration-200 md:flex dark:border-slate-700 dark:bg-slate-800 ${
+      className={`hidden shrink-0 flex-col border-slate-200 bg-white transition-[width] duration-200 print:hidden md:flex dark:border-slate-700 dark:bg-slate-800 ${
         collapsed ? "md:w-0 md:overflow-hidden md:border-r-0" : "w-60 border-r"
       }`}
     >

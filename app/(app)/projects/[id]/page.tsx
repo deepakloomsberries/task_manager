@@ -7,11 +7,15 @@ import {
   addProjectMember,
   removeProjectMember,
   deleteProject,
+  linkTaskToProject,
 } from "@/lib/actions/projects";
+import { createTask } from "@/lib/actions/tasks";
 import { saveProjectAsTemplate } from "@/lib/actions/templates";
 import UserAvatar from "@/components/UserAvatar";
+import { ActiveTimersProvider, WorkingCell } from "@/components/ActiveTimers";
 import ProjectTimeline from "@/components/ProjectTimeline";
 import SearchSelect from "@/components/SearchSelect";
+import DatePicker from "@/components/DatePicker";
 import AutoRefresh from "@/components/AutoRefresh";
 import {
   PROJECT_STATUSES,
@@ -32,13 +36,14 @@ export default async function ProjectDetailPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { edit?: string };
+  searchParams: { edit?: string; addTask?: string; error?: string };
 }) {
   const user = await requireUser();
   const id = Number(params.id);
   if (!id) notFound();
 
-  const [project, allUsers] = await Promise.all([
+  const addingTask = searchParams.addTask === "1";
+  const [project, allUsers, openTasks] = await Promise.all([
     db.project.findUnique({
       where: { id },
       include: {
@@ -53,6 +58,16 @@ export default async function ProjectDetailPage({
       },
     }),
     db.user.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
+    // Only fetched when the picker is open — existing tasks with no project
+    // yet, so "Add task" can attach one instead of always creating new.
+    addingTask
+      ? db.task.findMany({
+          where: { projectId: null, deletedAt: null },
+          select: { id: true, title: true, status: true },
+          orderBy: { createdAt: "desc" },
+          take: 200,
+        })
+      : Promise.resolve([]),
   ]);
   if (!project) notFound();
 
@@ -87,8 +102,61 @@ export default async function ProjectDetailPage({
     (blockersByTask[d.taskId] ??= []).push(d.blocker);
   }
 
+  // Per-assignee breakdown: how many of this project's tasks each person has
+  // in each status, plus (via the live timer) what they're working on right
+  // now. Seeded from the project's members so everyone shows up even with 0
+  // tasks, then filled in from the task list (an assignee doesn't have to be
+  // a formal member to show up here).
+  type AssigneeRow = {
+    user: typeof project.members[number]["user"];
+    counts: Record<string, number>;
+    total: number;
+  };
+  const assigneeMap = new Map<number, AssigneeRow>();
+  for (const m of project.members) {
+    assigneeMap.set(m.userId, { user: m.user, counts: {}, total: 0 });
+  }
+  for (const t of project.tasks) {
+    if (!t.assigneeId || !t.assignee) continue;
+    let row = assigneeMap.get(t.assigneeId);
+    if (!row) {
+      row = { user: t.assignee, counts: {}, total: 0 };
+      assigneeMap.set(t.assigneeId, row);
+    }
+    row.counts[t.status] = (row.counts[t.status] ?? 0) + 1;
+    row.total += 1;
+  }
+  const assigneeRows = Array.from(assigneeMap.values()).sort(
+    (a, b) => b.total - a.total || a.user.name.localeCompare(b.user.name)
+  );
+
+  // Anyone in the summary currently running a task timer — shown live on
+  // their row via WorkingCell, wherever the task actually lives.
+  const runningTimers = assigneeRows.length
+    ? await db.taskTimer.findMany({
+        where: { userId: { in: assigneeRows.map((r) => r.user.id) } },
+        include: {
+          user: { select: { id: true, name: true, avatarPath: true } },
+          task: { select: { id: true, title: true, estimateHours: true, deletedAt: true } },
+        },
+      })
+    : [];
+  const activeTimers = runningTimers
+    .filter((t) => t.task && !t.task.deletedAt)
+    .map((t) => ({
+      id: t.id,
+      userId: t.userId,
+      userName: t.user.name,
+      avatarPath: t.user.avatarPath,
+      taskId: t.task!.id,
+      taskTitle: t.task!.title,
+      estimateHours: t.task!.estimateHours,
+      startedAt: t.startedAt.toISOString(),
+    }));
+
   const canManage = isManagerOrAdmin(user.role);
   const editing = searchParams.edit === "1" && canManage;
+  const showAddTask = addingTask && canManage;
   const status = lookup(PROJECT_STATUSES, project.status);
   const memberIds = new Set(project.members.map((m) => m.userId));
   const nonMembers = allUsers.filter((u) => !memberIds.has(u.id));
@@ -104,9 +172,9 @@ export default async function ProjectDetailPage({
 
       <div className="card p-6">
         {!editing ? (
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-3">
                 <h1 className="text-xl font-bold">{project.name}</h1>
                 <span className={`badge ${status.badge}`}>{status.label}</span>
               </div>
@@ -119,7 +187,7 @@ export default async function ProjectDetailPage({
               </p>
             </div>
             {canManage && (
-              <div className="flex shrink-0 gap-2">
+              <div className="flex flex-wrap gap-2">
                 <form action={saveProjectAsTemplate}>
                   <input type="hidden" name="projectId" value={project.id} />
                   <button type="submit" className="btn-secondary" title="Copy this project's tasks into a reusable template">
@@ -184,14 +252,97 @@ export default async function ProjectDetailPage({
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="card lg:col-span-2">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-3">
+        <div className="card min-w-0 lg:col-span-2">
           <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
             <h2 className="font-semibold">Tasks</h2>
-            <Link href={`/tasks?new=1`} className="text-sm text-sky-600 hover:underline">
-              + Add task
-            </Link>
+            {canManage ? (
+              <Link
+                href={showAddTask ? `/projects/${project.id}` : `/projects/${project.id}?addTask=1`}
+                className="text-sm text-sky-600 hover:underline"
+              >
+                {showAddTask ? "Close" : "+ Add task"}
+              </Link>
+            ) : (
+              <Link href="/tasks?new=1" className="text-sm text-sky-600 hover:underline">
+                + Add task
+              </Link>
+            )}
           </div>
+          {showAddTask && (
+            <div className="border-b border-slate-200 bg-slate-50/60 px-5 py-4 dark:bg-slate-900/20">
+              {searchParams.error === "pick-a-task" && (
+                <p className="mb-3 text-sm text-rose-600">Pick a task from the list first.</p>
+              )}
+              <div className="grid gap-5 md:grid-cols-2">
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Link an existing task
+                  </p>
+                  {openTasks.length === 0 ? (
+                    <p className="text-sm text-slate-400">No project-less tasks to attach right now.</p>
+                  ) : (
+                    <form action={linkTaskToProject} className="flex items-start gap-2">
+                      <input type="hidden" name="projectId" value={project.id} />
+                      <div className="flex-1">
+                        <SearchSelect
+                          name="taskId"
+                          placeholder="Search open tasks…"
+                          searchPlaceholder="Search open tasks…"
+                          options={openTasks.map((t) => ({
+                            value: String(t.id),
+                            label: `${t.title} — ${lookup(TASK_STATUSES, t.status).label}`,
+                          }))}
+                        />
+                      </div>
+                      <button type="submit" className="btn-secondary shrink-0">
+                        Attach
+                      </button>
+                    </form>
+                  )}
+                  <p className="mt-2 text-xs text-slate-400">
+                    Only tasks not already in a project are listed — move one out of another
+                    project first if it needs to switch.
+                  </p>
+                </div>
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Or create a new one
+                  </p>
+                  <form action={createTask} className="grid grid-cols-2 gap-2">
+                    <input type="hidden" name="projectId" value={project.id} />
+                    <input
+                      name="title"
+                      required
+                      placeholder="Task title"
+                      className="input col-span-2"
+                    />
+                    <SearchSelect
+                      name="assigneeId"
+                      defaultValue={String(user.id)}
+                      placeholder="— Unassigned —"
+                      searchPlaceholder="Search people…"
+                      options={[
+                        { value: "", label: "— Unassigned —" },
+                        ...allUsers.map((u) => ({ value: String(u.id), label: u.name })),
+                      ]}
+                    />
+                    <SearchSelect
+                      name="priority"
+                      defaultValue="MEDIUM"
+                      options={TASK_PRIORITIES.map((p) => ({ value: p.value, label: p.label }))}
+                    />
+                    <div className="col-span-2">
+                      <DatePicker name="dueDate" placeholder="Due date (optional)" />
+                    </div>
+                    <button type="submit" className="btn-primary col-span-2">
+                      Create task
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="divide-y divide-slate-100">
             {project.tasks.length === 0 && (
               <p className="px-5 py-8 text-center text-sm text-slate-400">No tasks in this project.</p>
@@ -203,16 +354,16 @@ export default async function ProjectDetailPage({
                 <Link
                   key={t.id}
                   href={`/tasks/${t.id}`}
-                  className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50"
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-3 hover:bg-slate-50"
                 >
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 basis-full sm:basis-auto">
                     <div className="truncate text-sm font-medium">{t.title}</div>
                     <div className="text-xs text-slate-500">{t.assignee?.name ?? "Unassigned"}</div>
                   </div>
-                  <span className={`badge ${tp.badge}`}>{tp.label}</span>
-                  <span className={`badge ${ts.badge}`}>{ts.label}</span>
+                  <span className={`badge shrink-0 ${tp.badge}`}>{tp.label}</span>
+                  <span className={`badge shrink-0 ${ts.badge}`}>{ts.label}</span>
                   <span
-                    className={`w-24 text-right text-xs ${
+                    className={`shrink-0 text-right text-xs sm:w-24 ${
                       isOverdue(t) ? "font-semibold text-red-600" : "text-slate-500"
                     }`}
                   >
@@ -224,7 +375,7 @@ export default async function ProjectDetailPage({
           </div>
         </div>
 
-        <div className="card">
+        <div className="card min-w-0">
           <div className="border-b border-slate-200 px-5 py-4">
             <h2 className="font-semibold">Members ({project.members.length})</h2>
           </div>
@@ -274,6 +425,80 @@ export default async function ProjectDetailPage({
           )}
         </div>
       </div>
+
+      {assigneeRows.length > 0 && (
+        <div className="card p-6">
+          <h2 className="mb-4 font-semibold">Team summary</h2>
+          <ActiveTimersProvider initial={activeTimers}>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px]">
+                <thead className="border-b border-slate-200 bg-slate-50">
+                  <tr>
+                    <th className="th">Person</th>
+                    {TASK_STATUSES.map((s) => (
+                      <th key={s.value} className="th text-center">
+                        {s.label}
+                      </th>
+                    ))}
+                    <th className="th text-center">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {assigneeRows.map((r) => (
+                    <tr key={r.user.id} className="hover:bg-slate-50">
+                      <td className="td">
+                        <Link
+                          href={`/people/${r.user.id}`}
+                          className="flex items-center gap-2 hover:text-sky-700"
+                          title="View profile"
+                        >
+                          <UserAvatar user={r.user} size={28} presence={r.user.lastSeenAt} />
+                          <span className="font-medium">{r.user.name}</span>
+                        </Link>
+                        <WorkingCell userId={r.user.id} />
+                      </td>
+                      {TASK_STATUSES.map((s) => (
+                        <td key={s.value} className="td text-center">
+                          {r.counts[s.value] ? (
+                            <Link
+                              href={`/tasks?project=${project.id}&assignee=${r.user.id}&status=${s.value}`}
+                              title={`View ${r.user.name}'s ${s.label.toLowerCase()} tasks in this project`}
+                              className={`font-medium hover:underline ${
+                                s.value === "DONE"
+                                  ? "text-green-700"
+                                  : s.value === "REVIEW"
+                                    ? "text-amber-700"
+                                    : "text-slate-700 hover:text-sky-700"
+                              }`}
+                            >
+                              {r.counts[s.value]}
+                            </Link>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </td>
+                      ))}
+                      <td className="td text-center font-semibold">
+                        {r.total > 0 ? (
+                          <Link
+                            href={`/tasks?project=${project.id}&assignee=${r.user.id}`}
+                            title={`View all of ${r.user.name}'s tasks in this project`}
+                            className="hover:text-sky-700 hover:underline"
+                          >
+                            {r.total}
+                          </Link>
+                        ) : (
+                          r.total
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </ActiveTimersProvider>
+        </div>
+      )}
 
       <div className="card p-6">
         <h2 className="mb-4 font-semibold">Timeline</h2>
