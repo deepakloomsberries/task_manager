@@ -460,15 +460,37 @@ export default async function ProjectDetailPage({
                       {TASK_STATUSES.map((s) => (
                         <td key={s.value} className="td text-center">
                           {r.counts[s.value] ? (
-                            <span className={s.value === "DONE" ? "font-medium text-green-700" : "font-medium"}>
+                            <Link
+                              href={`/tasks?project=${project.id}&assignee=${r.user.id}&status=${s.value}`}
+                              title={`View ${r.user.name}'s ${s.label.toLowerCase()} tasks in this project`}
+                              className={`font-medium hover:underline ${
+                                s.value === "DONE"
+                                  ? "text-green-700"
+                                  : s.value === "REVIEW"
+                                    ? "text-amber-700"
+                                    : "text-slate-700 hover:text-sky-700"
+                              }`}
+                            >
                               {r.counts[s.value]}
-                            </span>
+                            </Link>
                           ) : (
                             <span className="text-slate-300">—</span>
                           )}
                         </td>
                       ))}
-                      <td className="td text-center font-semibold">{r.total}</td>
+                      <td className="td text-center font-semibold">
+                        {r.total > 0 ? (
+                          <Link
+                            href={`/tasks?project=${project.id}&assignee=${r.user.id}`}
+                            title={`View all of ${r.user.name}'s tasks in this project`}
+                            className="hover:text-sky-700 hover:underline"
+                          >
+                            {r.total}
+                          </Link>
+                        ) : (
+                          r.total
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

@@ -6,6 +6,7 @@
 export type TaskListParams = {
   status?: string;
   assignee?: string;
+  owner?: string;
   project?: string;
   tag?: string;
   q?: string;
@@ -22,7 +23,7 @@ export type TaskListParams = {
 
 /** The query param keys that affect which tasks are shown (i.e. not view/UI state). */
 export const TASK_FILTER_KEYS: (keyof TaskListParams)[] = [
-  "status", "assignee", "project", "tag", "q", "open", "overdue", "due", "blocked", "watching", "collaborating", "hiderec", "sort",
+  "status", "assignee", "owner", "project", "tag", "q", "open", "overdue", "due", "blocked", "watching", "collaborating", "hiderec", "sort",
 ];
 
 export function buildTaskListQuery(sp: TaskListParams, userId: number) {
@@ -30,6 +31,8 @@ export function buildTaskListQuery(sp: TaskListParams, userId: number) {
   if (sp.status) where.status = sp.status;
   if (sp.assignee === "me") where.assigneeId = userId;
   else if (sp.assignee) where.assigneeId = Number(sp.assignee);
+  // Tasks the current user assigned/owns — e.g. "waiting on my review".
+  if (sp.owner === "me") where.createdById = userId;
   if (sp.project) where.projectId = Number(sp.project);
   // Dashboard deep-links: open (not done), overdue, and due-this-week.
   if (sp.open) where.status = { not: "DONE" };

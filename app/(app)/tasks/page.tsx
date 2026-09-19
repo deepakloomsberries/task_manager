@@ -33,6 +33,7 @@ export default async function TasksPage({
   searchParams: {
     status?: string;
     assignee?: string;
+    owner?: string;
     project?: string;
     tag?: string;
     q?: string;
