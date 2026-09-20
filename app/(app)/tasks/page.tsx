@@ -11,6 +11,7 @@ import MultiSelect from "@/components/MultiSelect";
 import RememberTaskView from "@/components/RememberTaskView";
 import SaveViewButton from "@/components/SaveViewButton";
 import BulkTaskImport from "@/components/BulkTaskImport";
+import AiTaskCompose from "@/components/AiTaskCompose";
 import AutoRefresh from "@/components/AutoRefresh";
 import { deleteSavedView } from "@/lib/actions/savedViews";
 import { buildTaskListQuery, TASK_FILTER_KEYS } from "@/lib/taskFilters";
@@ -165,8 +166,8 @@ export default async function TasksPage({
     <div className="space-y-4">
       <AutoRefresh />
       <RememberTaskView view={viewParam} />
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Tasks</h1>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <h1 className="mt-1.5 text-2xl font-bold">Tasks</h1>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex shrink-0 rounded-lg border border-slate-300 p-0.5 text-sm dark:border-slate-600">
             <Link
@@ -203,6 +204,7 @@ export default async function TasksPage({
           <Link href={showNew ? listHref : "/tasks?new=1"} className="btn-primary shrink-0 whitespace-nowrap">
             {showNew ? "Close" : "+ New Task"}
           </Link>
+          <AiTaskCompose users={users} projects={projects} currentUserId={user.id} />
         </div>
       </div>
 
