@@ -1,4 +1,4 @@
-import { TASK_PRIORITIES } from "@/lib/ui";
+import { TASK_PRIORITIES, CHAT_LANGUAGES } from "@/lib/ui";
 
 export type TaskDraft = {
   title: string;
@@ -8,8 +8,51 @@ export type TaskDraft = {
 };
 
 export type DraftResult = { ok: true; draft: TaskDraft } | { ok: false; error: string };
+export type TranslateResult = { ok: true; text: string } | { ok: false; error: string };
 
 const PRIORITY_VALUES = TASK_PRIORITIES.map((p) => p.value);
+
+/** Raw call to Gemini's generateContent, shared by every AI feature in this
+ *  file. Returns the model's raw text output (still needs schema-specific
+ *  parsing by the caller) or a `{ ok: false }` with a message safe to show
+ *  the person who triggered it. */
+async function callGemini(
+  parts: Record<string, unknown>[],
+  generationConfig?: Record<string, unknown>
+): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return { ok: false, error: "not-configured" };
+
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts }], ...(generationConfig ? { generationConfig } : {}) }),
+      }
+    );
+
+    if (!res.ok) {
+      const body = await res.text();
+      console.error(`[ai] Gemini API error ${res.status}:`, body.slice(0, 500));
+      const hint =
+        res.status === 404
+          ? " The model may have been retired — check https://ai.google.dev/gemini-api/docs/models for current names and update GEMINI_MODEL."
+          : " Check the GEMINI_API_KEY / GEMINI_MODEL server config.";
+      return { ok: false, error: `AI request failed (${res.status}).${hint}` };
+    }
+
+    const json = await res.json();
+    const raw = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!raw) return { ok: false, error: "AI returned an empty response." };
+    return { ok: true, text: raw };
+  } catch (e) {
+    console.error("[ai] request failed:", e);
+    return { ok: false, error: "Something went wrong talking to the AI. Please try again." };
+  }
+}
 
 /**
  * Turns pasted text and/or a screenshot into a structured task draft using
@@ -22,8 +65,7 @@ export async function draftTaskFromInput(opts: {
   imageBase64?: string;
   imageMimeType?: string;
 }): Promise<DraftResult> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
+  if (!process.env.GEMINI_API_KEY) {
     return {
       ok: false,
       error: "AI drafting isn't set up yet — ask an admin to add a GEMINI_API_KEY (see .env.example).",
@@ -33,9 +75,7 @@ export async function draftTaskFromInput(opts: {
     return { ok: false, error: "Paste some text or an image first." };
   }
 
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const today = new Date().toISOString().slice(0, 10);
-
   const parts: Record<string, unknown>[] = [
     {
       text:
@@ -51,46 +91,23 @@ export async function draftTaskFromInput(opts: {
     parts.push({ inlineData: { mimeType: opts.imageMimeType, data: opts.imageBase64 } });
   }
 
+  const result = await callGemini(parts, {
+    responseMimeType: "application/json",
+    responseSchema: {
+      type: "OBJECT",
+      properties: {
+        title: { type: "STRING" },
+        description: { type: "STRING" },
+        priority: { type: "STRING", enum: PRIORITY_VALUES },
+        dueDate: { type: "STRING", nullable: true },
+      },
+      required: ["title", "priority"],
+    },
+  });
+  if (!result.ok) return result;
+
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts }],
-          generationConfig: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: "OBJECT",
-              properties: {
-                title: { type: "STRING" },
-                description: { type: "STRING" },
-                priority: { type: "STRING", enum: PRIORITY_VALUES },
-                dueDate: { type: "STRING", nullable: true },
-              },
-              required: ["title", "priority"],
-            },
-          },
-        }),
-      }
-    );
-
-    if (!res.ok) {
-      const body = await res.text();
-      console.error(`[ai draft] Gemini API error ${res.status}:`, body.slice(0, 500));
-      const hint =
-        res.status === 404
-          ? " The model may have been retired — check https://ai.google.dev/gemini-api/docs/models for current names and update GEMINI_MODEL."
-          : " Check the GEMINI_API_KEY / GEMINI_MODEL server config.";
-      return { ok: false, error: `AI request failed (${res.status}).${hint}` };
-    }
-
-    const json = await res.json();
-    const raw = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!raw) return { ok: false, error: "AI returned an empty response — try adding more detail." };
-
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(result.text);
     const title = String(parsed.title ?? "").trim().slice(0, 300);
     if (!title) return { ok: false, error: "AI couldn't find a clear task in that — try rephrasing." };
 
@@ -101,7 +118,47 @@ export async function draftTaskFromInput(opts: {
 
     return { ok: true, draft: { title, description, priority, dueDate } };
   } catch (e) {
-    console.error("[ai draft] failed:", e);
-    return { ok: false, error: "Something went wrong drafting the task. Please try again." };
+    console.error("[ai draft] failed to parse response:", e);
+    return { ok: false, error: "AI returned something unexpected. Please try again." };
+  }
+}
+
+/**
+ * Translates one chat message into `targetLangCode` (a CHAT_LANGUAGES value)
+ * via Gemini. Used to auto-translate direct messages for a recipient whose
+ * preferred chat language differs from the sender's. Never throws.
+ */
+export async function translateText(text: string, targetLangCode: string): Promise<TranslateResult> {
+  if (!process.env.GEMINI_API_KEY) return { ok: false, error: "not-configured" };
+  if (!text.trim()) return { ok: true, text };
+
+  const langLabel = CHAT_LANGUAGES.find((l) => l.value === targetLangCode)?.label ?? targetLangCode;
+  const parts = [
+    {
+      text:
+        `Translate the following chat message into ${langLabel}. Preserve tone, names and numbers exactly. ` +
+        `Respond with JSON only, matching the given schema — the "translated" field holds ONLY the translated ` +
+        `text, no notes or quotes.\n\nMessage:\n${text}`,
+    },
+  ];
+
+  const result = await callGemini(parts, {
+    responseMimeType: "application/json",
+    responseSchema: {
+      type: "OBJECT",
+      properties: { translated: { type: "STRING" } },
+      required: ["translated"],
+    },
+  });
+  if (!result.ok) return result;
+
+  try {
+    const parsed = JSON.parse(result.text);
+    const translated = String(parsed.translated ?? "").trim();
+    if (!translated) return { ok: false, error: "AI returned an empty translation." };
+    return { ok: true, text: translated };
+  } catch (e) {
+    console.error("[ai translate] failed to parse response:", e);
+    return { ok: false, error: "AI returned something unexpected." };
   }
 }

@@ -26,6 +26,8 @@ type Msg = {
   replyTo?: ReplyRef | null;
   reactions?: Reaction[];
   starred?: boolean;
+  translatedBody?: string | null;
+  translatedLang?: string | null;
 };
 
 type Person = {
@@ -267,6 +269,7 @@ export default function ChatThread({
   const [searchIndex, setSearchIndex] = useState(0);
   const [showJumpToBottom, setShowJumpToBottom] = useState(false);
   const [newWhileAway, setNewWhileAway] = useState(0);
+  const [showOriginalIds, setShowOriginalIds] = useState<Set<number>>(new Set());
   const [, forceTick] = useState(0);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -576,6 +579,17 @@ export default function ChatThread({
     }
   }, []);
 
+  // Per-message "show original" toggle for auto-translated messages — local
+  // and ephemeral, not saved server-side (same as WhatsApp/Messenger).
+  const toggleOriginal = useCallback((messageId: number) => {
+    setShowOriginalIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(messageId)) next.delete(messageId);
+      else next.add(messageId);
+      return next;
+    });
+  }, []);
+
   function insertEmoji(emoji: string) {
     const el = textareaRef.current;
     if (!el) {
@@ -854,6 +868,11 @@ export default function ChatThread({
                 );
               }
               const isLastMine = mine && m.id === lastMineKey;
+              // Translation only ever applies to messages you received (never
+              // your own — you already know what you wrote in your own language).
+              const hasTranslation = !mine && !!m.translatedBody && m.translatedBody !== m.body;
+              const showingOriginal = showOriginalIds.has(m.id);
+              const displayBody = hasTranslation && !showingOriginal ? m.translatedBody! : m.body;
               const actions = (
                 <div key={`actions-${m.id}`}>
                   {reactingTo === m.id ? (
@@ -903,7 +922,20 @@ export default function ChatThread({
                           </span>
                         </button>
                       )}
-                      {m.body && <p className="whitespace-pre-wrap text-sm">{renderBody(m.body, mine, searchOpen ? searchQuery : "")}</p>}
+                      {displayBody && (
+                        <p className="whitespace-pre-wrap text-sm">
+                          {renderBody(displayBody, mine, searchOpen ? searchQuery : "")}
+                        </p>
+                      )}
+                      {hasTranslation && (
+                        <button
+                          type="button"
+                          onClick={() => toggleOriginal(m.id)}
+                          className="mt-1 block text-[11px] font-medium text-sky-700 opacity-0 transition-opacity hover:underline group-hover:opacity-100 dark:text-sky-400"
+                        >
+                          {showingOriginal ? "Show translation" : "Show original"}
+                        </button>
+                      )}
                       <AttachmentList atts={m.attachments ?? []} mine={mine} />
                     </div>
                     <div className="mt-0.5 flex items-center gap-1 px-1 text-[10px] text-slate-400">

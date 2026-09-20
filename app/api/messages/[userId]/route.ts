@@ -93,6 +93,8 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
       return {
         id: m.id,
         body: isDeleted ? "" : m.body,
+        translatedBody: isDeleted ? null : m.translatedBody,
+        translatedLang: isDeleted ? null : m.translatedLang,
         senderId: m.senderId,
         createdAt: m.createdAt.toISOString(),
         deleted: isDeleted,

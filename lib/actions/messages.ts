@@ -6,6 +6,28 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { pushNotification } from "@/lib/notify";
 import { deleteUpload } from "@/lib/storage";
+import { translateText } from "@/lib/ai";
+
+/**
+ * Auto-translates a message body into the recipient's preferred chat
+ * language, if they've set one that differs from the sender's — e.g. an
+ * English speaker in India messaging an Arabic-preferring colleague in Saudi.
+ * Skipped (returns nulls) when no translation is needed or Gemini isn't
+ * configured — the chat then just shows the original body, same as today.
+ */
+async function translateForRecipient(
+  body: string,
+  sender: { preferredLanguage: string | null },
+  recipient: { preferredLanguage: string | null }
+): Promise<{ translatedBody: string | null; translatedLang: string | null }> {
+  if (!body || !recipient.preferredLanguage || recipient.preferredLanguage === sender.preferredLanguage) {
+    return { translatedBody: null, translatedLang: null };
+  }
+  const result = await translateText(body, recipient.preferredLanguage);
+  return result.ok
+    ? { translatedBody: result.text, translatedLang: recipient.preferredLanguage }
+    : { translatedBody: null, translatedLang: null };
+}
 
 export async function sendDirectMessage(formData: FormData) {
   const user = await requireUser();
@@ -18,8 +40,10 @@ export async function sendDirectMessage(formData: FormData) {
   const recipient = await db.user.findUnique({ where: { id: recipientId } });
   if (!recipient || !recipient.active) redirect("/messages");
 
+  const { translatedBody, translatedLang } = await translateForRecipient(body, user, recipient);
+
   await db.directMessage.create({
-    data: { body, senderId: user.id, recipientId },
+    data: { body, senderId: user.id, recipientId, translatedBody, translatedLang },
   });
   await pushNotification(recipientId, `${user.name} sent you a message`, `/messages/${user.id}`);
 
@@ -131,8 +155,17 @@ export async function sendMessage(
     }
   }
 
+  const { translatedBody, translatedLang } = await translateForRecipient(body, user, recipient);
+
   const msg = await db.directMessage.create({
-    data: { body, senderId: user.id, recipientId, replyToId: replyToRow?.id ?? null },
+    data: {
+      body,
+      senderId: user.id,
+      recipientId,
+      replyToId: replyToRow?.id ?? null,
+      translatedBody,
+      translatedLang,
+    },
   });
 
   // Link the sender's freshly uploaded, not-yet-attached files to this message.

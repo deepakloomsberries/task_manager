@@ -87,6 +87,8 @@ export default async function ConversationPage({ params }: { params: { userId: s
       initialMessages={messages.map((m) => ({
         id: m.id,
         body: m.deletedAt ? "" : m.body,
+        translatedBody: m.deletedAt ? null : m.translatedBody,
+        translatedLang: m.deletedAt ? null : m.translatedLang,
         senderId: m.senderId,
         createdAt: m.createdAt.toISOString(),
         deleted: !!m.deletedAt,

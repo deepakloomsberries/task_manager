@@ -83,7 +83,9 @@ async function main() {
       r.senders.set(m.senderId, s);
     }
     s.count += 1;
-    s.latestBody = m.body; // orderBy createdAt asc, so the last write is the latest
+    // translatedBody (when present) is already in this recipient's own
+    // preferred language — better for the email preview than the original.
+    s.latestBody = m.translatedBody || m.body; // orderBy createdAt asc, so the last write is the latest
     s.ids.push(m.id);
   }
 
