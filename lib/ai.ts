@@ -33,7 +33,7 @@ export async function draftTaskFromInput(opts: {
     return { ok: false, error: "Paste some text or an image first." };
   }
 
-  const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const today = new Date().toISOString().slice(0, 10);
 
   const parts: Record<string, unknown>[] = [
@@ -79,10 +79,11 @@ export async function draftTaskFromInput(opts: {
     if (!res.ok) {
       const body = await res.text();
       console.error(`[ai draft] Gemini API error ${res.status}:`, body.slice(0, 500));
-      return {
-        ok: false,
-        error: `AI request failed (${res.status}). Check the GEMINI_API_KEY / GEMINI_MODEL server config.`,
-      };
+      const hint =
+        res.status === 404
+          ? " The model may have been retired — check https://ai.google.dev/gemini-api/docs/models for current names and update GEMINI_MODEL."
+          : " Check the GEMINI_API_KEY / GEMINI_MODEL server config.";
+      return { ok: false, error: `AI request failed (${res.status}).${hint}` };
     }
 
     const json = await res.json();
