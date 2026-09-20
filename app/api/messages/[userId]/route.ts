@@ -34,7 +34,9 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
     ],
   };
 
-  const [messages, lastRead, partner, deleted, reactionRows, starRows] = await Promise.all([
+  const recentlyTranslatedSince = new Date(Date.now() - 5 * 60_000);
+
+  const [messages, lastRead, partner, deleted, reactionRows, starRows, translated] = await Promise.all([
     db.directMessage.findMany({
       where: { id: { gt: after }, ...conversationWhere },
       orderBy: { createdAt: "asc" },
@@ -70,6 +72,14 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
     db.messageStar.findMany({
       where: { userId: meId, message: conversationWhere },
       select: { messageId: true },
+    }),
+    // Translations that finished recently (translation now runs in the
+    // background after send — see scheduleTranslation in lib/actions/messages.ts)
+    // so an already-sent bubble can pick up its translation moments later,
+    // the same way deletedIds patches an already-loaded bubble.
+    db.directMessage.findMany({
+      where: { translatedAt: { gte: recentlyTranslatedSince }, ...conversationWhere },
+      select: { id: true, translatedBody: true, translatedLang: true },
     }),
   ]);
   const myStarredIds = new Set(starRows.map((s) => s.messageId));
@@ -121,6 +131,7 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
     // Same idea for stars: the full set of my starred ids in the loaded
     // window, so starring from another tab/device is reflected here too.
     myStarredIds: Array.from(myStarredIds),
+    translationUpdates: translated,
     lastReadMyId: lastRead?.id ?? 0,
     partnerLastSeenAt: partner?.lastSeenAt ? partner.lastSeenAt.toISOString() : null,
     partnerTyping: isTyping(otherId, meId),

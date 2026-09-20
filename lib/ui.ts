@@ -19,6 +19,12 @@ export const CHAT_LANGUAGES = [
   { value: "en", label: "English" },
   { value: "ar", label: "Arabic" },
   { value: "hi", label: "Hindi" },
+  { value: "kn", label: "Kannada" },
+  { value: "ta", label: "Tamil" },
+  { value: "te", label: "Telugu" },
+  { value: "ml", label: "Malayalam" },
+  { value: "mr", label: "Marathi" },
+  { value: "bn", label: "Bengali" },
   { value: "ur", label: "Urdu" },
   { value: "fr", label: "French" },
 ];

@@ -397,6 +397,23 @@ export default function ChatThread({
             prev.map((m) => (!!m.starred === starredSet.has(m.id) ? m : { ...m, starred: starredSet.has(m.id) }))
           );
         }
+        // Translation runs in the background after send, so it can land on a
+        // message this client already has — patch it in place when it does.
+        if (Array.isArray(data.translationUpdates) && data.translationUpdates.length) {
+          const byId = new Map<number, { translatedBody: string | null; translatedLang: string | null }>(
+            data.translationUpdates.map((t: { id: number; translatedBody: string | null; translatedLang: string | null }) => [
+              t.id,
+              t,
+            ])
+          );
+          setMessages((prev) =>
+            prev.map((m) => {
+              const upd = byId.get(m.id);
+              if (!upd || upd.translatedBody === m.translatedBody) return m;
+              return { ...m, translatedBody: upd.translatedBody, translatedLang: upd.translatedLang };
+            })
+          );
+        }
         setLastReadMyId((cur) => Math.max(cur, data.lastReadMyId ?? 0));
         setPartnerLastSeen(data.partnerLastSeenAt ?? null);
         setPartnerTyping(!!data.partnerTyping);
