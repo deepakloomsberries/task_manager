@@ -326,6 +326,10 @@ model DirectMessage {
   recipient   User              @relation("dmRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
   recipientId Int
   read        Boolean           @default(false)
+  // Set once an "unread message" email has gone out for this message, so the
+  // background job (scripts/unread-messages.ts) never emails the same unread
+  // message twice — null means "not yet notified".
+  notifiedAt  DateTime?
   createdAt   DateTime          @default(now())
   deletedAt   DateTime?
   attachments Attachment[]
