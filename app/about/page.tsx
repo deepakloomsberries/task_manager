@@ -311,11 +311,15 @@ export default function AboutPage() {
                 <a href="#contact" className="block rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
                   Contact
                 </a>
+                <div className="my-1 border-t border-slate-200 dark:border-slate-700" />
+                <Link href="/login" className="block rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
+                  Sign in
+                </Link>
               </div>
             </details>
             <Link
               href="/login"
-              className="btn-secondary whitespace-nowrap !px-2.5 !py-1.5 text-xs sm:!px-4 sm:text-sm"
+              className="btn-secondary hidden whitespace-nowrap !px-4 text-sm sm:inline-flex"
             >
               Sign in
             </Link>
@@ -323,7 +327,8 @@ export default function AboutPage() {
               href={CONTACT_HREF}
               className="btn-primary whitespace-nowrap !px-2.5 !py-1.5 text-xs sm:!px-4 sm:text-sm"
             >
-              Request a demo
+              <span className="min-[400px]:hidden">Demo</span>
+              <span className="hidden min-[400px]:inline">Request a demo</span>
             </a>
           </div>
         </div>
