@@ -6,6 +6,55 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { pushNotification } from "@/lib/notify";
 import { deleteUpload } from "@/lib/storage";
+import { translateText } from "@/lib/ai";
+
+/**
+ * Kicks off translation of a just-created message in the background and does
+ * NOT await it — translation used to run before the message was created,
+ * which made every cross-language send wait ~1-2s on Gemini before the
+ * bubble would even appear. Now the message is created and returned
+ * immediately, and this fills in translatedBody/translatedLang moments
+ * later; the chat's poll endpoint picks up the update via `translatedAt`
+ * (see /api/messages/[userId]) and patches the already-rendered bubble.
+ *
+ * Safe to fire-and-forget here specifically because this app runs as a
+ * long-lived `next start` process under systemd, not a serverless/edge
+ * function that gets frozen the instant the response is sent — the event
+ * loop keeps running this promise to completion regardless.
+ *
+ * Skipped entirely when no translation is needed (recipient has no
+ * preference, or it matches the sender's) or Gemini isn't configured — the
+ * chat then just shows the original body, same as before this feature.
+ * Retries once on a transient failure (e.g. a rate limit blip) before
+ * giving up silently; a message that never gets translated just never shows
+ * a "Show original" toggle, which is a safe, quiet failure mode.
+ */
+function scheduleTranslation(
+  messageId: number,
+  body: string,
+  sender: { preferredLanguage: string | null },
+  recipient: { preferredLanguage: string | null }
+) {
+  if (!body || !recipient.preferredLanguage || recipient.preferredLanguage === sender.preferredLanguage) return;
+  const targetLang = recipient.preferredLanguage;
+
+  const attempt = (retriesLeft: number): Promise<void> =>
+    translateText(body, targetLang).then((result) => {
+      if (result.ok) {
+        return db.directMessage
+          .update({
+            where: { id: messageId },
+            data: { translatedBody: result.text, translatedLang: targetLang, translatedAt: new Date() },
+          })
+          .then(() => {});
+      }
+      if (retriesLeft > 0) {
+        return new Promise((resolve) => setTimeout(resolve, 1500)).then(() => attempt(retriesLeft - 1));
+      }
+    });
+
+  void attempt(1).catch((e) => console.error(`[chat translate] background translation failed for message ${messageId}:`, e));
+}
 
 export async function sendDirectMessage(formData: FormData) {
   const user = await requireUser();
@@ -18,9 +67,10 @@ export async function sendDirectMessage(formData: FormData) {
   const recipient = await db.user.findUnique({ where: { id: recipientId } });
   if (!recipient || !recipient.active) redirect("/messages");
 
-  await db.directMessage.create({
+  const msg = await db.directMessage.create({
     data: { body, senderId: user.id, recipientId },
   });
+  scheduleTranslation(msg.id, body, user, recipient);
   await pushNotification(recipientId, `${user.name} sent you a message`, `/messages/${user.id}`);
 
   revalidatePath(`/messages/${recipientId}`);
@@ -134,6 +184,7 @@ export async function sendMessage(
   const msg = await db.directMessage.create({
     data: { body, senderId: user.id, recipientId, replyToId: replyToRow?.id ?? null },
   });
+  scheduleTranslation(msg.id, body, user, recipient);
 
   // Link the sender's freshly uploaded, not-yet-attached files to this message.
   if (ids.length > 0) {

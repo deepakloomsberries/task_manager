@@ -12,6 +12,23 @@ export const TASK_PRIORITIES = [
   { value: "URGENT", label: "Urgent", badge: "bg-red-100 text-red-700" },
 ];
 
+// Languages offered for "Preferred chat language" — auto-translates chat
+// messages sent to you into this language. Kept to a short, curated list
+// (like TASK_PRIORITIES etc.) rather than every ISO language.
+export const CHAT_LANGUAGES = [
+  { value: "en", label: "English" },
+  { value: "ar", label: "Arabic" },
+  { value: "hi", label: "Hindi" },
+  { value: "kn", label: "Kannada" },
+  { value: "ta", label: "Tamil" },
+  { value: "te", label: "Telugu" },
+  { value: "ml", label: "Malayalam" },
+  { value: "mr", label: "Marathi" },
+  { value: "bn", label: "Bengali" },
+  { value: "ur", label: "Urdu" },
+  { value: "fr", label: "French" },
+];
+
 export const PROJECT_STATUSES = [
   { value: "ACTIVE", label: "Active", badge: "bg-green-100 text-green-700" },
   { value: "ON_HOLD", label: "On Hold", badge: "bg-amber-100 text-amber-700" },

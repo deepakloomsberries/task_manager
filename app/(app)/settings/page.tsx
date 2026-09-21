@@ -4,7 +4,9 @@ import { removeAvatar } from "@/lib/actions/profile";
 import PasswordField from "@/components/PasswordField";
 import AvatarUpload from "@/components/AvatarUpload";
 import FlashToast from "@/components/FlashToast";
+import SearchSelect from "@/components/SearchSelect";
 import { PASSWORD_RULES } from "@/lib/password";
+import { CHAT_LANGUAGES } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +76,22 @@ export default async function SettingsPage({
           <div>
             <label className="label">Job title</label>
             <input name="jobTitle" defaultValue={user.jobTitle ?? ""} className="input" />
+          </div>
+          <div>
+            <label className="label">Preferred chat language</label>
+            <SearchSelect
+              name="preferredLanguage"
+              defaultValue={user.preferredLanguage ?? ""}
+              placeholder="Don't translate for me"
+              options={[
+                { value: "", label: "Don't translate for me" },
+                ...CHAT_LANGUAGES.map((l) => ({ value: l.value, label: l.label })),
+              ]}
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Messages people send you in Direct Messages will be auto-translated into this language —
+              hover a translated message to see the original.
+            </p>
           </div>
           <div className="md:col-span-2">
             <button type="submit" className="btn-primary">

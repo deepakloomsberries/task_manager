@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
   const form = await req.formData();
   const file = form.get("file");
   const taskId = form.get("taskId") ? Number(form.get("taskId")) : null;
+  const noteId = form.get("noteId") ? Number(form.get("noteId")) : null;
 
   if (!(file instanceof File) || file.size === 0) {
     return NextResponse.json({ error: "Please choose a file to upload." }, { status: 400 });
@@ -31,13 +32,22 @@ export async function POST(req: NextRequest) {
     const task = await db.task.findUnique({ where: { id: taskId }, select: { id: true } });
     if (!task) return NextResponse.json({ error: "That task no longer exists." }, { status: 404 });
   }
+  if (noteId) {
+    const note = await db.note.findUnique({
+      where: { id: noteId },
+      select: { userId: true, shares: { select: { userId: true } } },
+    });
+    const allowed =
+      note && (note.userId === session.userId || note.shares.some((s) => s.userId === session.userId));
+    if (!allowed) return NextResponse.json({ error: "That note isn't available." }, { status: 404 });
+  }
 
   const saved = await saveUpload(file);
   const attachment = await db.attachment.create({
-    data: { ...saved, taskId, uploadedById: session.userId },
+    data: { ...saved, taskId, noteId, uploadedById: session.userId },
   });
 
-  revalidatePath(taskId ? `/tasks/${taskId}` : "/documents");
+  revalidatePath(taskId ? `/tasks/${taskId}` : noteId ? "/notes" : "/documents");
 
   return NextResponse.json({
     id: attachment.id,

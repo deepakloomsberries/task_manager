@@ -259,7 +259,15 @@ export default async function TaskDetailPage({
       {movedMsg && <FlashToast message={movedMsg} />}
       {task.assigneeId === user.id && !task.acknowledgedAt && <AckOnView taskId={task.id} />}
       <Link
-        href={task.parent ? `/tasks/${task.parent.id}` : backTo}
+        href={
+          task.parent
+            ? `/tasks/${task.parent.id}?back=${encodeURIComponent(backTo)}`
+            : backTo
+        }
+        // The target's content (or, for a filtered list, the applied filter)
+        // depends on this URL exactly — a stale prefetch cached for a
+        // different variant would silently discard it.
+        prefetch={false}
         className="text-sm text-slate-500 hover:underline"
       >
         ← {task.parent ? `Back to "${task.parent.title}"` : "Back to tasks"}
@@ -315,6 +323,7 @@ export default async function TaskDetailPage({
                         <form action={removeTagFromTask} className="ml-1 inline">
                           <input type="hidden" name="taskId" value={task.id} />
                           <input type="hidden" name="tagId" value={tag.id} />
+                          <input type="hidden" name="back" value={backTo} />
                           <button type="submit" title="Remove tag" className="opacity-50 hover:opacity-100">
                             ✕
                           </button>
@@ -332,6 +341,7 @@ export default async function TaskDetailPage({
                         className="absolute left-0 top-7 z-10 flex w-64 gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-lg"
                       >
                         <input type="hidden" name="taskId" value={task.id} />
+                        <input type="hidden" name="back" value={backTo} />
                         <input name="name" required maxLength={30} placeholder="Tag name" className="input !py-1.5" />
                         <select name="color" className="input w-24 !py-1.5">
                           {TAG_COLORS.map((c) => (
@@ -355,6 +365,7 @@ export default async function TaskDetailPage({
                   return (
                     <form action={isWatching ? unwatchTask : watchTask}>
                       <input type="hidden" name="taskId" value={task.id} />
+                      <input type="hidden" name="back" value={backTo} />
                       <button
                         type="submit"
                         title={isWatching ? "Stop following this task" : "Get notified of status changes and comments"}
@@ -370,6 +381,7 @@ export default async function TaskDetailPage({
                 {task.createdById === user.id && task.assignee && (
                   <form action={sendTaskReminder}>
                     <input type="hidden" name="id" value={task.id} />
+                    <input type="hidden" name="back" value={backTo} />
                     <button
                       type="submit"
                       className="btn-secondary"
@@ -380,13 +392,18 @@ export default async function TaskDetailPage({
                   </form>
                 )}
                 {canEdit && (
-                  <Link href={`/tasks/${task.id}?edit=1`} className="btn-secondary">
+                  <Link
+                    href={`/tasks/${task.id}?edit=1&back=${encodeURIComponent(backTo)}`}
+                    prefetch={false}
+                    className="btn-secondary"
+                  >
                     Edit
                   </Link>
                 )}
                 {canEdit && (
                   <form action={duplicateTask}>
                     <input type="hidden" name="id" value={task.id} />
+                    <input type="hidden" name="back" value={backTo} />
                     <button type="submit" className="btn-secondary" title="Create a copy of this task">
                       Duplicate
                     </button>
@@ -395,6 +412,7 @@ export default async function TaskDetailPage({
                 {canDelete && (
                   <form action={deleteTask}>
                     <input type="hidden" name="id" value={task.id} />
+                    <input type="hidden" name="back" value={backTo} />
                     <ConfirmButton
                       message={
                         task.recurrence
@@ -490,6 +508,7 @@ export default async function TaskDetailPage({
                       <form action={removeTaskCollaborator} className="inline">
                         <input type="hidden" name="taskId" value={task.id} />
                         <input type="hidden" name="userId" value={c.userId} />
+                        <input type="hidden" name="back" value={backTo} />
                         <ConfirmButton
                           message={`Remove ${c.user.name} from this task?`}
                           title="Remove collaborator"
@@ -508,6 +527,7 @@ export default async function TaskDetailPage({
               {canManageCollab && (
                 <form action={addTaskCollaborator} className="mt-2 flex items-center gap-2">
                   <input type="hidden" name="taskId" value={task.id} />
+                  <input type="hidden" name="back" value={backTo} />
                   <SearchSelect
                     name="userId"
                     required
@@ -584,6 +604,7 @@ export default async function TaskDetailPage({
                       <form key={s.value} action={setTaskStatus}>
                         <input type="hidden" name="id" value={task.id} />
                         <input type="hidden" name="status" value={s.value} />
+                        <input type="hidden" name="back" value={backTo} />
                         {isRevert ? (
                           <ConfirmButton
                             tone="primary"
@@ -614,6 +635,7 @@ export default async function TaskDetailPage({
         ) : (
           <form action={updateTask} className="grid gap-4 md:grid-cols-2">
             <input type="hidden" name="id" value={task.id} />
+            <input type="hidden" name="back" value={backTo} />
             <div className="md:col-span-2">
               <label className="label">Title *</label>
               <input name="title" required defaultValue={task.title} className="input" />
@@ -846,6 +868,7 @@ export default async function TaskDetailPage({
                       <form action={removeTaskDependency}>
                         <input type="hidden" name="taskId" value={task.id} />
                         <input type="hidden" name="blockerId" value={b.id} />
+                        <input type="hidden" name="back" value={backTo} />
                         <button type="submit" title="Remove blocker" className="text-slate-400 hover:text-red-600">
                           ✕
                         </button>
@@ -860,6 +883,7 @@ export default async function TaskDetailPage({
           {canEdit && dependencyOptions.length > 0 && (
             <form action={addTaskDependency} className="mb-5 flex flex-col gap-2 sm:flex-row">
               <input type="hidden" name="taskId" value={task.id} />
+              <input type="hidden" name="back" value={backTo} />
               <SearchSelect
                 name="blockerId"
                 required
@@ -926,7 +950,7 @@ export default async function TaskDetailPage({
                 <form action={setTaskStatus}>
                   <input type="hidden" name="id" value={s.id} />
                   <input type="hidden" name="status" value={s.status === "DONE" ? "TODO" : "DONE"} />
-                  <input type="hidden" name="back" value={`/tasks/${task.id}`} />
+                  <input type="hidden" name="back" value={`/tasks/${task.id}?back=${encodeURIComponent(backTo)}`} />
                   <button
                     type="submit"
                     title={s.status === "DONE" ? "Mark as not done" : "Mark as done"}
@@ -940,7 +964,8 @@ export default async function TaskDetailPage({
                   </button>
                 </form>
                 <Link
-                  href={`/tasks/${s.id}`}
+                  href={`/tasks/${s.id}?back=${encodeURIComponent(backTo)}`}
+                  prefetch={false}
                   className={`flex-1 text-sm hover:text-sky-700 ${
                     s.status === "DONE" ? "text-slate-400 line-through" : "font-medium"
                   }`}
@@ -961,6 +986,7 @@ export default async function TaskDetailPage({
               className="mt-3 flex flex-col gap-2 sm:flex-row"
             >
               <input type="hidden" name="parentId" value={task.id} />
+              <input type="hidden" name="back" value={backTo} />
               <input name="title" required placeholder="Add a subtask…" className="input flex-1" />
               <SearchSelect
                 name="assigneeId"
@@ -1020,6 +1046,11 @@ export default async function TaskDetailPage({
               {(a.uploadedById === user.id || user.role === "ADMIN") && (
                 <form action={deleteAttachment}>
                   <input type="hidden" name="id" value={a.id} />
+                  <input
+                    type="hidden"
+                    name="back"
+                    value={`/tasks/${task.id}?back=${encodeURIComponent(backTo)}`}
+                  />
                   <ConfirmButton
                     message={`Delete "${a.originalName}"? This can't be undone.`}
                     className="text-xs text-red-600 hover:underline"
@@ -1060,6 +1091,7 @@ export default async function TaskDetailPage({
                     {(c.authorId === user.id || user.role === "ADMIN") && (
                       <form action={deleteComment} className="inline">
                         <input type="hidden" name="id" value={c.id} />
+                        <input type="hidden" name="back" value={backTo} />
                         <ConfirmButton message="Delete this comment?" className="text-xs text-slate-400 hover:text-red-600">
                           ✕
                         </ConfirmButton>
@@ -1077,6 +1109,7 @@ export default async function TaskDetailPage({
         </div>
         <form action={addComment} key={task.comments.length} className="mt-5 flex gap-3">
           <input type="hidden" name="taskId" value={task.id} />
+          <input type="hidden" name="back" value={backTo} />
           <MentionTextarea
             name="body"
             users={users}

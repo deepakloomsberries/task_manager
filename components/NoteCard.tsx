@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   toggleNotePin,
@@ -11,6 +11,7 @@ import {
 } from "@/lib/actions/notes";
 import NoteEditor from "@/components/NoteEditor";
 import ChecklistNoteEditor from "@/components/ChecklistNoteEditor";
+import { type NoteImage } from "@/components/NoteImages";
 import SearchSelect from "@/components/SearchSelect";
 import ConfirmButton from "@/components/ConfirmButton";
 import { NOTE_COLORS, noteCard, fmtDate, initials, avatarColor } from "@/lib/ui";
@@ -26,6 +27,7 @@ export type NoteCardData = {
   updatedAt: string;
   shares: { userId: number; name: string }[];
   ownerName?: string;
+  images: NoteImage[];
 };
 
 function Avatar({ name }: { name: string }) {
@@ -60,14 +62,30 @@ export default function NoteCard({
   const [editing, setEditing] = useState(false);
   const [colorOpen, setColorOpen] = useState(false);
   const colorRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(
+    null
+  );
+  const [shareOpen, setShareOpen] = useState(false);
+  const shareRef = useRef<HTMLDivElement>(null);
   const isChecklist = note.type === "checklist";
   const [checkItems, setCheckItems] = useState<ChecklistItem[]>(() =>
     isChecklist ? parseChecklist(note.body) : []
   );
+  // The editor modal's own colour swatch saves via its own fetch call rather
+  // than a server action + revalidate, so nothing repaints this component's
+  // `note.color`-derived background until the next full refresh (on close).
+  // Track the live value here so the open modal recolours immediately.
+  const [liveColor, setLiveColor] = useState(note.color);
 
   useEffect(() => {
     if (isChecklist) setCheckItems(parseChecklist(note.body));
   }, [note.body, isChecklist]);
+
+  useEffect(() => {
+    setLiveColor(note.color);
+  }, [note.color]);
 
   async function toggleItem(i: number) {
     const next = checkItems.map((it, idx) => (idx === i ? { ...it, done: !it.done } : it));
@@ -98,10 +116,59 @@ export default function NoteCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing]);
 
+  useEffect(() => {
+    if (!shareOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (shareRef.current && !shareRef.current.contains(e.target as Node)) setShareOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [shareOpen]);
+
   function closeEditor() {
     setEditing(false);
+    setPos(null);
+    setSize(null);
+    setShareOpen(false);
     // The editor autosaves to the API; refresh so the card reflects the edits.
     router.refresh();
+  }
+
+  // Open the modal large — near-full-page, like a sheet of paper — so a long
+  // note can be read without it being cramped into a small box, then let it
+  // be dragged by its grip bar and resized from the corner if you want it
+  // smaller. Dragging is driven by document-level listeners (rather than
+  // relying on setPointerCapture on the grip itself) so it keeps tracking
+  // reliably even once the pointer moves off the small grip bar.
+  useLayoutEffect(() => {
+    if (!editing) return;
+    const w = Math.min(820, window.innerWidth - 64);
+    const h = Math.min(window.innerHeight - 64, 1040);
+    setSize({ w, h });
+    setPos({
+      x: Math.max(16, (window.innerWidth - w) / 2),
+      y: Math.max(16, (window.innerHeight - h) / 2),
+    });
+  }, [editing]);
+
+  function onGripPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (!pos) return;
+    e.preventDefault();
+    dragRef.current = { startX: e.clientX, startY: e.clientY, origX: pos.x, origY: pos.y };
+    const onMove = (ev: PointerEvent) => {
+      if (!dragRef.current) return;
+      setPos({
+        x: dragRef.current.origX + (ev.clientX - dragRef.current.startX),
+        y: dragRef.current.origY + (ev.clientY - dragRef.current.startY),
+      });
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
   }
 
   const toolBtn =
@@ -166,7 +233,32 @@ export default function NoteCard({
             {note.body && (
               <p className="mt-1 line-clamp-[15] whitespace-pre-wrap text-sm text-slate-700">{note.body}</p>
             )}
-            {!note.title && !note.body && <div className="text-sm text-slate-400">Empty note</div>}
+            {!note.title && !note.body && !note.images.length && (
+              <div className="text-sm text-slate-400">Empty note</div>
+            )}
+          </button>
+        )}
+
+        {note.images.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="flex w-full gap-1.5 overflow-hidden px-4 pb-2"
+          >
+            {note.images.slice(0, 3).map((img) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={img.id}
+                src={`/api/files/${img.id}`}
+                alt={img.originalName}
+                className="h-16 w-16 shrink-0 rounded-md object-cover"
+              />
+            ))}
+            {note.images.length > 3 && (
+              <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md bg-black/10 text-xs font-medium text-slate-600">
+                +{note.images.length - 3}
+              </span>
+            )}
           </button>
         )}
 
@@ -243,69 +335,136 @@ export default function NoteCard({
         )}
       </div>
 
-      {/* Edit modal */}
+      {/* Edit modal — draggable by its grip bar, resizable from the bottom-right corner */}
       {editing && (
-        <div
-          className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 py-[8vh]"
-          onClick={closeEditor}
-        >
+        <div className="fixed inset-0 z-[100] bg-slate-900/50" onClick={closeEditor}>
           <div
-            className={`w-full max-w-xl rounded-xl border shadow-2xl ${noteCard(note.color)}`}
+            style={
+              pos && size
+                ? {
+                    position: "fixed",
+                    left: pos.x,
+                    top: pos.y,
+                    width: size.w,
+                    height: size.h,
+                    maxWidth: "calc(100vw - 2rem)",
+                    maxHeight: "calc(100vh - 2rem)",
+                    minWidth: 320,
+                    minHeight: 220,
+                    resize: "both",
+                    overflow: "auto",
+                    display: "flex",
+                    flexDirection: "column",
+                  }
+                : { visibility: "hidden" }
+            }
+            className={`rounded-xl border shadow-2xl ${noteCard(liveColor)}`}
             onClick={(e) => e.stopPropagation()}
           >
+            <div
+              onPointerDown={onGripPointerDown}
+              className="flex shrink-0 touch-none items-center justify-center rounded-t-xl border-b border-black/10 py-1 text-slate-400 hover:bg-black/5 hover:text-slate-600"
+              style={{ cursor: "move" }}
+              title="Drag to move"
+            >
+              <svg width="18" height="8" viewBox="0 0 18 8" fill="currentColor">
+                <circle cx="2" cy="2" r="1.4" />
+                <circle cx="9" cy="2" r="1.4" />
+                <circle cx="16" cy="2" r="1.4" />
+                <circle cx="2" cy="6" r="1.4" />
+                <circle cx="9" cy="6" r="1.4" />
+                <circle cx="16" cy="6" r="1.4" />
+              </svg>
+            </div>
+
             {isChecklist ? (
-              <ChecklistNoteEditor id={note.id} initialTitle={note.title} initialBody={note.body} initialColor={note.color} />
+              <ChecklistNoteEditor
+                id={note.id}
+                initialTitle={note.title}
+                initialBody={note.body}
+                initialColor={note.color}
+                images={note.images}
+                onColorChange={setLiveColor}
+              />
             ) : (
-              <NoteEditor id={note.id} initialTitle={note.title} initialBody={note.body} initialColor={note.color} />
+              <NoteEditor
+                id={note.id}
+                initialTitle={note.title}
+                initialBody={note.body}
+                initialColor={note.color}
+                images={note.images}
+                onColorChange={setLiveColor}
+              />
             )}
 
-            {isOwner && (
-              <div className="border-t border-black/10 px-4 py-3">
-                <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  Shared with
-                </div>
-                {note.shares.length === 0 && <p className="mb-2 text-xs text-slate-400">Not shared yet.</p>}
-                {note.shares.length > 0 && (
-                  <div className="mb-2 space-y-1">
-                    {note.shares.map((s) => (
-                      <div key={s.userId} className="flex items-center gap-2 text-xs">
-                        <Avatar name={s.name} />
-                        <span className="flex-1 text-slate-700">{s.name}</span>
-                        <form action={unshareNote}>
+            <div className="flex shrink-0 items-center gap-0.5 border-t border-black/10 px-2.5 py-1.5">
+              {isOwner && (
+                <div className="relative" ref={shareRef}>
+                  <button
+                    type="button"
+                    title="Collaborators"
+                    className={toolBtn}
+                    onClick={() => setShareOpen((o) => !o)}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                      <circle cx="9" cy="8" r="3" />
+                      <path d="M4 20a5 5 0 0 1 10 0M18 8v6M15 11h6" strokeLinecap="round" />
+                    </svg>
+                    {note.shares.length > 0 && (
+                      <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-sky-600 text-[9px] font-semibold text-white">
+                        {note.shares.length}
+                      </span>
+                    )}
+                  </button>
+                  {shareOpen && (
+                    <div className="absolute bottom-9 left-0 z-20 w-56 rounded-lg border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                      <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        Shared with
+                      </div>
+                      {note.shares.length === 0 && (
+                        <p className="mb-2 text-xs text-slate-400">Not shared yet.</p>
+                      )}
+                      {note.shares.length > 0 && (
+                        <div className="mb-2 space-y-1">
+                          {note.shares.map((s) => (
+                            <div key={s.userId} className="flex items-center gap-2 text-xs">
+                              <Avatar name={s.name} />
+                              <span className="flex-1 truncate text-slate-700">{s.name}</span>
+                              <form action={unshareNote}>
+                                <input type="hidden" name="id" value={note.id} />
+                                <input type="hidden" name="userId" value={s.userId} />
+                                <button type="submit" title="Stop sharing" className="text-slate-400 hover:text-red-600">
+                                  ✕
+                                </button>
+                              </form>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {shareOptions.length > 0 && (
+                        <form action={shareNote} className="flex flex-col gap-2">
                           <input type="hidden" name="id" value={note.id} />
-                          <input type="hidden" name="userId" value={s.userId} />
-                          <button type="submit" title="Stop sharing" className="text-slate-400 hover:text-red-600">
-                            ✕
+                          <SearchSelect
+                            name="userId"
+                            required
+                            className="w-full"
+                            placeholder="Share with…"
+                            searchPlaceholder="Search people…"
+                            options={shareOptions.map((u) => ({ value: String(u.id), label: u.name }))}
+                          />
+                          <button type="submit" className="btn-secondary !py-1.5 text-xs">
+                            Share
                           </button>
                         </form>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {shareOptions.length > 0 && (
-                  <form action={shareNote} className="flex gap-2">
-                    <input type="hidden" name="id" value={note.id} />
-                    <SearchSelect
-                      name="userId"
-                      required
-                      className="w-48"
-                      placeholder="Share with…"
-                      searchPlaceholder="Search people…"
-                      options={shareOptions.map((u) => ({ value: String(u.id), label: u.name }))}
-                    />
-                    <button type="submit" className="btn-secondary !py-1.5 text-xs">
-                      Share
-                    </button>
-                  </form>
-                )}
-              </div>
-            )}
-
-            <div className="flex justify-end px-4 pb-3">
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
               <button
                 type="button"
                 onClick={closeEditor}
-                className="rounded-md px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-black/5"
+                className="ml-auto rounded-md px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-black/5"
               >
                 Close
               </button>

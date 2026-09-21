@@ -37,6 +37,9 @@ model User {
   emailNotifications Boolean     @default(true)
   avatarPath         String?
   jobTitle           String?
+  // ISO code (e.g. "en", "ar") — when set, messages sent TO this person are
+  // auto-translated into it in chat. Null means "don't translate for them".
+  preferredLanguage  String?
   lastSeenAt         DateTime?
   requiresApproval   Boolean     @default(false) // can't self-complete; owner approves from Review
   company            Company     @relation(fields: [companyId], references: [id])
@@ -304,7 +307,8 @@ model Note {
   updatedAt DateTime    @updatedAt
   createdAt DateTime    @default(now())
   deletedAt DateTime?
-  shares    NoteShare[]
+  shares      NoteShare[]
+  attachments Attachment[]
 
   @@index([userId, deletedAt])
 }
@@ -330,6 +334,18 @@ model DirectMessage {
   // background job (scripts/unread-messages.ts) never emails the same unread
   // message twice — null means "not yet notified".
   notifiedAt  DateTime?
+  // Auto-translation into the recipient's preferred language, computed once
+  // at send time. Null when no translation was needed/available — the chat
+  // UI then just shows `body`. translatedLang is the language it's in, so a
+  // "Show original" toggle knows what it's toggling away from.
+  translatedBody String?
+  translatedLang String?
+  // When the translation above landed — translation now runs in the
+  // background after the message is created (so sending stays instant), and
+  // the chat's poll endpoint uses this to find recently-completed
+  // translations for messages it already sent the client, similar to how
+  // deletedIds/reactions are patched onto already-loaded messages.
+  translatedAt DateTime?
   createdAt   DateTime          @default(now())
   deletedAt   DateTime?
   attachments Attachment[]
@@ -391,12 +407,15 @@ model Attachment {
   messageId           Int?
   discussion          DiscussionMessage? @relation(fields: [discussionMessageId], references: [id], onDelete: Cascade)
   discussionMessageId Int?
+  note                Note?              @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  noteId              Int?
   uploadedBy          User               @relation(fields: [uploadedById], references: [id])
   uploadedById        Int
   createdAt           DateTime           @default(now())
 
   @@index([messageId])
   @@index([discussionMessageId])
+  @@index([noteId])
   @@index([taskId])
   @@index([uploadedById])
 }

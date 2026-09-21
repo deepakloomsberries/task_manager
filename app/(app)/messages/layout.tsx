@@ -24,9 +24,13 @@ export default async function MessagesLayout({ children }: { children: React.Rea
     const partner = m.senderId === user.id ? m.recipient : m.sender;
     const existing = convos.get(partner.id);
     if (!existing) {
+      // Show the translated text in the preview too, for a message where you're
+      // the recipient — otherwise it'd flash the sender's language for a beat
+      // before you open the thread and see it translated there.
+      const bodyForPreview = m.recipientId === user.id && m.translatedBody ? m.translatedBody : m.body;
       const preview = m.deletedAt
         ? "🚫 Message deleted"
-        : m.body ||
+        : bodyForPreview ||
           (m.attachments.length
             ? m.attachments.some((a) => a.mimeType.startsWith("image/"))
               ? "📷 Photo"

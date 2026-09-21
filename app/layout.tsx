@@ -3,6 +3,7 @@ import "./globals.css";
 import ChunkErrorRecovery from "@/components/ChunkErrorRecovery";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://task.donetella.com"),
   title: "Looms & Berries Tasks",
   description: "Internal task management for Looms & Berries",
   manifest: "/manifest.webmanifest",
@@ -25,7 +26,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className="scroll-smooth">
       <head>
         <script
           dangerouslySetInnerHTML={{

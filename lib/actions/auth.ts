@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { createSession, destroySession, requireUser } from "@/lib/auth";
 import { isStrongPassword } from "@/lib/password";
 import { notifyPasswordOtp } from "@/lib/mail";
+import { CHAT_LANGUAGES } from "@/lib/ui";
 
 const OTP_TTL_MIN = 15;
 const OTP_MAX_ATTEMPTS = 5; // wrong-code guesses before the code is invalidated
@@ -140,10 +141,14 @@ export async function updateOwnProfile(formData: FormData) {
   const user = await requireUser();
   const name = String(formData.get("name") ?? "").trim();
   const jobTitle = String(formData.get("jobTitle") ?? "").trim();
+  const preferredLanguageRaw = String(formData.get("preferredLanguage") ?? "");
+  const preferredLanguage = CHAT_LANGUAGES.some((l) => l.value === preferredLanguageRaw)
+    ? preferredLanguageRaw
+    : null;
   if (name) {
     await db.user.update({
       where: { id: user.id },
-      data: { name, jobTitle: jobTitle || null },
+      data: { name, jobTitle: jobTitle || null, preferredLanguage },
     });
   }
   redirect("/settings?ok=1");

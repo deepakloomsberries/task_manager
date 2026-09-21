@@ -57,7 +57,14 @@ export async function deleteAttachment(formData: FormData) {
   const attachment = await db.attachment.findUnique({ where: { id } });
   if (!attachment) redirect("/documents");
 
-  const back = attachment.taskId ? `/tasks/${attachment.taskId}` : "/documents";
+  const fallback = attachment.taskId ? `/tasks/${attachment.taskId}` : attachment.noteId ? "/notes" : "/documents";
+  // A task attachment's delete button passes along the filtered list/board the
+  // person opened the task from, so this redirect doesn't strip it.
+  const backField = formData.get("back");
+  const back =
+    attachment.taskId && typeof backField === "string" && backField.startsWith("/tasks")
+      ? backField
+      : fallback;
   if (attachment.uploadedById !== user.id && user.role !== "ADMIN") redirect(back);
 
   await db.attachment.delete({ where: { id } });

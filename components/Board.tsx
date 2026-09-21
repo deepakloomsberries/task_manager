@@ -116,6 +116,11 @@ export default function Board({
                   </div>
                   <Link
                     href={backHref ? `/tasks/${t.id}?back=${encodeURIComponent(backHref)}` : `/tasks/${t.id}`}
+                    // The target's rendered content depends on this ever-changing
+                    // `back` query param — a stale prefetch cached under a
+                    // different `back` (or none) would silently serve the wrong
+                    // "Back to tasks" link, so always fetch fresh.
+                    prefetch={false}
                     className="block text-sm font-medium text-slate-800 hover:text-sky-700"
                   >
                     {t.title}
