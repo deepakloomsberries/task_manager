@@ -2,16 +2,50 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 
+const TITLE = "Looms & Berries Tasks — Work management for real teams";
+const DESCRIPTION =
+  "Tasks, projects, time tracking, team chat and AI in one place. Built and battle-tested by a team running daily operations across India, the UAE and Saudi Arabia.";
+const OG_IMAGE = "/marketing/dashboard.png";
+
 export const metadata: Metadata = {
-  title: "Looms & Berries Tasks — Work management for real teams",
-  description:
-    "Tasks, projects, time tracking, team chat and AI in one place. Built and battle-tested by a team running daily operations across India, the UAE and Saudi Arabia.",
+  title: TITLE,
+  description: DESCRIPTION,
+  alternates: { canonical: "/about" },
+  openGraph: {
+    title: TITLE,
+    description: DESCRIPTION,
+    url: "/about",
+    siteName: "Looms & Berries Tasks",
+    type: "website",
+    locale: "en_US",
+    images: [{ url: OG_IMAGE, width: 1440, height: 960, alt: "Looms & Berries Tasks dashboard" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+    images: [OG_IMAGE],
+  },
 };
 
 const CONTACT_EMAIL = "sales@loomsberries.com";
 const CONTACT_HREF = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(
   "Interested in Looms & Berries Tasks"
 )}`;
+
+const LANGUAGES = [
+  "English",
+  "Arabic",
+  "Hindi",
+  "Kannada",
+  "Tamil",
+  "Telugu",
+  "Malayalam",
+  "Marathi",
+  "Bengali",
+  "Urdu",
+  "French",
+];
 
 type Feature = {
   icon: string;
@@ -137,6 +171,36 @@ const FEATURE_GROUPS: FeatureGroup[] = [
   },
 ];
 
+const SHOWCASE_MODULE_COUNT = 3; // Tasks, Projects, Chat — detailed in the showcase section below
+const TOTAL_MODULE_COUNT =
+  SHOWCASE_MODULE_COUNT + FEATURE_GROUPS.reduce((sum, g) => sum + g.items.length, 0);
+
+const STATS = [
+  { value: `${TOTAL_MODULE_COUNT}+`, label: "modules in one workspace" },
+  { value: `${LANGUAGES.length}`, label: "languages, auto-translated" },
+  { value: "3", label: "countries running on it daily" },
+  { value: "1", label: "login for everything" },
+];
+
+const FAQS = [
+  {
+    q: "Is this a SaaS we sign up for, or do we run it ourselves?",
+    a: "It's self-hosted on your own domain and server — your data stays on infrastructure you control, not a shared multi-tenant cloud.",
+  },
+  {
+    q: "Is AI translation and task drafting a paid add-on?",
+    a: "No. Both are built into the product itself, not a separate upsell tier.",
+  },
+  {
+    q: "Can we bring over our existing tasks and users?",
+    a: "Yes — CSV import/export is built into both tasks and users, for migrating in or reporting out.",
+  },
+  {
+    q: "What happens if someone deletes something by mistake?",
+    a: "Deleted items go to a recycle bin first, so accidental deletions are recoverable rather than permanent.",
+  },
+];
+
 const WHY = [
   {
     icon: "🏗️",
@@ -160,17 +224,53 @@ const WHY = [
   },
 ];
 
-function Screenshot({ src, alt }: { src: string; alt: string }) {
+function Screenshot({ src, alt, priority }: { src: string; alt: string; priority?: boolean }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl shadow-slate-300/40 ring-1 ring-slate-900/5 dark:border-slate-700 dark:shadow-none">
-      <Image src={src} alt={alt} width={1440} height={960} className="w-full" />
+    <div className="group overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl shadow-slate-300/40 ring-1 ring-slate-900/5 dark:border-slate-700 dark:shadow-none">
+      <Image
+        src={src}
+        alt={alt}
+        width={1440}
+        height={960}
+        priority={priority}
+        className="w-full transition-transform duration-500 ease-out group-hover:scale-[1.02]"
+      />
     </div>
   );
 }
 
 export default function AboutPage() {
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "Looms & Berries Tasks",
+    description: DESCRIPTION,
+    url: "https://task.donetella.com/about",
+    applicationCategory: "BusinessApplication",
+    operatingSystem: "Web",
+    featureList: [
+      "Task and project management",
+      "Time tracking and timesheets",
+      "Team chat with AI translation",
+      "Video calls",
+      "Calendar and scheduling",
+      "Dashboards and reports",
+      "Role-based access control",
+    ],
+  };
+
   return (
     <div className="bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <a
+        href="#main-content"
+        className="sr-only rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50"
+      >
+        Skip to content
+      </a>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+      />
       {/* Nav */}
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3 sm:px-5 sm:py-4">
@@ -230,7 +330,7 @@ export default function AboutPage() {
       </header>
 
       {/* Hero */}
-      <section className="relative overflow-hidden">
+      <section id="main-content" className="relative overflow-hidden">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-x-0 -top-40 -z-10 h-[32rem] bg-[radial-gradient(60%_60%_at_50%_0%,theme(colors.sky.100),transparent)] dark:bg-[radial-gradient(60%_60%_at_50%_0%,theme(colors.sky.950),transparent)]"
@@ -259,14 +359,26 @@ export default function AboutPage() {
           </div>
 
           <div className="mx-auto mt-14 max-w-5xl">
-            <Screenshot src="/marketing/dashboard.png" alt="Looms & Berries Tasks dashboard" />
+            <Screenshot src="/marketing/dashboard.png" alt="Looms & Berries Tasks dashboard" priority />
           </div>
         </div>
       </section>
 
-      {/* Proof strip */}
-      <section className="border-y border-slate-200 bg-slate-50 py-6 dark:border-slate-800 dark:bg-slate-900/40">
-        <p className="mx-auto max-w-3xl px-5 text-center text-sm font-medium text-slate-500 dark:text-slate-400">
+      {/* Stats bar — real counts derived from the feature data below, not marketing fluff */}
+      <section className="border-y border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/40">
+        <div className="mx-auto grid max-w-5xl grid-cols-2 gap-x-4 gap-y-6 px-5 py-8 sm:grid-cols-4 sm:gap-6">
+          {STATS.map((s) => (
+            <div key={s.label} className="text-center">
+              <div className="text-3xl font-bold tracking-tight text-sky-700 dark:text-sky-400 sm:text-4xl">
+                {s.value}
+              </div>
+              <div className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400 sm:text-sm">
+                {s.label}
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="border-t border-slate-200 px-5 py-3 text-center text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
           Actively used every working day across offices in{" "}
           <span className="text-slate-700 dark:text-slate-200">India</span>,{" "}
           <span className="text-slate-700 dark:text-slate-200">the UAE</span> and{" "}
@@ -335,7 +447,7 @@ export default function AboutPage() {
                 away.
               </p>
               <ul className="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                <li>• Supports English, Arabic, Hindi, Kannada, Tamil, Telugu, Malayalam, Marathi, Bengali, Urdu and French</li>
+                <li>• Supports {LANGUAGES.slice(0, -1).join(", ")} and {LANGUAGES[LANGUAGES.length - 1]}</li>
                 <li>• Full chat features: attachments, replies, reactions, starring, video calls</li>
                 <li>• &quot;Show original&quot; on any translated message, one hover away</li>
               </ul>
@@ -364,7 +476,10 @@ export default function AboutPage() {
                 </h3>
                 <div className="mt-5 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
                   {group.items.map((f) => (
-                    <div key={f.title} className="card p-6">
+                    <div
+                      key={f.title}
+                      className="card p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                    >
                       <span className="text-2xl">{f.icon}</span>
                       <h4 className="mt-3 font-semibold">{f.title}</h4>
                       <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{f.body}</p>
@@ -390,6 +505,41 @@ export default function AboutPage() {
               <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{w.body}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="border-t border-slate-200 bg-slate-50 py-20 dark:border-slate-800 dark:bg-slate-900/30">
+        <div className="mx-auto max-w-3xl px-5">
+          <h2 className="text-center text-3xl font-bold tracking-tight sm:text-4xl">
+            Common questions
+          </h2>
+          <div className="mt-10 space-y-3">
+            {FAQS.map((f) => (
+              <details
+                key={f.q}
+                className="group card open:shadow-md px-5 py-4 [&::-webkit-details-marker]:hidden"
+              >
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold">
+                  {f.q}
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    className="shrink-0 transition-transform duration-200 group-open:rotate-45"
+                  >
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                </summary>
+                <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{f.a}</p>
+              </details>
+            ))}
+          </div>
         </div>
       </section>
 
