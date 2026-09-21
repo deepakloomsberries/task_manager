@@ -59,6 +59,29 @@ function canChangeStatus(
   );
 }
 
+/**
+ * Resolves a form's `back` field to a safe redirect target — the filtered
+ * list/board view the person opened this task from — falling back to
+ * `fallback` when it's absent (a plain "/tasks/<id>" visit). Every action on
+ * the task detail page should redirect through this, not a bare task URL,
+ * or clicking "Back to tasks" afterwards silently loses the filter.
+ */
+function backOr(formData: FormData, fallback: string): string {
+  const back = formData.get("back");
+  return typeof back === "string" && back.startsWith("/tasks") ? back : fallback;
+}
+
+/** Same as `backOr`, but appends the `back` value as a query param onto a
+ *  DIFFERENT url (used when an action navigates to a different task, e.g.
+ *  a duplicate, and that page's own "Back to tasks" should keep the filter). */
+function appendBack(url: string, formData: FormData): string {
+  const back = formData.get("back");
+  if (typeof back === "string" && back.startsWith("/tasks")) {
+    return `${url}?back=${encodeURIComponent(back)}`;
+  }
+  return url;
+}
+
 async function revalidateTaskViews(taskId?: number) {
   revalidatePath("/tasks");
   revalidatePath("/my-tasks");
@@ -193,7 +216,7 @@ export async function duplicateTask(formData: FormData) {
     if (assignee) await notifyAssignment({ assignee, task: copy, actor: user });
   }
   await revalidateTaskViews(copy.id);
-  redirect(`/tasks/${copy.id}`);
+  redirect(appendBack(`/tasks/${copy.id}`, formData));
 }
 
 /** Deletes a comment. The author can remove their own; admins can remove any. */
@@ -205,7 +228,7 @@ export async function deleteComment(formData: FormData) {
   if (comment.authorId !== user.id && user.role !== "ADMIN") redirect(`/tasks/${comment.taskId}`);
   await db.taskComment.delete({ where: { id } });
   revalidatePath(`/tasks/${comment.taskId}`);
-  redirect(`/tasks/${comment.taskId}`);
+  redirect(backOr(formData, `/tasks/${comment.taskId}`));
 }
 
 export async function addSubtask(formData: FormData) {
@@ -242,7 +265,7 @@ export async function addSubtask(formData: FormData) {
   }
 
   await revalidateTaskViews(parentId);
-  redirect(`/tasks/${parentId}`);
+  redirect(backOr(formData, `/tasks/${parentId}`));
 }
 
 export async function updateTask(formData: FormData) {
@@ -280,7 +303,7 @@ export async function updateTask(formData: FormData) {
   }
 
   await revalidateTaskViews(id);
-  redirect(`/tasks/${id}`);
+  redirect(backOr(formData, `/tasks/${id}`));
 }
 
 /** True when the task still has at least one unfinished blocker. */
@@ -467,10 +490,10 @@ export async function addTaskCollaborator(formData: FormData) {
   if (!canManageCollaborators(user, task)) redirect(`/tasks/${taskId}?error=forbidden`);
 
   // Skip if it's the assignee already; addCollaborator handles inactive users.
-  if (userId === task.assigneeId) redirect(`/tasks/${taskId}`);
+  if (userId === task.assigneeId) redirect(backOr(formData, `/tasks/${taskId}`));
   await addCollaborator(taskId, userId, task.title, user);
   await revalidateTaskViews(taskId);
-  redirect(`/tasks/${taskId}`);
+  redirect(backOr(formData, `/tasks/${taskId}`));
 }
 
 export async function removeTaskCollaborator(formData: FormData) {
@@ -490,7 +513,7 @@ export async function removeTaskCollaborator(formData: FormData) {
   const person = await db.user.findUnique({ where: { id: userId }, select: { name: true } });
   await logActivity(taskId, user.id, "details", `removed ${person?.name ?? "a collaborator"} from collaborators`);
   await revalidateTaskViews(taskId);
-  redirect(`/tasks/${taskId}`);
+  redirect(backOr(formData, `/tasks/${taskId}`));
 }
 
 export async function deleteTask(formData: FormData) {
@@ -511,7 +534,7 @@ export async function deleteTask(formData: FormData) {
     data: { deletedAt: now },
   });
   await revalidateTaskViews();
-  redirect(task.parentId ? `/tasks/${task.parentId}` : "/tasks");
+  redirect(task.parentId ? `/tasks/${task.parentId}` : backOr(formData, "/tasks"));
 }
 
 /** Restore a soft-deleted task (and its subtasks) from the recycle bin. */
@@ -563,7 +586,8 @@ export async function sendTaskReminder(formData: FormData) {
   await notifyReminder({ recipient: task.assignee, task, actor: user });
   await logActivity(id, user.id, "reminder", `sent a reminder to ${task.assignee.name}`);
   await revalidateTaskViews(id);
-  redirect(`/tasks/${id}?ok=reminder`);
+  const back = backOr(formData, `/tasks/${id}`);
+  redirect(`${back}${back.includes("?") ? "&" : "?"}ok=reminder`);
 }
 
 /** Follow a task to get notified of status changes and new comments. */
@@ -580,7 +604,7 @@ export async function watchTask(formData: FormData) {
     });
   }
   revalidatePath(`/tasks/${taskId}`);
-  redirect(`/tasks/${taskId}`);
+  redirect(backOr(formData, `/tasks/${taskId}`));
 }
 
 export async function unwatchTask(formData: FormData) {
@@ -589,7 +613,7 @@ export async function unwatchTask(formData: FormData) {
   if (!taskId) redirect("/tasks");
   await db.taskWatcher.deleteMany({ where: { taskId, userId: user.id } });
   revalidatePath(`/tasks/${taskId}`);
-  redirect(`/tasks/${taskId}`);
+  redirect(backOr(formData, `/tasks/${taskId}`));
 }
 
 /** The user ids watching a task, excluding one actor (who triggered the event). */
@@ -643,7 +667,7 @@ export async function addComment(formData: FormData) {
   });
 
   revalidatePath(`/tasks/${taskId}`);
-  redirect(`/tasks/${taskId}`);
+  redirect(backOr(formData, `/tasks/${taskId}`));
 }
 
 // --- Task dependencies (blockers) ------------------------------------------
@@ -677,7 +701,7 @@ export async function addTaskDependency(formData: FormData) {
   await logActivity(taskId, user.id, "details", `added blocker "${blocker.title}"`);
   await revalidateTaskViews(taskId);
   revalidatePath(`/tasks/${blockerId}`);
-  redirect(`/tasks/${taskId}`);
+  redirect(backOr(formData, `/tasks/${taskId}`));
 }
 
 /** Removes a blocker relationship from `taskId`. */
@@ -694,7 +718,7 @@ export async function removeTaskDependency(formData: FormData) {
   await db.taskDependency.deleteMany({ where: { taskId, blockerId } });
   await revalidateTaskViews(taskId);
   revalidatePath(`/tasks/${blockerId}`);
-  redirect(`/tasks/${taskId}`);
+  redirect(backOr(formData, `/tasks/${taskId}`));
 }
 
 /** Moves a task's due date (used by the project timeline's drag-to-reschedule). */
