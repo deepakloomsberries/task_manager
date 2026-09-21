@@ -73,6 +73,11 @@ model User {
   billingSnapshots     BillingSnapshot[]
   messageReactions     MessageReaction[]
   messageStars         MessageStar[]
+  groupsCreated        Group[]               @relation("groupCreator")
+  groupMemberships     GroupMember[]
+  groupMessagesSent    GroupMessage[]        @relation("groupMessageSender")
+  groupMessageReactions GroupMessageReaction[]
+  groupMessageStars    GroupMessageStar[]
 }
 
 /**
@@ -415,6 +420,8 @@ model Attachment {
   discussionMessageId Int?
   note                Note?              @relation(fields: [noteId], references: [id], onDelete: Cascade)
   noteId              Int?
+  groupMessage        GroupMessage?      @relation(fields: [groupMessageId], references: [id], onDelete: Cascade)
+  groupMessageId      Int?
   uploadedBy          User               @relation(fields: [uploadedById], references: [id])
   uploadedById        Int
   createdAt           DateTime           @default(now())
@@ -424,8 +431,13 @@ model Attachment {
   @@index([noteId])
   @@index([taskId])
   @@index([uploadedById])
+  @@index([groupMessageId])
 }
 
+// Kept only so the one-time migration script (scripts/migrate-discussion-to-group.ts)
+// can read the old single company-wide channel's history when copying it into
+// the "General" group — the Discussion tab itself now runs on Group/GroupMessage
+// below, WhatsApp-style (multiple named groups instead of one global channel).
 model DiscussionMessage {
   id          Int          @id @default(autoincrement())
   body        String
@@ -436,6 +448,80 @@ model DiscussionMessage {
   attachments Attachment[]
 
   @@index([createdAt])
+}
+
+model Group {
+  id          Int            @id @default(autoincrement())
+  name        String
+  createdBy   User           @relation("groupCreator", fields: [createdById], references: [id])
+  createdById Int
+  createdAt   DateTime       @default(now())
+  members     GroupMember[]
+  messages    GroupMessage[]
+}
+
+/**
+ * Membership row. `lastReadAt` powers the unread badge in the group list
+ * (any GroupMessage newer than this, not sent by you, counts as unread) —
+ * simpler than per-message read receipts, which don't generalize cleanly to
+ * "seen by N of M members" the way a 1:1 chat's single Seen/Delivered does.
+ */
+model GroupMember {
+  group      Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId    Int
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     Int
+  joinedAt   DateTime @default(now())
+  lastReadAt DateTime @default(now())
+
+  @@id([groupId, userId])
+  @@index([userId])
+}
+
+model GroupMessage {
+  id          Int                    @id @default(autoincrement())
+  body        String
+  sender      User                   @relation("groupMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  senderId    Int
+  group       Group                  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId     Int
+  createdAt   DateTime               @default(now())
+  deletedAt   DateTime?
+  attachments Attachment[]
+  replyTo     GroupMessage?          @relation("groupReplyTo", fields: [replyToId], references: [id], onDelete: SetNull)
+  replyToId   Int?
+  replies     GroupMessage[]         @relation("groupReplyTo")
+  reactions   GroupMessageReaction[]
+  stars       GroupMessageStar[]
+
+  @@index([groupId, createdAt])
+  @@index([senderId])
+  @@index([replyToId])
+}
+
+model GroupMessageReaction {
+  id        Int          @id @default(autoincrement())
+  message   GroupMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId Int
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  emoji     String
+  createdAt DateTime     @default(now())
+
+  @@unique([messageId, userId])
+  @@index([messageId])
+}
+
+model GroupMessageStar {
+  id        Int          @id @default(autoincrement())
+  message   GroupMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId Int
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  createdAt DateTime     @default(now())
+
+  @@unique([messageId, userId])
+  @@index([messageId])
 }
 
 model TimeEntry {
