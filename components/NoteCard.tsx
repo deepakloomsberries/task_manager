@@ -63,6 +63,7 @@ export default function NoteCard({
   const [colorOpen, setColorOpen] = useState(false);
   const colorRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(
     null
   );
@@ -118,21 +119,26 @@ export default function NoteCard({
   function closeEditor() {
     setEditing(false);
     setPos(null);
+    setSize(null);
     setShareOpen(false);
     // The editor autosaves to the API; refresh so the card reflects the edits.
     router.refresh();
   }
 
-  // Centre the modal the first time it opens, then let it be dragged by its
-  // grip bar. Dragging is driven by document-level listeners (rather than
+  // Open the modal large — near-full-page, like a sheet of paper — so a long
+  // note can be read without it being cramped into a small box, then let it
+  // be dragged by its grip bar and resized from the corner if you want it
+  // smaller. Dragging is driven by document-level listeners (rather than
   // relying on setPointerCapture on the grip itself) so it keeps tracking
   // reliably even once the pointer moves off the small grip bar.
   useLayoutEffect(() => {
     if (!editing) return;
-    const w = Math.min(576, window.innerWidth - 32);
+    const w = Math.min(820, window.innerWidth - 64);
+    const h = Math.min(window.innerHeight - 64, 1040);
+    setSize({ w, h });
     setPos({
       x: Math.max(16, (window.innerWidth - w) / 2),
-      y: Math.max(16, window.innerHeight * 0.08),
+      y: Math.max(16, (window.innerHeight - h) / 2),
     });
   }, [editing]);
 
@@ -325,18 +331,21 @@ export default function NoteCard({
         <div className="fixed inset-0 z-[100] bg-slate-900/50" onClick={closeEditor}>
           <div
             style={
-              pos
+              pos && size
                 ? {
                     position: "fixed",
                     left: pos.x,
                     top: pos.y,
-                    width: 576,
+                    width: size.w,
+                    height: size.h,
                     maxWidth: "calc(100vw - 2rem)",
-                    maxHeight: "85vh",
+                    maxHeight: "calc(100vh - 2rem)",
                     minWidth: 320,
                     minHeight: 220,
                     resize: "both",
                     overflow: "auto",
+                    display: "flex",
+                    flexDirection: "column",
                   }
                 : { visibility: "hidden" }
             }
@@ -345,7 +354,7 @@ export default function NoteCard({
           >
             <div
               onPointerDown={onGripPointerDown}
-              className="flex touch-none items-center justify-center rounded-t-xl border-b border-black/10 py-1 text-slate-400 hover:bg-black/5 hover:text-slate-600"
+              className="flex shrink-0 touch-none items-center justify-center rounded-t-xl border-b border-black/10 py-1 text-slate-400 hover:bg-black/5 hover:text-slate-600"
               style={{ cursor: "move" }}
               title="Drag to move"
             >
@@ -377,7 +386,7 @@ export default function NoteCard({
               />
             )}
 
-            <div className="flex items-center gap-0.5 border-t border-black/10 px-2.5 py-1.5">
+            <div className="flex shrink-0 items-center gap-0.5 border-t border-black/10 px-2.5 py-1.5">
               {isOwner && (
                 <div className="relative" ref={shareRef}>
                   <button

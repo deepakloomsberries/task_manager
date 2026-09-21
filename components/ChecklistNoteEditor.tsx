@@ -91,9 +91,11 @@ export default function ChecklistNoteEditor({
   };
 
   return (
-    <div>
-      <div className="space-y-2 px-4 pb-1 pt-4">
-        <NoteImages ref={imagesRef} noteId={id} images={images} editable />
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 pb-1 pt-4">
+        <div className="shrink-0">
+          <NoteImages ref={imagesRef} noteId={id} images={images} editable />
+        </div>
         <input
           value={title}
           onChange={(e) => {
@@ -101,11 +103,11 @@ export default function ChecklistNoteEditor({
             schedule();
           }}
           placeholder="Title"
-          className="w-full border-none bg-transparent px-1 text-base font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-0"
+          className="w-full shrink-0 border-none bg-transparent px-1 text-base font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-0"
         />
         <ChecklistEditor initial={parseChecklist(initialBody)} onChange={onItems} />
       </div>
-      <div className="flex items-center gap-0.5 px-2.5 pb-1.5 pt-1">
+      <div className="flex shrink-0 items-center gap-0.5 px-2.5 pb-1.5 pt-1">
         <div className="relative" ref={colorRef}>
           <button
             type="button"
