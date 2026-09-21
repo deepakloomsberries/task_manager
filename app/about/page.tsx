@@ -19,56 +19,121 @@ type Feature = {
   body: string;
 };
 
-const CORE_FEATURES: Feature[] = [
+type FeatureGroup = {
+  title: string;
+  items: Feature[];
+};
+
+const FEATURE_GROUPS: FeatureGroup[] = [
   {
-    icon: "✅",
-    title: "Tasks, boards & subtasks",
-    body: "Create, assign and track work with priorities, due dates, subtasks, dependencies and recurring tasks. Switch between list and Kanban board views instantly.",
+    title: "Plan the work",
+    items: [
+      {
+        icon: "✨",
+        title: "AI-drafted tasks",
+        body: "Paste an email, a chat message or a screenshot and let AI turn it into a ready-to-edit task — title, priority and due date pre-filled, nothing created until you approve it.",
+      },
+      {
+        icon: "🗓️",
+        title: "Calendar & scheduling",
+        body: "Every due date, meeting and project milestone on one calendar — filterable by project, person or department.",
+      },
+      {
+        icon: "🗄️",
+        title: "Documents & files",
+        body: "A shared file library attached to every project and task, so specs, contracts and assets live next to the work instead of scattered across email and drives.",
+      },
+      {
+        icon: "📝",
+        title: "Notes",
+        body: "Quick notes and running docs on a project or kept personal — for meeting minutes, decisions and anything that doesn't need to be a task.",
+      },
+    ],
   },
   {
-    icon: "📁",
-    title: "Projects & templates",
-    body: "Group tasks into projects with progress tracking, timelines and a team summary that breaks down every person's workload by status at a glance.",
+    title: "Track time & workload",
+    items: [
+      {
+        icon: "⏱️",
+        title: "Built-in time tracking",
+        body: "One-click task timers, weekly timesheets with an approval workflow, and live \"who's working on what right now\" visibility for managers.",
+      },
+      {
+        icon: "⚖️",
+        title: "Workload & capacity",
+        body: "See who's overloaded and who has room before you assign the next task — a live view of everyone's open work across all projects.",
+      },
+    ],
   },
   {
-    icon: "⏱️",
-    title: "Built-in time tracking",
-    body: "One-click task timers, weekly timesheets with an approval workflow, and live \"who's working on what right now\" visibility for managers.",
+    title: "Communicate",
+    items: [
+      {
+        icon: "🌐",
+        title: "AI-translated conversations",
+        body: "Teammates each set their own preferred language. Messages translate automatically as they arrive, with a one-tap \"Show original\" whenever you need the exact wording.",
+      },
+      {
+        icon: "🎥",
+        title: "Video calls",
+        body: "Jump from a chat straight into a video call — no separate meeting link or third-party app required.",
+      },
+      {
+        icon: "📢",
+        title: "Company-wide discussion",
+        body: "A dedicated space for announcements and cross-team discussion, kept separate from day-to-day project chat.",
+      },
+      {
+        icon: "🔔",
+        title: "Notifications that don't nag",
+        body: "Daily due/overdue digests, a weekly team time summary, and unread-message emails that only fire once someone's genuinely missed a message — never a duplicate.",
+      },
+    ],
   },
   {
-    icon: "💬",
-    title: "Team chat, not a side tool",
-    body: "A full WhatsApp-style messaging experience — attachments, replies, reactions, starring, video calls and search — built into the same app as the work itself.",
+    title: "See what's happening",
+    items: [
+      {
+        icon: "📊",
+        title: "Dashboards that answer real questions",
+        body: "A personal dashboard for \"what's on me today,\" and a command-centre view for managers: overdue work, who's over capacity, project health and team activity.",
+      },
+      {
+        icon: "📑",
+        title: "Reports",
+        body: "Exportable reports on tasks, time and project progress — for management reviews, client updates or billing.",
+      },
+      {
+        icon: "🔎",
+        title: "Global search",
+        body: "Find any task, message, document or person in seconds, from one search bar.",
+      },
+    ],
   },
   {
-    icon: "🌐",
-    title: "AI-translated conversations",
-    body: "Teammates can each set their own preferred language. Messages translate automatically as they arrive, with a one-tap \"Show original\" whenever you need the exact wording.",
-  },
-  {
-    icon: "✨",
-    title: "AI-drafted tasks",
-    body: "Paste an email, a chat message or a screenshot and let AI turn it into a ready-to-edit task — title, priority and due date pre-filled, nothing created until you approve it.",
-  },
-  {
-    icon: "📊",
-    title: "Dashboards that answer real questions",
-    body: "A personal dashboard for \"what's on me today,\" and a command-centre view for managers: overdue work, who's over capacity, project health and team activity.",
-  },
-  {
-    icon: "🔔",
-    title: "Notifications that don't nag",
-    body: "Daily due/overdue digests, a weekly team time summary, and unread-message emails that only fire once someone's genuinely missed a message — never a duplicate.",
-  },
-  {
-    icon: "🌍",
-    title: "Built for multi-office teams",
-    body: "Multiple companies, departments and offices in one workspace, with live local time shown for every office so a distributed team never has to guess who's around.",
-  },
-  {
-    icon: "🔐",
-    title: "Role-based access & admin controls",
-    body: "Admin, manager and employee roles, CSV import/export, a recycle bin for anything deleted by mistake, and per-seat billing reports for internal cost recovery.",
+    title: "Run it your way",
+    items: [
+      {
+        icon: "🌍",
+        title: "Multi-office & departments",
+        body: "Multiple companies, departments and offices in one workspace, with live local time shown for every office so a distributed team never has to guess who's around.",
+      },
+      {
+        icon: "🧑‍🤝‍🧑",
+        title: "People directory",
+        body: "A full employee directory with roles, departments and offices — the single source of truth for who's who.",
+      },
+      {
+        icon: "🔐",
+        title: "Role-based access & admin controls",
+        body: "Admin, manager and employee roles, CSV import/export, and a recycle bin for anything deleted by mistake.",
+      },
+      {
+        icon: "💳",
+        title: "Billing & per-seat reports",
+        body: "Per-seat usage and cost-recovery reports for finance and internal billing, without spreadsheets.",
+      },
+    ],
   },
 ];
 
@@ -125,6 +190,29 @@ export default function AboutPage() {
             </a>
           </nav>
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+            <details className="relative md:hidden">
+              <summary
+                aria-label="Open menu"
+                className="flex cursor-pointer list-none items-center justify-center rounded-lg border border-slate-300 p-2 text-slate-600 [&::-webkit-details-marker]:hidden dark:border-slate-600 dark:text-slate-300"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <line x1="3" y1="12" x2="21" y2="12" />
+                  <line x1="3" y1="18" x2="21" y2="18" />
+                </svg>
+              </summary>
+              <div className="absolute right-0 top-full z-40 mt-2 w-44 rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                <a href="#features" className="block rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
+                  Features
+                </a>
+                <a href="#why" className="block rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
+                  Why it&apos;s different
+                </a>
+                <a href="#contact" className="block rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
+                  Contact
+                </a>
+              </div>
+            </details>
             <Link
               href="/login"
               className="btn-secondary whitespace-nowrap !px-2.5 !py-1.5 text-xs sm:!px-4 sm:text-sm"
@@ -188,7 +276,7 @@ export default function AboutPage() {
       </section>
 
       {/* Feature showcase — a few larger, alternating sections for the standout features */}
-      <section id="features" className="mx-auto max-w-6xl px-5 py-20">
+      <section id="features" className="mx-auto max-w-6xl scroll-mt-16 px-5 py-20">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Everything a growing team needs</h2>
           <p className="mt-3 text-slate-600 dark:text-slate-300">
@@ -257,18 +345,32 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Compact feature grid — everything else */}
+      {/* Full feature grid — grouped so everything the product does is easy to scan */}
       <section className="bg-slate-50 py-20 dark:bg-slate-900/30">
         <div className="mx-auto max-w-6xl px-5">
           <div className="mx-auto max-w-2xl text-center">
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">And there&apos;s more under the hood</h2>
+            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Every module, in one workspace</h2>
+            <p className="mt-3 text-slate-600 dark:text-slate-300">
+              Nothing here is a bolt-on. It&apos;s the same set of modules the team runs daily
+              operations on.
+            </p>
           </div>
-          <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {CORE_FEATURES.map((f) => (
-              <div key={f.title} className="card p-6">
-                <span className="text-2xl">{f.icon}</span>
-                <h3 className="mt-3 font-semibold">{f.title}</h3>
-                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{f.body}</p>
+
+          <div className="mt-14 space-y-14">
+            {FEATURE_GROUPS.map((group) => (
+              <div key={group.title}>
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-400">
+                  {group.title}
+                </h3>
+                <div className="mt-5 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                  {group.items.map((f) => (
+                    <div key={f.title} className="card p-6">
+                      <span className="text-2xl">{f.icon}</span>
+                      <h4 className="mt-3 font-semibold">{f.title}</h4>
+                      <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{f.body}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
@@ -276,7 +378,7 @@ export default function AboutPage() {
       </section>
 
       {/* Why it's different */}
-      <section id="why" className="mx-auto max-w-6xl px-5 py-20">
+      <section id="why" className="mx-auto max-w-6xl scroll-mt-16 px-5 py-20">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Why teams choose it over another SaaS tool</h2>
         </div>
@@ -292,7 +394,7 @@ export default function AboutPage() {
       </section>
 
       {/* CTA */}
-      <section id="contact" className="border-t border-slate-200 bg-gradient-to-br from-slate-900 to-sky-900 dark:border-slate-800">
+      <section id="contact" className="scroll-mt-16 border-t border-slate-200 bg-gradient-to-br from-slate-900 to-sky-900 dark:border-slate-800">
         <div className="mx-auto max-w-3xl px-5 py-20 text-center text-white">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Want this running for your team?</h2>
           <p className="mx-auto mt-4 max-w-xl text-sky-50/90">
