@@ -340,6 +340,12 @@ model DirectMessage {
   // "Show original" toggle knows what it's toggling away from.
   translatedBody String?
   translatedLang String?
+  // Set when a translation attempt used up its retries without succeeding
+  // (Gemini quota/rate-limit/config error) — lets the chat UI show a small
+  // "couldn't translate" notice instead of silently showing the original
+  // with no explanation. Left false for the "AI not configured" case, which
+  // is an intentional off-state, not a failure worth surfacing.
+  translationFailed Boolean @default(false)
   // When the translation above landed — translation now runs in the
   // background after the message is created (so sending stays instant), and
   // the chat's poll endpoint uses this to find recently-completed

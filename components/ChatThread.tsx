@@ -28,6 +28,7 @@ type Msg = {
   starred?: boolean;
   translatedBody?: string | null;
   translatedLang?: string | null;
+  translationFailed?: boolean;
 };
 
 type Person = {
@@ -400,17 +401,28 @@ export default function ChatThread({
         // Translation runs in the background after send, so it can land on a
         // message this client already has — patch it in place when it does.
         if (Array.isArray(data.translationUpdates) && data.translationUpdates.length) {
-          const byId = new Map<number, { translatedBody: string | null; translatedLang: string | null }>(
-            data.translationUpdates.map((t: { id: number; translatedBody: string | null; translatedLang: string | null }) => [
-              t.id,
-              t,
-            ])
+          const byId = new Map<
+            number,
+            { translatedBody: string | null; translatedLang: string | null; translationFailed: boolean }
+          >(
+            data.translationUpdates.map(
+              (t: { id: number; translatedBody: string | null; translatedLang: string | null; translationFailed: boolean }) => [
+                t.id,
+                t,
+              ]
+            )
           );
           setMessages((prev) =>
             prev.map((m) => {
               const upd = byId.get(m.id);
-              if (!upd || upd.translatedBody === m.translatedBody) return m;
-              return { ...m, translatedBody: upd.translatedBody, translatedLang: upd.translatedLang };
+              if (!upd || (upd.translatedBody === m.translatedBody && upd.translationFailed === m.translationFailed))
+                return m;
+              return {
+                ...m,
+                translatedBody: upd.translatedBody,
+                translatedLang: upd.translatedLang,
+                translationFailed: upd.translationFailed,
+              };
             })
           );
         }
@@ -888,6 +900,7 @@ export default function ChatThread({
               // Translation only ever applies to messages you received (never
               // your own — you already know what you wrote in your own language).
               const hasTranslation = !mine && !!m.translatedBody && m.translatedBody !== m.body;
+              const translationUnavailable = !mine && !hasTranslation && !!m.translationFailed;
               const showingOriginal = showOriginalIds.has(m.id);
               const displayBody = hasTranslation && !showingOriginal ? m.translatedBody! : m.body;
               const actions = (
@@ -952,6 +965,14 @@ export default function ChatThread({
                         >
                           {showingOriginal ? "Show translation" : "Show original"}
                         </button>
+                      )}
+                      {translationUnavailable && (
+                        <span
+                          className="mt-1 block text-[11px] italic text-slate-400 dark:text-slate-400"
+                          title="The translation service couldn't be reached — showing the original message."
+                        >
+                          ⚠ Translation unavailable — showing original
+                        </span>
                       )}
                       <AttachmentList atts={m.attachments ?? []} mine={mine} />
                     </div>

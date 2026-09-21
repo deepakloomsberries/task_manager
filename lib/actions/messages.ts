@@ -26,8 +26,9 @@ import { translateText } from "@/lib/ai";
  * preference, or it matches the sender's) or Gemini isn't configured — the
  * chat then just shows the original body, same as before this feature.
  * Retries once on a transient failure (e.g. a rate limit blip) before
- * giving up silently; a message that never gets translated just never shows
- * a "Show original" toggle, which is a safe, quiet failure mode.
+ * giving up; a genuine failure (quota exceeded, bad config, etc.) sets
+ * `translationFailed` so the bubble can show a small notice instead of
+ * silently staying untranslated with no explanation.
  */
 function scheduleTranslation(
   messageId: number,
@@ -50,6 +51,16 @@ function scheduleTranslation(
       }
       if (retriesLeft > 0) {
         return new Promise((resolve) => setTimeout(resolve, 1500)).then(() => attempt(retriesLeft - 1));
+      }
+      // Out of retries. "not-configured" means the admin never set up
+      // GEMINI_API_KEY — an intentional off-state, not worth flagging. Any
+      // other error (quota exceeded, bad model name, network) is a real
+      // failure the recipient should know about, so the bubble can show a
+      // small notice instead of quietly staying untranslated.
+      if (result.error !== "not-configured") {
+        return db.directMessage
+          .update({ where: { id: messageId }, data: { translationFailed: true, translatedAt: new Date() } })
+          .then(() => {});
       }
     });
 
