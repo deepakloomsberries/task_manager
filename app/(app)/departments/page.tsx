@@ -65,40 +65,42 @@ export default async function DepartmentsPage({
       </div>
 
       <div className="card overflow-hidden">
-        <table className="w-full">
-          <thead className="border-b border-slate-200 bg-slate-50">
-            <tr>
-              <th className="th">Department</th>
-              <th className="th">Company</th>
-              <th className="th">Members</th>
-              <th className="th text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {departments.length === 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[520px]">
+            <thead className="border-b border-slate-200 bg-slate-50">
               <tr>
-                <td colSpan={4} className="td py-8 text-center text-slate-400">
-                  No departments yet.
-                </td>
+                <th className="th">Department</th>
+                <th className="th">Company</th>
+                <th className="th">Members</th>
+                <th className="th text-right">Actions</th>
               </tr>
-            )}
-            {departments.map((d) => (
-              <tr key={d.id} className="hover:bg-slate-50">
-                <td className="td font-medium">{d.name}</td>
-                <td className="td text-slate-600">{d.company.name}</td>
-                <td className="td text-slate-600">{d._count.users}</td>
-                <td className="td text-right">
-                  <form action={deleteDepartment}>
-                    <input type="hidden" name="id" value={d.id} />
-                    <ConfirmButton message={`Delete the "${d.name}" department?`} className="text-xs text-red-600 hover:underline">
-                      Delete
-                    </ConfirmButton>
-                  </form>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {departments.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="td py-8 text-center text-slate-400">
+                    No departments yet.
+                  </td>
+                </tr>
+              )}
+              {departments.map((d) => (
+                <tr key={d.id} className="hover:bg-slate-50">
+                  <td className="td font-medium">{d.name}</td>
+                  <td className="td text-slate-600">{d.company.name}</td>
+                  <td className="td text-slate-600">{d._count.users}</td>
+                  <td className="td text-right">
+                    <form action={deleteDepartment}>
+                      <input type="hidden" name="id" value={d.id} />
+                      <ConfirmButton message={`Delete the "${d.name}" department?`} className="text-xs text-red-600 hover:underline">
+                        Delete
+                      </ConfirmButton>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

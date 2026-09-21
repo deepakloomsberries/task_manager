@@ -51,7 +51,7 @@ function Section({ title, accent, tasks, back }: { title: string; accent: string
           const priority = lookup(TASK_PRIORITIES, t.priority);
           const doneSubs = t.subtasks.filter((s) => s.status === "DONE").length;
           return (
-            <div key={t.id} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50">
+            <div key={t.id} className="flex items-start gap-3 px-5 py-3 hover:bg-slate-50">
               <form action={setTaskStatus}>
                 <input type="hidden" name="id" value={t.id} />
                 <input type="hidden" name="status" value="DONE" />

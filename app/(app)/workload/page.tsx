@@ -248,6 +248,9 @@ export default async function WorkloadPage({
       </div>
 
       <ActiveTimersProvider initial={activeTimers}>
+      <p className="mb-2 text-xs text-slate-500 dark:text-slate-400 lg:hidden">
+        ← Swipe sideways to see the rest of the week →
+      </p>
       <div className="card overflow-x-auto">
         <table className="w-full min-w-[900px]">
           <thead className="border-b border-slate-200 bg-slate-50">
