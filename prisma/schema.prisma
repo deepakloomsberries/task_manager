@@ -307,7 +307,8 @@ model Note {
   updatedAt DateTime    @updatedAt
   createdAt DateTime    @default(now())
   deletedAt DateTime?
-  shares    NoteShare[]
+  shares      NoteShare[]
+  attachments Attachment[]
 
   @@index([userId, deletedAt])
 }
@@ -406,12 +407,15 @@ model Attachment {
   messageId           Int?
   discussion          DiscussionMessage? @relation(fields: [discussionMessageId], references: [id], onDelete: Cascade)
   discussionMessageId Int?
+  note                Note?              @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  noteId              Int?
   uploadedBy          User               @relation(fields: [uploadedById], references: [id])
   uploadedById        Int
   createdAt           DateTime           @default(now())
 
   @@index([messageId])
   @@index([discussionMessageId])
+  @@index([noteId])
   @@index([taskId])
   @@index([uploadedById])
 }

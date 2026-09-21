@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { NOTE_COLORS } from "@/lib/ui";
 import { parseChecklist, serializeChecklist, type ChecklistItem } from "@/lib/checklist";
 import ChecklistEditor from "@/components/ChecklistEditor";
+import NoteImages, { type NoteImage } from "@/components/NoteImages";
 
 type Status = "idle" | "saving" | "saved" | "error";
 
@@ -14,11 +15,13 @@ export default function ChecklistNoteEditor({
   initialTitle,
   initialBody,
   initialColor,
+  images = [],
 }: {
   id: number;
   initialTitle: string;
   initialBody: string;
   initialColor: string;
+  images?: NoteImage[];
 }) {
   const [title, setTitle] = useState(initialTitle);
   const [color, setColor] = useState(initialColor);
@@ -82,6 +85,7 @@ export default function ChecklistNoteEditor({
         className="w-full border-none bg-transparent px-1 text-base font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-0"
       />
       <ChecklistEditor initial={parseChecklist(initialBody)} onChange={onItems} />
+      <NoteImages noteId={id} images={images} editable />
       <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
         <div className="flex flex-wrap items-center gap-1.5">
           {NOTE_COLORS.map((c) => (

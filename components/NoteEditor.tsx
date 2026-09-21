@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NOTE_COLORS } from "@/lib/ui";
+import NoteImages, { type NoteImage } from "@/components/NoteImages";
 
 type Status = "idle" | "saving" | "saved" | "error";
 
@@ -15,11 +16,13 @@ export default function NoteEditor({
   initialTitle,
   initialBody,
   initialColor,
+  images = [],
 }: {
   id: number;
   initialTitle: string;
   initialBody: string;
   initialColor: string;
+  images?: NoteImage[];
 }) {
   const [title, setTitle] = useState(initialTitle);
   const [body, setBody] = useState(initialBody);
@@ -102,8 +105,9 @@ export default function NoteEditor({
         onBlur={flush}
         rows={6}
         placeholder="Take a note…"
-        className="input !bg-white/70"
+        className="input !bg-white/70 resize-none"
       />
+      <NoteImages noteId={id} images={images} editable />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
           {NOTE_COLORS.map((c) => (

@@ -12,12 +12,19 @@ export default async function NotesPage() {
   const [owned, shared, users] = await Promise.all([
     db.note.findMany({
       where: { userId: user.id, deletedAt: null },
-      include: { shares: { include: { user: true } } },
+      include: {
+        shares: { include: { user: true } },
+        attachments: { orderBy: { createdAt: "asc" } },
+      },
       orderBy: [{ pinned: "desc" }, { sortOrder: "asc" }, { updatedAt: "desc" }],
     }),
     db.note.findMany({
       where: { shares: { some: { userId: user.id } }, deletedAt: null },
-      include: { user: true, shares: { include: { user: true } } },
+      include: {
+        user: true,
+        shares: { include: { user: true } },
+        attachments: { orderBy: { createdAt: "asc" } },
+      },
       orderBy: { updatedAt: "desc" },
     }),
     db.user.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
@@ -26,7 +33,9 @@ export default async function NotesPage() {
   const pinned = owned.filter((n) => n.pinned);
   const others = owned.filter((n) => !n.pinned);
 
-  const toCard = (n: (typeof owned)[number] & { user?: { name: string } }): NoteCardData => ({
+  const toCard = (
+    n: (typeof owned)[number] & { user?: { name: string } }
+  ): NoteCardData => ({
     id: n.id,
     title: n.title,
     body: n.body,
@@ -36,6 +45,9 @@ export default async function NotesPage() {
     updatedAt: n.updatedAt.toISOString(),
     shares: n.shares.map((s) => ({ userId: s.userId, name: s.user.name })),
     ownerName: n.user?.name,
+    images: n.attachments
+      .filter((a) => a.mimeType.startsWith("image/"))
+      .map((a) => ({ id: a.id, originalName: a.originalName })),
   });
 
   const optionsFor = (note: (typeof owned)[number]) => {

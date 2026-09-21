@@ -57,7 +57,7 @@ export async function deleteAttachment(formData: FormData) {
   const attachment = await db.attachment.findUnique({ where: { id } });
   if (!attachment) redirect("/documents");
 
-  const back = attachment.taskId ? `/tasks/${attachment.taskId}` : "/documents";
+  const back = attachment.taskId ? `/tasks/${attachment.taskId}` : attachment.noteId ? "/notes" : "/documents";
   if (attachment.uploadedById !== user.id && user.role !== "ADMIN") redirect(back);
 
   await db.attachment.delete({ where: { id } });

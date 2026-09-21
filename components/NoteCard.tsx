@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   toggleNotePin,
@@ -11,6 +11,7 @@ import {
 } from "@/lib/actions/notes";
 import NoteEditor from "@/components/NoteEditor";
 import ChecklistNoteEditor from "@/components/ChecklistNoteEditor";
+import { type NoteImage } from "@/components/NoteImages";
 import SearchSelect from "@/components/SearchSelect";
 import ConfirmButton from "@/components/ConfirmButton";
 import { NOTE_COLORS, noteCard, fmtDate, initials, avatarColor } from "@/lib/ui";
@@ -26,6 +27,7 @@ export type NoteCardData = {
   updatedAt: string;
   shares: { userId: number; name: string }[];
   ownerName?: string;
+  images: NoteImage[];
 };
 
 function Avatar({ name }: { name: string }) {
@@ -60,6 +62,10 @@ export default function NoteCard({
   const [editing, setEditing] = useState(false);
   const [colorOpen, setColorOpen] = useState(false);
   const colorRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(
+    null
+  );
   const isChecklist = note.type === "checklist";
   const [checkItems, setCheckItems] = useState<ChecklistItem[]>(() =>
     isChecklist ? parseChecklist(note.body) : []
@@ -100,8 +106,42 @@ export default function NoteCard({
 
   function closeEditor() {
     setEditing(false);
+    setPos(null);
     // The editor autosaves to the API; refresh so the card reflects the edits.
     router.refresh();
+  }
+
+  // Centre the modal the first time it opens, then let it be dragged by its
+  // grip bar. Dragging is driven by document-level listeners (rather than
+  // relying on setPointerCapture on the grip itself) so it keeps tracking
+  // reliably even once the pointer moves off the small grip bar.
+  useLayoutEffect(() => {
+    if (!editing) return;
+    const w = Math.min(576, window.innerWidth - 32);
+    setPos({
+      x: Math.max(16, (window.innerWidth - w) / 2),
+      y: Math.max(16, window.innerHeight * 0.08),
+    });
+  }, [editing]);
+
+  function onGripPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (!pos) return;
+    e.preventDefault();
+    dragRef.current = { startX: e.clientX, startY: e.clientY, origX: pos.x, origY: pos.y };
+    const onMove = (ev: PointerEvent) => {
+      if (!dragRef.current) return;
+      setPos({
+        x: dragRef.current.origX + (ev.clientX - dragRef.current.startX),
+        y: dragRef.current.origY + (ev.clientY - dragRef.current.startY),
+      });
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
   }
 
   const toolBtn =
@@ -166,7 +206,32 @@ export default function NoteCard({
             {note.body && (
               <p className="mt-1 line-clamp-[15] whitespace-pre-wrap text-sm text-slate-700">{note.body}</p>
             )}
-            {!note.title && !note.body && <div className="text-sm text-slate-400">Empty note</div>}
+            {!note.title && !note.body && !note.images.length && (
+              <div className="text-sm text-slate-400">Empty note</div>
+            )}
+          </button>
+        )}
+
+        {note.images.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="flex w-full gap-1.5 overflow-hidden px-4 pb-2"
+          >
+            {note.images.slice(0, 3).map((img) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={img.id}
+                src={`/api/files/${img.id}`}
+                alt={img.originalName}
+                className="h-16 w-16 shrink-0 rounded-md object-cover"
+              />
+            ))}
+            {note.images.length > 3 && (
+              <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md bg-black/10 text-xs font-medium text-slate-600">
+                +{note.images.length - 3}
+              </span>
+            )}
           </button>
         )}
 
@@ -243,20 +308,61 @@ export default function NoteCard({
         )}
       </div>
 
-      {/* Edit modal */}
+      {/* Edit modal — draggable by its grip bar, resizable from the bottom-right corner */}
       {editing && (
-        <div
-          className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 py-[8vh]"
-          onClick={closeEditor}
-        >
+        <div className="fixed inset-0 z-[100] bg-slate-900/50" onClick={closeEditor}>
           <div
-            className={`w-full max-w-xl rounded-xl border shadow-2xl ${noteCard(note.color)}`}
+            style={
+              pos
+                ? {
+                    position: "fixed",
+                    left: pos.x,
+                    top: pos.y,
+                    width: 576,
+                    maxWidth: "calc(100vw - 2rem)",
+                    maxHeight: "85vh",
+                    minWidth: 320,
+                    minHeight: 220,
+                    resize: "both",
+                    overflow: "auto",
+                  }
+                : { visibility: "hidden" }
+            }
+            className={`rounded-xl border shadow-2xl ${noteCard(note.color)}`}
             onClick={(e) => e.stopPropagation()}
           >
+            <div
+              onPointerDown={onGripPointerDown}
+              className="flex touch-none items-center justify-center rounded-t-xl border-b border-black/10 py-1 text-slate-400 hover:bg-black/5 hover:text-slate-600"
+              style={{ cursor: "move" }}
+              title="Drag to move"
+            >
+              <svg width="18" height="8" viewBox="0 0 18 8" fill="currentColor">
+                <circle cx="2" cy="2" r="1.4" />
+                <circle cx="9" cy="2" r="1.4" />
+                <circle cx="16" cy="2" r="1.4" />
+                <circle cx="2" cy="6" r="1.4" />
+                <circle cx="9" cy="6" r="1.4" />
+                <circle cx="16" cy="6" r="1.4" />
+              </svg>
+            </div>
+
             {isChecklist ? (
-              <ChecklistNoteEditor id={note.id} initialTitle={note.title} initialBody={note.body} initialColor={note.color} />
+              <ChecklistNoteEditor
+                id={note.id}
+                initialTitle={note.title}
+                initialBody={note.body}
+                initialColor={note.color}
+                images={note.images}
+              />
             ) : (
-              <NoteEditor id={note.id} initialTitle={note.title} initialBody={note.body} initialColor={note.color} />
+              <NoteEditor
+                id={note.id}
+                initialTitle={note.title}
+                initialBody={note.body}
+                initialColor={note.color}
+                images={note.images}
+              />
             )}
 
             {isOwner && (

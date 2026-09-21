@@ -21,9 +21,15 @@ export default function NotesGrid({
   const [dragId, setDragId] = useState<number | null>(null);
   const [, startTransition] = useTransition();
 
-  // Resync when the server sends new data — including edits, which change
-  // updatedAt/pinned even though the id set stays the same.
-  const sig = items.map((i) => `${i.note.id}:${i.note.updatedAt}:${i.note.pinned}`).join(",");
+  // Resync when the server sends new data — including edits (which change
+  // updatedAt/pinned) and photo uploads (which don't touch the note itself,
+  // only add an Attachment row, so its id list has to be in the signature too).
+  const sig = items
+    .map(
+      (i) =>
+        `${i.note.id}:${i.note.updatedAt}:${i.note.pinned}:${i.note.images.map((img) => img.id).join(",")}`
+    )
+    .join("|");
   useEffect(() => {
     setOrder(items);
     // eslint-disable-next-line react-hooks/exhaustive-deps
