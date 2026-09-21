@@ -66,6 +66,8 @@ export default function NoteCard({
   const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(
     null
   );
+  const [shareOpen, setShareOpen] = useState(false);
+  const shareRef = useRef<HTMLDivElement>(null);
   const isChecklist = note.type === "checklist";
   const [checkItems, setCheckItems] = useState<ChecklistItem[]>(() =>
     isChecklist ? parseChecklist(note.body) : []
@@ -104,9 +106,19 @@ export default function NoteCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing]);
 
+  useEffect(() => {
+    if (!shareOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (shareRef.current && !shareRef.current.contains(e.target as Node)) setShareOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [shareOpen]);
+
   function closeEditor() {
     setEditing(false);
     setPos(null);
+    setShareOpen(false);
     // The editor autosaves to the API; refresh so the card reflects the edits.
     router.refresh();
   }
@@ -365,53 +377,74 @@ export default function NoteCard({
               />
             )}
 
-            {isOwner && (
-              <div className="border-t border-black/10 px-4 py-3">
-                <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  Shared with
-                </div>
-                {note.shares.length === 0 && <p className="mb-2 text-xs text-slate-400">Not shared yet.</p>}
-                {note.shares.length > 0 && (
-                  <div className="mb-2 space-y-1">
-                    {note.shares.map((s) => (
-                      <div key={s.userId} className="flex items-center gap-2 text-xs">
-                        <Avatar name={s.name} />
-                        <span className="flex-1 text-slate-700">{s.name}</span>
-                        <form action={unshareNote}>
+            <div className="flex items-center gap-0.5 border-t border-black/10 px-2.5 py-1.5">
+              {isOwner && (
+                <div className="relative" ref={shareRef}>
+                  <button
+                    type="button"
+                    title="Collaborators"
+                    className={toolBtn}
+                    onClick={() => setShareOpen((o) => !o)}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                      <circle cx="9" cy="8" r="3" />
+                      <path d="M4 20a5 5 0 0 1 10 0M18 8v6M15 11h6" strokeLinecap="round" />
+                    </svg>
+                    {note.shares.length > 0 && (
+                      <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-sky-600 text-[9px] font-semibold text-white">
+                        {note.shares.length}
+                      </span>
+                    )}
+                  </button>
+                  {shareOpen && (
+                    <div className="absolute bottom-9 left-0 z-20 w-56 rounded-lg border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                      <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        Shared with
+                      </div>
+                      {note.shares.length === 0 && (
+                        <p className="mb-2 text-xs text-slate-400">Not shared yet.</p>
+                      )}
+                      {note.shares.length > 0 && (
+                        <div className="mb-2 space-y-1">
+                          {note.shares.map((s) => (
+                            <div key={s.userId} className="flex items-center gap-2 text-xs">
+                              <Avatar name={s.name} />
+                              <span className="flex-1 truncate text-slate-700">{s.name}</span>
+                              <form action={unshareNote}>
+                                <input type="hidden" name="id" value={note.id} />
+                                <input type="hidden" name="userId" value={s.userId} />
+                                <button type="submit" title="Stop sharing" className="text-slate-400 hover:text-red-600">
+                                  ✕
+                                </button>
+                              </form>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {shareOptions.length > 0 && (
+                        <form action={shareNote} className="flex flex-col gap-2">
                           <input type="hidden" name="id" value={note.id} />
-                          <input type="hidden" name="userId" value={s.userId} />
-                          <button type="submit" title="Stop sharing" className="text-slate-400 hover:text-red-600">
-                            ✕
+                          <SearchSelect
+                            name="userId"
+                            required
+                            className="w-full"
+                            placeholder="Share with…"
+                            searchPlaceholder="Search people…"
+                            options={shareOptions.map((u) => ({ value: String(u.id), label: u.name }))}
+                          />
+                          <button type="submit" className="btn-secondary !py-1.5 text-xs">
+                            Share
                           </button>
                         </form>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {shareOptions.length > 0 && (
-                  <form action={shareNote} className="flex gap-2">
-                    <input type="hidden" name="id" value={note.id} />
-                    <SearchSelect
-                      name="userId"
-                      required
-                      className="w-48"
-                      placeholder="Share with…"
-                      searchPlaceholder="Search people…"
-                      options={shareOptions.map((u) => ({ value: String(u.id), label: u.name }))}
-                    />
-                    <button type="submit" className="btn-secondary !py-1.5 text-xs">
-                      Share
-                    </button>
-                  </form>
-                )}
-              </div>
-            )}
-
-            <div className="flex justify-end px-4 pb-3">
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
               <button
                 type="button"
                 onClick={closeEditor}
-                className="rounded-md px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-black/5"
+                className="ml-auto rounded-md px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-black/5"
               >
                 Close
               </button>
