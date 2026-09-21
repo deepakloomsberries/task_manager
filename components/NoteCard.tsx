@@ -73,10 +73,19 @@ export default function NoteCard({
   const [checkItems, setCheckItems] = useState<ChecklistItem[]>(() =>
     isChecklist ? parseChecklist(note.body) : []
   );
+  // The editor modal's own colour swatch saves via its own fetch call rather
+  // than a server action + revalidate, so nothing repaints this component's
+  // `note.color`-derived background until the next full refresh (on close).
+  // Track the live value here so the open modal recolours immediately.
+  const [liveColor, setLiveColor] = useState(note.color);
 
   useEffect(() => {
     if (isChecklist) setCheckItems(parseChecklist(note.body));
   }, [note.body, isChecklist]);
+
+  useEffect(() => {
+    setLiveColor(note.color);
+  }, [note.color]);
 
   async function toggleItem(i: number) {
     const next = checkItems.map((it, idx) => (idx === i ? { ...it, done: !it.done } : it));
@@ -349,7 +358,7 @@ export default function NoteCard({
                   }
                 : { visibility: "hidden" }
             }
-            className={`rounded-xl border shadow-2xl ${noteCard(note.color)}`}
+            className={`rounded-xl border shadow-2xl ${noteCard(liveColor)}`}
             onClick={(e) => e.stopPropagation()}
           >
             <div
@@ -375,6 +384,7 @@ export default function NoteCard({
                 initialBody={note.body}
                 initialColor={note.color}
                 images={note.images}
+                onColorChange={setLiveColor}
               />
             ) : (
               <NoteEditor
@@ -383,6 +393,7 @@ export default function NoteCard({
                 initialBody={note.body}
                 initialColor={note.color}
                 images={note.images}
+                onColorChange={setLiveColor}
               />
             )}
 

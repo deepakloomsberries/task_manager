@@ -22,12 +22,14 @@ export default function NoteEditor({
   initialBody,
   initialColor,
   images = [],
+  onColorChange,
 }: {
   id: number;
   initialTitle: string;
   initialBody: string;
   initialColor: string;
   images?: NoteImage[];
+  onColorChange?: (color: string) => void;
 }) {
   const [title, setTitle] = useState(initialTitle);
   const [body, setBody] = useState(initialBody);
@@ -151,6 +153,7 @@ export default function NoteEditor({
                   title={c.value}
                   onClick={() => {
                     setColor(c.value);
+                    onColorChange?.(c.value);
                     dirty.current = true;
                     flush();
                     setColorOpen(false);

@@ -21,12 +21,14 @@ export default function ChecklistNoteEditor({
   initialBody,
   initialColor,
   images = [],
+  onColorChange,
 }: {
   id: number;
   initialTitle: string;
   initialBody: string;
   initialColor: string;
   images?: NoteImage[];
+  onColorChange?: (color: string) => void;
 }) {
   const [title, setTitle] = useState(initialTitle);
   const [color, setColor] = useState(initialColor);
@@ -129,6 +131,7 @@ export default function ChecklistNoteEditor({
                   title={c.value}
                   onClick={() => {
                     setColor(c.value);
+                    onColorChange?.(c.value);
                     dirty.current = true;
                     if (timer.current) clearTimeout(timer.current);
                     void save();
