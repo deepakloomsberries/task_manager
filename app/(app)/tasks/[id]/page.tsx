@@ -604,7 +604,6 @@ export default async function TaskDetailPage({
                       <form key={s.value} action={setTaskStatus}>
                         <input type="hidden" name="id" value={task.id} />
                         <input type="hidden" name="status" value={s.value} />
-                        <input type="hidden" name="back" value={backTo} />
                         {isRevert ? (
                           <ConfirmButton
                             tone="primary"
