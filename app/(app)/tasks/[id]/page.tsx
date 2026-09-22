@@ -1091,7 +1091,6 @@ export default async function TaskDetailPage({
                     {(c.authorId === user.id || user.role === "ADMIN") && (
                       <form action={deleteComment} className="inline">
                         <input type="hidden" name="id" value={c.id} />
-                        <input type="hidden" name="back" value={backTo} />
                         <ConfirmButton message="Delete this comment?" className="text-xs text-slate-400 hover:text-red-600">
                           ✕
                         </ConfirmButton>
@@ -1109,7 +1108,6 @@ export default async function TaskDetailPage({
         </div>
         <form action={addComment} key={task.comments.length} className="mt-5 flex gap-3">
           <input type="hidden" name="taskId" value={task.id} />
-          <input type="hidden" name="back" value={backTo} />
           <MentionTextarea
             name="body"
             users={users}
