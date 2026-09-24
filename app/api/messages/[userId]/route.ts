@@ -79,7 +79,7 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
     // the same way deletedIds patches an already-loaded bubble.
     db.directMessage.findMany({
       where: { translatedAt: { gte: recentlyTranslatedSince }, ...conversationWhere },
-      select: { id: true, translatedBody: true, translatedLang: true },
+      select: { id: true, translatedBody: true, translatedLang: true, translationFailed: true },
     }),
   ]);
   const myStarredIds = new Set(starRows.map((s) => s.messageId));
@@ -105,6 +105,7 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
         body: isDeleted ? "" : m.body,
         translatedBody: isDeleted ? null : m.translatedBody,
         translatedLang: isDeleted ? null : m.translatedLang,
+        translationFailed: isDeleted ? false : m.translationFailed,
         senderId: m.senderId,
         createdAt: m.createdAt.toISOString(),
         deleted: isDeleted,

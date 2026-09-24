@@ -31,7 +31,7 @@ export default function ChatInfoPanel({
   links,
   starred,
   meId,
-  otherName,
+  resolveSenderName,
   onJump,
   onClose,
 }: {
@@ -40,7 +40,10 @@ export default function ChatInfoPanel({
   links: PanelLink[];
   starred: PanelStarred[];
   meId: number;
-  otherName: string;
+  /** First name of the sender for a starred message that isn't yours — a
+   *  single "other" person in a 1:1 thread, or a lookup by senderId in a
+   *  group thread. */
+  resolveSenderName: (senderId: number) => string;
   /** Close the panel and scroll the thread to this message. */
   onJump: (messageId: number) => void;
   onClose: () => void;
@@ -192,7 +195,7 @@ export default function ChatInfoPanel({
                 >
                   <span className="mb-0.5 flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
                     <span className="text-amber-500">★</span>
-                    {s.senderId === meId ? "You" : otherName.split(" ")[0]}
+                    {s.senderId === meId ? "You" : resolveSenderName(s.senderId).split(" ")[0]}
                     <span className="font-normal text-slate-400">· {dateLabel(s.at)}</span>
                   </span>
                   <span className="block truncate text-slate-700 dark:text-slate-200">

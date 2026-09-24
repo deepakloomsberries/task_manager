@@ -89,6 +89,7 @@ export default async function ConversationPage({ params }: { params: { userId: s
         body: m.deletedAt ? "" : m.body,
         translatedBody: m.deletedAt ? null : m.translatedBody,
         translatedLang: m.deletedAt ? null : m.translatedLang,
+        translationFailed: m.deletedAt ? false : m.translationFailed,
         senderId: m.senderId,
         createdAt: m.createdAt.toISOString(),
         deleted: !!m.deletedAt,

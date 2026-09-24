@@ -84,7 +84,11 @@ export default function CalendarGrid({
   };
 
   return (
-    <div className={`card overflow-x-auto ${isPending ? "opacity-90" : ""}`}>
+    <>
+      <p className="mb-2 text-xs text-slate-500 dark:text-slate-400 lg:hidden">
+        ← Swipe sideways to see the rest of the week →
+      </p>
+      <div className={`card overflow-x-auto ${isPending ? "opacity-90" : ""}`}>
       <div className="grid min-w-[840px] grid-cols-7 border-b border-slate-200 bg-slate-50">
         {WEEKDAYS.map((d) => (
           <div key={d} className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -212,6 +216,7 @@ export default function CalendarGrid({
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }
