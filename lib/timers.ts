@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { pushNotification } from "@/lib/notify";
 import { fmtHours } from "@/lib/ui";
+import { auditTimeEntry } from "@/lib/timeAudit";
 
 /**
  * How long a running timer may go without a ping from any open tab before we
@@ -13,9 +14,10 @@ type TimerRow = { id: number; userId: number; taskId: number; note: string | nul
 /**
  * Converts a running timer into a logged time entry. `endAt` defaults to now;
  * auto-stopped timers pass the last moment we knew the person was there.
+ * `actorId` is who stopped it (null when the system auto-stopped it).
  * Returns the hours logged.
  */
-export async function commitTimer(timer: TimerRow, endAt: Date = new Date()) {
+export async function commitTimer(timer: TimerRow, endAt: Date = new Date(), actorId: number | null = timer.userId) {
   const start = new Date(timer.startedAt);
   const end = endAt > start ? endAt : start;
   const elapsedHours = (end.getTime() - start.getTime()) / 3600000;
@@ -23,7 +25,7 @@ export async function commitTimer(timer: TimerRow, endAt: Date = new Date()) {
   const hours = Math.max(0.02, Math.round(elapsedHours * 60) / 60);
   const task = await db.task.findUnique({ where: { id: timer.taskId }, select: { projectId: true } });
 
-  await db.$transaction([
+  const [entry] = await db.$transaction([
     db.timeEntry.create({
       data: {
         userId: timer.userId,
@@ -39,6 +41,7 @@ export async function commitTimer(timer: TimerRow, endAt: Date = new Date()) {
     }),
     db.taskTimer.delete({ where: { id: timer.id } }),
   ]);
+  await auditTimeEntry(actorId === null ? "auto_stop" : "timer", actorId, null, entry);
   return hours;
 }
 
@@ -65,7 +68,7 @@ export async function reapStaleTimers(): Promise<number[]> {
   for (const t of stale) {
     const endAt = t.lastPingAt ?? t.user.lastSeenAt ?? t.startedAt;
     try {
-      const hours = await commitTimer(t, endAt);
+      const hours = await commitTimer(t, endAt, null);
       stopped.push(t.userId);
       await pushNotification(
         t.userId,

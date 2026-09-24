@@ -2,25 +2,43 @@
 
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { createSession, destroySession, requireUser } from "@/lib/auth";
 import { isStrongPassword } from "@/lib/password";
 import { notifyPasswordOtp } from "@/lib/mail";
 import { CHAT_LANGUAGES } from "@/lib/ui";
+import { LIMITS, clientIp, hit, isLimited, reset as clearLimit } from "@/lib/rateLimit";
 
 const OTP_TTL_MIN = 15;
 const OTP_MAX_ATTEMPTS = 5; // wrong-code guesses before the code is invalidated
 const OTP_MAX_SENDS = 5; // codes we'll email within one active window (resend cap)
 
+// bcrypt hash of a random string, compared against when the email is unknown.
+const DUMMY_HASH = "$2b$10$CC6rVNOW008B.W6HG3wfp.vMNi6Wy/w7CG0R24JCyCtPp8eV0j5vi";
+
 export async function login(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
 
+  const ip = clientIp(headers());
+  const emailKey = `login:email:${email}`;
+  const ipKey = `login:ip:${ip}`;
+  if (isLimited(emailKey, LIMITS.loginPerEmail) || isLimited(ipKey, LIMITS.loginPerIp)) {
+    redirect("/login?error=locked");
+  }
+
   const user = await db.user.findUnique({ where: { email } });
-  if (!user || !user.active || !(await bcrypt.compare(password, user.passwordHash))) {
+  // Always run a bcrypt compare so response time doesn't reveal whether the
+  // email has an account.
+  const ok = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
+  if (!user || !user.active || !ok) {
+    hit(emailKey, LIMITS.loginPerEmail);
+    hit(ipKey, LIMITS.loginPerIp);
     redirect("/login?error=1");
   }
 
+  clearLimit(emailKey);
   await createSession(user.id, user.role);
   redirect(user.mustChangePassword ? "/settings?first=1" : "/dashboard");
 }
@@ -37,6 +55,12 @@ export async function logout() {
  */
 export async function requestPasswordReset(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
+
+  const ipKey = `reset:req:${clientIp(headers())}`;
+  if (isLimited(ipKey, LIMITS.resetRequestPerIp)) {
+    redirect(`/forgot?step=code&email=${encodeURIComponent(email)}&error=throttled`);
+  }
+  hit(ipKey, LIMITS.resetRequestPerIp);
 
   if (email) {
     const user = await db.user.findUnique({ where: { email } });
@@ -83,11 +107,16 @@ export async function resetPasswordWithOtp(formData: FormData) {
   const failUrl = (err: string) =>
     `/forgot?step=code&email=${encodeURIComponent(email)}&error=${err}`;
 
+  const ipKey = `reset:verify:${clientIp(headers())}`;
+  if (isLimited(ipKey, LIMITS.resetVerifyPerIp)) redirect(failUrl("throttled"));
   if (!isStrongPassword(password)) redirect(failUrl("weak"));
 
   const user = email ? await db.user.findUnique({ where: { email } }) : null;
   const reset = user ? await db.passwordReset.findUnique({ where: { userId: user.id } }) : null;
-  if (!user || !user.active || !reset) redirect(failUrl("invalid"));
+  if (!user || !user.active || !reset) {
+    hit(ipKey, LIMITS.resetVerifyPerIp);
+    redirect(failUrl("invalid"));
+  }
 
   if (reset.expiresAt < new Date()) {
     await db.passwordReset.delete({ where: { userId: user.id } });
@@ -99,6 +128,7 @@ export async function resetPasswordWithOtp(formData: FormData) {
   }
 
   if (!(await bcrypt.compare(code, reset.codeHash))) {
+    hit(ipKey, LIMITS.resetVerifyPerIp);
     await db.passwordReset.update({
       where: { userId: user.id },
       data: { attempts: { increment: 1 } },

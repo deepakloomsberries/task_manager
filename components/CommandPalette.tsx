@@ -46,9 +46,12 @@ export function CommandButton() {
 
 type Item = { key: string; label: string; sub?: string; icon: string; run: () => void };
 
-export default function CommandPalette({ users, projects }: { users: Lite[]; projects: Lite[] }) {
+export default function CommandPalette() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [users, setUsers] = useState<Lite[]>([]);
+  const [projects, setProjects] = useState<Lite[]>([]);
+  const lookupsLoaded = useRef(false);
   const [mode, setMode] = useState<"search" | "add">("search");
   const [query, setQuery] = useState("");
   const [tasks, setTasks] = useState<TaskHit[]>([]);
@@ -81,6 +84,22 @@ export default function CommandPalette({ users, projects }: { users: Lite[]; pro
       window.removeEventListener("command:open", onOpen);
     };
   }, []);
+
+  // People/projects are only needed once the palette is open — load them lazily
+  // (once per page session) rather than on every server render of the layout.
+  useEffect(() => {
+    if (!open || lookupsLoaded.current) return;
+    lookupsLoaded.current = true;
+    fetch("/api/command/lookups", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d: { users: Lite[]; projects: Lite[] }) => {
+        setUsers(d.users);
+        setProjects(d.projects);
+      })
+      .catch(() => {
+        lookupsLoaded.current = false; // retry on next open
+      });
+  }, [open]);
 
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 0);

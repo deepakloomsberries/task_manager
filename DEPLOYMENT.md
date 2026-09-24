@@ -311,11 +311,23 @@ Command reference by type of change:
 
 ## Part 3 — Backups
 
-One-time setup (nightly at 02:00, 14-day retention):
+One-time setup (nightly at 02:00, 14-day retention). `scripts/backup.ts` takes a
+consistent snapshot with SQLite's `VACUUM INTO` (safe while the app is running —
+a plain `cp` of `dev.db` can capture a half-written file or miss data still in
+the WAL), runs an integrity check on it, copies `uploads/`, and prunes old days:
 
 ```bash
-(crontab -l 2>/dev/null; echo '0 2 * * * d=$(date +\%F); mkdir -p /home/kapil/backups/$d; cp /home/kapil/task_manager/prisma/dev.db /home/kapil/backups/$d/; cp -r /home/kapil/task_manager/uploads /home/kapil/backups/$d/ 2>/dev/null; find /home/kapil/backups -maxdepth 1 -mtime +14 -exec rm -rf {} \;') | crontab -
+# Remove the old cp-based entry if it's there, then add the new one.
+crontab -l 2>/dev/null | grep -v 'cp /home/kapil/task_manager/prisma/dev.db' | crontab -
+(crontab -l 2>/dev/null; echo '0 2 * * * cd /home/kapil/task_manager && /usr/bin/npx tsx scripts/backup.ts >> /var/log/task-backup.log 2>&1') | crontab -
 ```
+
+Backups land in `/home/kapil/backups/YYYY-MM-DD/` (override with `BACKUP_DIR`,
+retention with `BACKUP_KEEP_DAYS`). Run once by hand to check: `npm run backup`.
+Restore: `systemctl stop task-manager`, copy the chosen `dev.db` over
+`prisma/dev.db` (delete any `dev.db-wal`/`dev.db-shm` next to it), copy `uploads/`
+back, `systemctl start task-manager`. Keep a copy off the server too (e.g. a
+weekly `rclone`/`scp` of the backups folder to Google Drive or another machine).
 
 Required — nightly recurring-task roll-over at 00:05 (closes out each elapsed
 recurring occurrence — marking it missed if nobody finished it — and creates the
@@ -431,6 +443,29 @@ df -h /                         # disk usage within limits
 certbot renew --dry-run         # certificate auto-renewal functional
 systemctl status task-manager   # service active
 ```
+
+## Part 8 — Error monitoring (Sentry)
+
+The app reports crashes to [Sentry](https://sentry.io) (free tier is plenty).
+It stays switched off until a DSN is configured.
+
+1. Create a Sentry project (platform: Next.js) and copy its DSN.
+2. Add to `.env`:
+
+   ```
+   SENTRY_DSN="https://…@o0.ingest.sentry.io/0"
+   NEXT_PUBLIC_SENTRY_DSN="https://…@o0.ingest.sentry.io/0"   # same DSN; baked in at build time
+   SENTRY_ENVIRONMENT="production"
+   # Optional — readable stack traces (uploads source maps during build):
+   # SENTRY_ORG="looms-berries"  SENTRY_PROJECT="task-manager"  SENTRY_AUTH_TOKEN="sntrys_…"
+   ```
+
+3. `npm run build && systemctl restart task-manager`.
+
+Server errors (pages, API routes, server actions) and browser errors both show
+up in Sentry with the stack trace. Set an alert rule there to email you on new issues.
+
+---
 
 ## Prohibited actions
 

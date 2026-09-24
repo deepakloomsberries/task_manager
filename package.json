@@ -7,14 +7,18 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "reminders": "tsx scripts/reminders.ts",
     "digest": "tsx scripts/digest.ts",
+    "backup": "tsx scripts/backup.ts",
     "setup": "prisma generate && prisma db push && tsx prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "@sentry/nextjs": "^10.75.3",
     "bcryptjs": "^3.0.3",
     "jose": "^6.2.3",
     "next": "14.2.35",
@@ -37,6 +41,7 @@
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "tsx": "^4.23.1",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.7"
   }
 }

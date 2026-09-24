@@ -586,6 +586,26 @@ model PushSubscription {
 }
 
 /**
+ * Append-only history of changes to time entries — who created, edited or
+ * deleted which entry, with a snapshot before and after — so edits to a week
+ * before it's submitted remain visible to managers. No foreign key to the
+ * entry itself, so the trail survives the entry being deleted.
+ */
+model TimeEntryAudit {
+  id          Int      @id @default(autoincrement())
+  timeEntryId Int
+  ownerId     Int // whose timesheet the entry belongs to
+  actorId     Int? // who made the change; null = the system (auto-stopped timer)
+  action      String // create | update | delete | timer | auto_stop
+  before      String? // JSON snapshot before the change
+  after       String? // JSON snapshot after the change
+  createdAt   DateTime @default(now())
+
+  @@index([ownerId, createdAt])
+  @@index([timeEntryId])
+}
+
+/**
  * A live, running stopwatch for a task. There is at most one per user (enforced
  * by the unique userId) — starting a timer stops any other one first, matching
  * the way tools like Toggl or Asana track "what am I working on right now".

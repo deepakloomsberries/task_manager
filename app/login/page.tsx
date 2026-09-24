@@ -22,7 +22,9 @@ export default function LoginPage({
 
         {searchParams.error && (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            Invalid email or password, or your account is deactivated.
+            {searchParams.error === "locked"
+              ? "Too many failed sign-in attempts. Please wait 15 minutes and try again."
+              : "Invalid email or password, or your account is deactivated."}
           </div>
         )}
 

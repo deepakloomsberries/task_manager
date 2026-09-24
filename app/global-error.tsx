@@ -1,11 +1,18 @@
 "use client";
 
+import { useEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
+
 /**
  * Last-resort fallback for an error thrown in the root layout itself (rare —
  * app/error.tsx handles everything else). This replaces the whole document,
  * so it can't rely on globals.css having loaded; styles are inlined.
  */
-export default function GlobalError() {
+export default function GlobalError({ error }: { error: Error & { digest?: string } }) {
+  useEffect(() => {
+    Sentry.captureException(error);
+  }, [error]);
+
   return (
     <html lang="en">
       <body style={{ margin: 0, fontFamily: "system-ui, -apple-system, sans-serif", background: "#f8fafc" }}>

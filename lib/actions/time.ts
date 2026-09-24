@@ -8,15 +8,8 @@ import { pushNotification, logActivity } from "@/lib/notify";
 import { parseHours } from "@/lib/ui";
 import { weekStartOf } from "@/lib/timerange";
 import { commitTimer } from "@/lib/timers";
-
-/** Whether a user's week has been submitted/approved and is therefore locked. */
-async function weekLocked(userId: number, date: Date | string) {
-  const weekStart = weekStartOf(date);
-  const sub = await db.timesheetSubmission.findUnique({
-    where: { userId_weekStart: { userId, weekStart } },
-  });
-  return !!sub && (sub.status === "SUBMITTED" || sub.status === "APPROVED");
-}
+import { auditTimeEntry } from "@/lib/timeAudit";
+import { weekLocked } from "@/lib/timesheetLock";
 
 /**
  * Resolves the hours and optional precise window from the form. A person can
@@ -56,9 +49,10 @@ export async function createTimeEntry(formData: FormData) {
     redirect(`${backFrom(formData)}${backFrom(formData).includes("?") ? "&" : "?"}error=locked`);
   }
 
-  await db.timeEntry.create({
+  const created = await db.timeEntry.create({
     data: { userId: user.id, date: new Date(date), hours, startedAt, endedAt, taskId, projectId, note },
   });
+  await auditTimeEntry("create", user.id, null, created);
   revalidatePath("/timesheet");
   redirect(backFrom(formData));
 }
@@ -92,10 +86,11 @@ export async function updateTimeEntry(formData: FormData) {
     redirect(`${back}${sep}error=locked`);
   }
 
-  await db.timeEntry.update({
+  const updated = await db.timeEntry.update({
     where: { id },
     data: { date: new Date(date), hours, startedAt, endedAt, taskId, projectId, note },
   });
+  await auditTimeEntry("update", user.id, existing, updated);
   revalidatePath("/timesheet");
   redirect(back);
 }
@@ -108,7 +103,8 @@ export async function deleteTimeEntry(formData: FormData) {
   if (entry && (await weekLocked(user.id, entry.date))) {
     redirect(`${back}${back.includes("?") ? "&" : "?"}error=locked`);
   }
-  await db.timeEntry.deleteMany({ where: { id, userId: user.id } });
+  const { count } = await db.timeEntry.deleteMany({ where: { id, userId: user.id } });
+  if (entry && count > 0) await auditTimeEntry("delete", user.id, entry, null);
   revalidatePath("/timesheet");
   redirect(back);
 }

@@ -31,7 +31,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Stop timers left running on a closed browser / shut-down laptop.
   await reapStaleTimers();
 
-  const [unread, unreadMessages, activeTimer, myTasksDue, paletteUsers, paletteProjects] =
+  const [unread, unreadMessages, activeTimer, myTasksDue] =
     await Promise.all([
       db.notification.count({ where: { userId: user.id, read: false } }),
       db.directMessage.count({ where: { recipientId: user.id, read: false } }),
@@ -46,12 +46,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           dueDate: { not: null, lte: endOfToday },
           OR: [{ assigneeId: user.id }, { collaborators: { some: { userId: user.id } } }],
         },
-      }),
-      db.user.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-      db.project.findMany({
-        where: { status: { in: ["ACTIVE", "ON_HOLD"] } },
-        orderBy: { name: "asc" },
-        select: { id: true, name: true },
       }),
     ]);
 
@@ -70,7 +64,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="flex h-screen">
       <Heartbeat />
       <PushSetup />
-      <CommandPalette users={paletteUsers} projects={paletteProjects} />
+      <CommandPalette />
       <DesktopSidebar isAdmin={isAdmin} isManager={isManager} badges={navBadges} />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 print:hidden sm:gap-4 sm:px-6 dark:border-slate-700 dark:bg-slate-800">
