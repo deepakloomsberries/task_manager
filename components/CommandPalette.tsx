@@ -21,6 +21,7 @@ const NAV: { label: string; href: string; icon: string }[] = [
   { label: "Notes", href: "/notes", icon: "✎" },
   { label: "Reports", href: "/reports", icon: "▙" },
   { label: "Settings", href: "/settings", icon: "⚙" },
+  { label: "Help & how-to guide", href: "/use", icon: "?" },
 ];
 
 /** Small header button that opens the palette (works on touch, where ⌘K can't). */

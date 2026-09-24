@@ -346,6 +346,15 @@ overdue and due-today tasks; requires SMTP to be configured in `.env`):
 (crontab -l 2>/dev/null; echo '0 8 * * * cd /home/kapil/task_manager && /usr/bin/npx tsx scripts/reminders.ts >> /var/log/task-reminders.log 2>&1') | crontab -
 ```
 
+Recommended — Friday 16:00 timesheet reminder (in-app notification, browser push
+and email for everyone whose week isn't submitted yet; safe to re-run — nobody
+is reminded twice in a day). Set `TIMESHEET_REMINDER_ROLES` in `.env` to change
+who gets it (default `EMPLOYEE,MANAGER`):
+
+```bash
+(crontab -l 2>/dev/null; echo '0 16 * * 5 cd /home/kapil/task_manager && /usr/bin/npx tsx scripts/timesheet-reminder.ts >> /var/log/task-timesheet-reminder.log 2>&1') | crontab -
+```
+
 Verify registration: `crontab -l`
 
 > The `/home/kapil/backups` directory is created by the first 02:00 run. "No such

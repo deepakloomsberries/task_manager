@@ -36,7 +36,7 @@ export default function ActiveTimerBanner({
           {title}
         </Link>
       </div>
-      <span className="font-mono text-2xl font-bold tabular-nums text-sky-600 dark:text-sky-400">
+      <span className="font-mono text-2xl font-bold tabular-nums text-sky-600 dark:text-sky-400" suppressHydrationWarning>
         {fmtDuration(elapsed)}
       </span>
       <div className="flex gap-2">

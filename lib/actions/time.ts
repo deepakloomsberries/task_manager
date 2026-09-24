@@ -7,7 +7,7 @@ import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import { pushNotification, logActivity } from "@/lib/notify";
 import { parseHours } from "@/lib/ui";
 import { weekStartOf } from "@/lib/timerange";
-import { commitTimer } from "@/lib/timers";
+import { backdatedStart, commitTimer } from "@/lib/timers";
 import { auditTimeEntry } from "@/lib/timeAudit";
 import { weekLocked } from "@/lib/timesheetLock";
 
@@ -127,13 +127,14 @@ export async function commitTimersForTask(taskId: number): Promise<number> {
  * Harvest. No-ops if they're already timing this task. Shared by the Start-timer
  * button and the auto-start when a task is moved to In Progress.
  */
-export async function startTimerFor(userId: number, taskId: number) {
+export async function startTimerFor(userId: number, taskId: number, minutesAgo = 0) {
   const existing = await db.taskTimer.findUnique({ where: { userId } });
-  if (existing) {
-    if (existing.taskId === taskId) return; // already timing this task
-    await commitTimer(existing);
-  }
-  await db.taskTimer.create({ data: { userId, taskId, lastPingAt: new Date() } });
+  if (existing?.taskId === taskId) return; // already timing this task
+  // "I forgot to start it" — count from when they really began. Whatever they
+  // were timing before is banked up to that same moment.
+  const startedAt = backdatedStart(minutesAgo, new Date(), existing?.startedAt);
+  if (existing) await commitTimer(existing, startedAt);
+  await db.taskTimer.create({ data: { userId, taskId, startedAt, lastPingAt: new Date() } });
 }
 
 /**
@@ -152,7 +153,7 @@ export async function startTaskTimer(formData: FormData) {
 
   const existing = await db.taskTimer.findUnique({ where: { userId: user.id } });
   if (existing && existing.taskId === taskId) redirect(back); // already timing this task
-  await startTimerFor(user.id, taskId);
+  await startTimerFor(user.id, taskId, Number(formData.get("minutesAgo") ?? 0));
 
   // Starting the clock means work has begun, so nudge a fresh task out of the
   // backlog into "In Progress" automatically (only from To-Do — never override

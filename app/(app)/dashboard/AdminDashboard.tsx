@@ -1,4 +1,5 @@
 import Link from "next/link";
+import GettingStarted from "@/components/GettingStarted";
 import ReviewTasksBanner from "@/components/ReviewTasksBanner";
 import { db } from "@/lib/db";
 import UserAvatar from "@/components/UserAvatar";
@@ -27,6 +28,9 @@ type AdminUser = {
   id: number;
   name: string;
   role: string;
+  createdAt: Date;
+  avatarPath: string | null;
+  preferredLanguage: string | null;
   company: { code: string };
 };
 
@@ -214,6 +218,8 @@ export default async function AdminDashboard({ user }: { user: AdminUser }) {
           ))}
         </div>
       </div>
+
+      <GettingStarted user={user} />
 
       <div className="grid min-w-0 gap-6 lg:grid-cols-3">
         {/* Left */}

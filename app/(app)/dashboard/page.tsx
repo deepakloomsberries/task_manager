@@ -11,6 +11,7 @@ import QuickAdd from "@/components/QuickAdd";
 import ReviewTasksBanner from "@/components/ReviewTasksBanner";
 import AutoRefresh from "@/components/AutoRefresh";
 import AdminDashboard from "./AdminDashboard";
+import GettingStarted from "@/components/GettingStarted";
 import { companyTimezone, zonedStartOfToday, zonedHour, zonedDateLine } from "@/lib/tz";
 import {
   TASK_PRIORITIES,
@@ -166,6 +167,8 @@ export default async function DashboardPage() {
           ))}
         </div>
       </div>
+
+      <GettingStarted user={user} />
 
       <div className="grid min-w-0 gap-6 lg:grid-cols-3">
         {/* Left: focus + agenda */}

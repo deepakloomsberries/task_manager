@@ -58,6 +58,10 @@ async function main() {
   const fatima = await user("Fatima Noor", "fatima@demo.local", "EMPLOYEE", uae.id, lst.id, "Listing Executive", 0);
   const rohan = await user("Rohan Iyer", "rohan@demo.local", "EMPLOYEE", ind.id, data.id, "Data Analyst", 300);
   const people = [priya, arjun, karan, sara, fatima, rohan];
+  for (const u of [priya, arjun, sara, fatima, rohan]) {
+    await db.user.update({ where: { id: u.id }, data: { createdAt: new Date(Date.now() - 120 * DAY) } });
+  }
+  await db.user.update({ where: { id: karan.id }, data: { createdAt: new Date(Date.now() - 6 * DAY), preferredLanguage: null } });
 
   const project = async (name: string, description: string, companyId: number, members: number[], status = "ACTIVE") =>
     db.project.create({
@@ -92,11 +96,11 @@ async function main() {
 
   const t1 = await task({
     title: "Finalise festive catalogue photography", status: "IN_PROGRESS", priority: "HIGH", due: 1, assignee: karan.id,
-    project: festive.id, est: 6, start: -2, collab: [fatima.id],
+    project: festive.id, est: 24, start: -2, collab: [fatima.id],
     description: "Shoot the 40 hero SKUs on white + lifestyle backgrounds.\n\n- Use the new lightbox in the studio\n- Export 2000×2000 JPGs to the shared Drive\n- Tag Fatima when images are ready for listing",
   });
   await task({ title: "Draft social media campaign calendar", status: "IN_PROGRESS", priority: "MEDIUM", due: 3, assignee: arjun.id, project: festive.id, est: 4 });
-  const t3 = await task({ title: "Reconcile October vendor invoices", status: "REVIEW", priority: "URGENT", due: 0, assignee: sara.id, project: audit.id, est: 5 });
+  const t3 = await task({ title: "Reconcile October vendor invoices", status: "REVIEW", priority: "URGENT", due: 0, assignee: sara.id, project: audit.id, est: 40 });
   await task({ title: "Warehouse stock count — Riyadh hub", status: "TODO", priority: "MEDIUM", due: 5, assignee: karan.id, project: festive.id, est: 8 });
   await task({ title: "Customer FAQ translation pass", status: "DONE", priority: "LOW", due: -1, assignee: fatima.id, project: festive.id, est: 2 });
   await task({ title: "Approve influencer shortlist", status: "TODO", priority: "HIGH", due: 2, assignee: priya.id, project: festive.id, est: 1 });
@@ -108,6 +112,49 @@ async function main() {
   await task({ title: "Weekly stock reconciliation", status: "TODO", priority: "MEDIUM", due: 3, assignee: karan.id, recurrence: "WEEKLY", est: 2 });
   await task({ title: "Monthly GST filing", status: "TODO", priority: "HIGH", due: 12, assignee: sara.id, recurrence: "MONTHLY", est: 3 });
   await task({ title: "Review campaign budget", status: "TODO", priority: "MEDIUM", due: 1, assignee: priya.id, project: festive.id, est: 1 });
+
+  // Completed tasks with estimates + logged time, for "Estimates vs actual".
+  const doneWithTime: [string, number, number, number][] = [
+    ["Campaign brief for festive ads", arjun.id, 3, 2.5],
+    ["Vendor master list cleanup", sara.id, 4, 6.5],
+    ["Final price sheet to Accounts", priya.id, 1, 1],
+    ["Size-chart images for kurtas", fatima.id, 2, 1.25],
+  ];
+  for (const [title, who, est, logged] of doneWithTime) {
+    const dt = await task({ title, status: "DONE", priority: "MEDIUM", due: -2, assignee: who, project: festive.id, est });
+    await db.timeEntry.create({
+      data: { userId: who, taskId: dt.id, projectId: festive.id, date: dateOnly(-2), hours: logged, source: "timer" },
+    });
+  }
+
+  // Tags, a dependency and a subtask checklist on the photography task.
+  const tagPhoto = await db.tag.create({ data: { name: "photography", color: "purple" } });
+  const tagFestive = await db.tag.create({ data: { name: "festive", color: "amber" } });
+  await db.taskTag.createMany({ data: [{ taskId: t1.id, tagId: tagPhoto.id }, { taskId: t1.id, tagId: tagFestive.id }] });
+  const studio = await task({ title: "Book studio & lightbox", status: "IN_PROGRESS", priority: "HIGH", due: 0, assignee: karan.id, project: festive.id, est: 1 });
+  await db.taskDependency.create({ data: { taskId: t1.id, blockerId: studio.id } });
+
+  // Something in the recycle bin.
+  await task({ title: "Old Diwali banner draft (duplicate)", status: "TODO", assignee: arjun.id, project: festive.id }).then((d) =>
+    db.task.update({ where: { id: d.id }, data: { deletedAt: at(-1, 15) } })
+  );
+
+  // A reusable project template.
+  await db.projectTemplate.create({
+    data: {
+      name: "New marketplace launch",
+      description: "Everything needed to list a new brand on a marketplace.",
+      items: {
+        create: [
+          { title: "Create brand registry", priority: "HIGH", dueOffsetDays: 2, order: 0 },
+          { title: "Shoot catalogue images", priority: "HIGH", dueOffsetDays: 7, order: 1 },
+          { title: "Write titles & bullet points", priority: "MEDIUM", dueOffsetDays: 10, order: 2 },
+          { title: "Set up pricing & inventory", priority: "MEDIUM", dueOffsetDays: 12, order: 3 },
+          { title: "Go-live checklist", priority: "URGENT", dueOffsetDays: 14, order: 4 },
+        ],
+      },
+    },
+  });
 
   for (const [title, status] of [["Hero SKUs — white background", "DONE"], ["Lifestyle shots", "IN_PROGRESS"], ["Upload to shared Drive", "TODO"]] as const) {
     await task({ title, status, assignee: karan.id, project: festive.id, parentId: t1.id, due: 1 });
@@ -168,7 +215,7 @@ async function main() {
   await db.timesheetSubmission.create({ data: { userId: fatima.id, weekStart, totalHours: 27, status: "SUBMITTED" } });
 
   // Running timers (the "working now" chips). lastPingAt keeps them alive.
-  await db.taskTimer.create({ data: { userId: karan.id, taskId: t1.id, startedAt: new Date(Date.now() - 47 * 60_000), lastPingAt: new Date() } });
+  await db.taskTimer.create({ data: { userId: karan.id, taskId: t1.id, startedAt: new Date(Date.now() - (4 * 60 + 22) * 60_000), lastPingAt: new Date() } });
 
   await db.note.createMany({
     data: [

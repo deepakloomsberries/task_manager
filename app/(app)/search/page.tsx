@@ -2,6 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { TASK_STATUSES, lookup, fmtDate } from "@/lib/ui";
+import { parseChecklist } from "@/lib/checklist";
 
 export const dynamic = "force-dynamic";
 
@@ -138,7 +139,13 @@ export default async function SearchPage({
             {notes.map((n) => (
               <Link key={n.id} href="/notes" className="block px-5 py-3 hover:bg-slate-50">
                 <div className="text-sm font-medium">{n.title}</div>
-                <div className="truncate text-xs text-slate-500">{n.body}</div>
+                <div className="truncate text-xs text-slate-500">
+                  {n.type === "checklist"
+                    ? parseChecklist(n.body)
+                        .map((it) => `${it.done ? "✓" : "☐"} ${it.text}`)
+                        .join("  ·  ")
+                    : n.body}
+                </div>
               </Link>
             ))}
           </div>

@@ -138,6 +138,21 @@ export function notifyTaskReminder(opts: {
   );
 }
 
+export function notifyTimesheetReminder(opts: { to: string; name: string; hours: number }) {
+  const h = Math.round(opts.hours * 60);
+  const logged = h > 0 ? `${Math.floor(h / 60)}h${h % 60 ? ` ${h % 60}m` : ""}` : "no time";
+  const lines = [
+    `Hi ${esc(opts.name)},`,
+    `It's the end of the week — you've logged <b>${logged}</b> so far and your timesheet hasn't been submitted yet.`,
+    `Please check your entries and click <b>Submit week for approval</b>.`,
+  ];
+  sendMail(
+    opts.to,
+    "Reminder: submit this week's timesheet",
+    emailShell("Timesheet reminder", lines, `${APP_URL}/timesheet?range=week`, "Open my time sheet")
+  );
+}
+
 export function notifyUserWelcome(opts: {
   to: string;
   name: string;
@@ -149,6 +164,7 @@ export function notifyUserWelcome(opts: {
     `Sign in with this email address (<b>${esc(opts.to)}</b>) and the temporary password below:`,
     `<b style="font-size:16px;letter-spacing:1px">${esc(opts.password)}</b>`,
     `You will be asked to set your own password the first time you sign in.`,
+    `New here? The illustrated how-to guide takes five minutes: <a href="${APP_URL}/use">${APP_URL}/use</a>`,
   ];
   sendMail(
     opts.to,

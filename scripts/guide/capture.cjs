@@ -269,6 +269,190 @@ const SHOTS = [
     },
   },
   {
+    id: "help-menu", path: "/tasks/3",
+    before: async (p) => {
+      await p.evaluate(() => {
+        const nav = document.querySelector("aside nav");
+        if (nav) nav.scrollTop = nav.scrollHeight;
+      });
+      await p.getByLabel("Help and how-to guide").click();
+      await p.waitForTimeout(300);
+    },
+    spots: {
+      button: (p) => p.getByLabel("Help and how-to guide"),
+      thispage: (p) => p.getByText("Help for this page").locator(".."),
+      related: (p) => p.getByText("Related", { exact: true }).locator(".."),
+      full: (p) => p.getByRole("menuitem", { name: /Open the full guide/ }),
+      sidebar: (p) => p.getByRole("link", { name: /Help & guide/ }).first(),
+    },
+  },
+  {
+    id: "ai-task", path: "/tasks",
+    before: async (p) => {
+      await p.getByText("New task with AI").first().click();
+      await p.locator("textarea").first().fill(
+        "Hi team — Riyadh warehouse says 120 units of the Eid gift box are damaged. Can someone raise a claim with BlueLine Logistics by Monday? Urgent. — Sara"
+      );
+    },
+    spots: {
+      box: (p) => p.locator("textarea").first(),
+      draft: (p) => p.getByRole("button", { name: "Draft with AI" }),
+      close: (p) => p.getByText("Create a task with AI").locator("xpath=../..").getByRole("button", { name: "Close" }),
+    },
+  },
+  {
+    id: "import-tasks", path: "/tasks?import=1",
+    spots: {
+      columns: (p) => p.getByText("Bulk import tasks from Excel").locator(".."),
+      template: (p) => p.getByRole("link", { name: /Blank template/ }),
+      file: (p) => p.locator("input[type=file]").first(),
+      preview: (p) => p.getByRole("button", { name: "Preview" }),
+    },
+  },
+  {
+    id: "subtasks", path: "/tasks/1",
+    before: async (p) => {
+      await p.getByText("Dependencies", { exact: true }).first().scrollIntoViewIfNeeded();
+      await p.evaluate(() => {
+        const el = [...document.querySelectorAll("h2")].find((h) => h.textContent?.trim() === "Dependencies");
+        el?.scrollIntoView({ block: "start" });
+        document.querySelector("main")?.scrollBy(0, -90);
+      });
+      await p.waitForTimeout(300);
+    },
+    spots: {
+      blocker: (p) => p.getByText("Book studio & lightbox").first().locator("xpath=ancestor::*[self::li or self::div][1]"),
+      addblocker: (p) => p.getByRole("button", { name: "Add blocker" }),
+      progress: (p) => p.getByText("Subtasks", { exact: false }).locator("xpath=ancestor::div[contains(@class,'card')][1]").locator(".bg-green-500").first(),
+      subtask: (p) => p.getByText("Lifestyle shots").first(),
+    },
+  },
+  {
+    id: "task-tags", path: "/tasks/1",
+    spots: {
+      tags: (p) => p.getByText(/^photography/).first().locator(".."),
+      addtag: (p) => p.getByText("+ tag").first(),
+      blocked: (p) => p.getByText("⛔ Blocked").first(),
+      done: (p) => p.getByText("Status", { exact: true }).first().locator("..").getByText(/Done/).first(),
+    },
+  },
+  {
+    id: "review-approve", path: "/tasks/3",
+    spots: {
+      inreview: (p) => p.getByText(/In Review/).filter({ hasText: "now" }).first(),
+      approve: (p) => p.getByRole("button", { name: "Approve" }).first(),
+      todo: (p) => p.getByRole("button", { name: "To Do" }).first(),
+    },
+  },
+  {
+    id: "backdate", path: "/tasks/14",
+    before: async (p) => {
+      await p.getByRole("button", { name: /Started earlier/ }).click();
+      await p.locator("select[name=minutesAgo]").selectOption("30");
+      await p.getByText("Time tracking").first().scrollIntoViewIfNeeded();
+      await p.evaluate(() => document.querySelector("main")?.scrollBy(0, 200));
+    },
+    spots: {
+      toggle: (p) => p.getByRole("button", { name: /Started earlier/ }),
+      minutes: (p) => p.locator("select[name=minutesAgo]"),
+      startthen: (p) => p.getByRole("button", { name: /Start from then/ }),
+      start: (p) => p.getByRole("button", { name: /Start timer/ }),
+    },
+  },
+  {
+    id: "templates", path: "/templates",
+    spots: {
+      create: (p) => p.getByRole("button", { name: "Create template" }).locator("xpath=ancestor::form[1]"),
+      row: (p) => p.getByText("New marketplace launch").first().locator("xpath=ancestor::div[contains(@class,'card')][1]"),
+      edit: (p) => p.getByText("Edit tasks").first(),
+    },
+  },
+  {
+    id: "people-profile", path: "/people/3",
+    spots: {
+      message: (p) => p.getByRole("link", { name: "Message", exact: true }).or(p.getByRole("button", { name: "Message", exact: true })).first(),
+      stats: (p) => p.getByText("Open tasks").first().locator("xpath=ancestor::div[contains(@class,'grid')][1]"),
+      now: (p) => p.getByText(/is working on now/).first().locator("xpath=ancestor::div[contains(@class,'card')][1]"),
+      manage: (p) => p.getByText("Manage account").first().locator("xpath=ancestor::details[1]"),
+    },
+  },
+  {
+    id: "search-results", path: "/search?q=festive",
+    spots: {
+      tasks: (p) => p.getByRole("heading", { name: "Tasks" }).locator(".."),
+      docs: (p) => p.getByRole("heading", { name: "Documents" }).locator(".."),
+      notes: (p) => p.getByRole("heading", { name: "Your notes" }).locator(".."),
+    },
+  },
+  {
+    id: "recycle-bin", path: "/trash",
+    spots: {
+      search: (p) => p.getByRole("button", { name: "Search" }).locator("xpath=ancestor::form[1]"),
+      restore: (p) => p.getByRole("button", { name: "Restore" }).first(),
+      forever: (p) => p.getByRole("button", { name: /Delete/ }).first(),
+    },
+  },
+  {
+    id: "departments", path: "/departments",
+    spots: {
+      add: (p) => p.locator("input[name=name]").first().locator("xpath=ancestor::form[1]"),
+      list: (p) => p.locator("table").first().or(p.getByText("Marketing").first().locator("xpath=ancestor::div[contains(@class,'card')][1]")).first(),
+    },
+  },
+  {
+    id: "billing", path: "/billing",
+    spots: {
+      month: (p) => p.getByText(/This month/).first().locator("xpath=ancestor::div[contains(@class,'card')][1]"),
+      rate: (p) => p.getByRole("heading", { name: "Rate" }).locator("xpath=ancestor::div[contains(@class,'card')][1]"),
+      snapshot: (p) => p.getByRole("button", { name: /Generate this month/ }),
+      pdf: (p) => p.getByRole("button", { name: /Print/ }).or(p.getByRole("link", { name: /Print/ })).first(),
+    },
+  },
+  {
+    id: "notification-settings", path: "/settings",
+    before: async (p) => {
+      await p.getByRole("heading", { name: "Notifications" }).scrollIntoViewIfNeeded();
+      await p.evaluate(() => document.querySelector("main")?.scrollBy(0, 250));
+    },
+    spots: {
+      email: (p) => p.getByText("Email notifications", { exact: true }).locator("xpath=../.."),
+      save: (p) => p.getByRole("button", { name: "Save preferences" }),
+      password: (p) => p.getByRole("heading", { name: /password/i }).first().locator("xpath=ancestor::div[contains(@class,'card')][1]"),
+    },
+  },
+  {
+    id: "reports-estimates", path: "/reports",
+    before: async (p) => {
+      await p.getByRole("heading", { name: "Estimates vs actual" }).scrollIntoViewIfNeeded();
+      await p.evaluate(() => {
+        const h = [...document.querySelectorAll("h2")].find((x) => x.textContent === "Estimates vs actual");
+        h?.scrollIntoView({ block: "start" });
+        document.querySelector("main")?.scrollBy(0, -40);
+      });
+    },
+    spots: {
+      totals: (p) => p.getByText("Tasks compared").locator("xpath=../.."),
+      bands: (p) => p.getByText(/^On target:/).locator(".."),
+      people: (p) => p.getByRole("heading", { name: "Estimates vs actual" }).locator("xpath=ancestor::div[contains(@class,'card')][1]").locator("table"),
+      over: (p) => p.getByText("Open tasks already over their estimate").locator(".."),
+    },
+  },
+  {
+    id: "welcome", path: "/dashboard", as: "karan",
+    before: async (p) => p.waitForTimeout(1200),
+    spots: {
+      checklist: (p) => p.getByLabel("Getting started"),
+      step: (p) => p.getByRole("link", { name: /Add a profile photo/ }),
+      showme: (p) => p.getByRole("link", { name: "Show me how" }).first(),
+      guide: (p) => p.getByRole("link", { name: /5-minute guide/ }),
+      dismiss: (p) => p.getByRole("button", { name: "Dismiss" }),
+      prompt: (p) => p.getByRole("alertdialog"),
+      keep: (p) => p.getByRole("button", { name: "Yes, keep going" }),
+      stopnow: (p) => p.getByRole("alertdialog").getByRole("button", { name: /Stop/ }),
+      pill: (p) => p.locator("header a[href^='/tasks/']").first(),
+    },
+  },
+  {
     id: "timer-running", path: "/tasks/6",
     before: async (p) => {
       const start = p.getByRole("button", { name: /Start timer|Switch timer/ });
@@ -313,11 +497,12 @@ async function box(page, loc, clipY) {
   const anon = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 2 });
   const ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 2 });
   const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+  const karan = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 2 });
 
-  for (const c of [ctx, phone]) {
+  for (const [c, email] of [[ctx, "priya@demo.local"], [phone, "priya@demo.local"], [karan, "karan@demo.local"]]) {
     const p = await c.newPage();
     await p.goto(`${BASE}/login`);
-    await p.fill("input[name=email]", "priya@demo.local");
+    await p.fill("input[name=email]", email);
     await p.fill("input[name=password]", "Demo@12345");
     await Promise.all([p.waitForURL(/dashboard/), p.click("button[type=submit]")]);
     await p.close();
@@ -325,7 +510,7 @@ async function box(page, loc, clipY) {
 
   for (const shot of SHOTS) {
     if (ONLY && !ONLY.includes(shot.id)) continue;
-    const c = shot.auth === false ? anon : shot.mobile ? phone : ctx;
+    const c = shot.auth === false ? anon : shot.mobile ? phone : shot.as === "karan" ? karan : ctx;
     const p = await c.newPage();
     await p.goto(BASE + shot.path, { waitUntil: "networkidle" });
     await p.addStyleTag({ content: "*{caret-color:transparent!important} nextjs-portal{display:none!important}" });

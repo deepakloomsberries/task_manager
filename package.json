@@ -14,6 +14,7 @@
     "reminders": "tsx scripts/reminders.ts",
     "digest": "tsx scripts/digest.ts",
     "backup": "tsx scripts/backup.ts",
+    "timesheet-reminder": "tsx scripts/timesheet-reminder.ts",
     "setup": "prisma generate && prisma db push && tsx prisma/seed.ts"
   },
   "dependencies": {

@@ -9,6 +9,22 @@ import { auditTimeEntry } from "@/lib/timeAudit";
  */
 export const TIMER_STALE_MS = 15 * 60 * 1000;
 
+/** How far back "I forgot to start the timer" can reach. */
+export const MAX_BACKDATE_MIN = 8 * 60;
+
+/**
+ * When a timer should count from if the person says they actually started
+ * `minutesAgo` minutes ago. Never earlier than MAX_BACKDATE_MIN, and never
+ * before a timer they're switching away from began (the two can't overlap).
+ * Invalid input means "now".
+ */
+export function backdatedStart(minutesAgo: unknown, now: Date = new Date(), switchingFrom?: Date | null): Date {
+  const m = Math.floor(Number(minutesAgo));
+  if (!Number.isFinite(m) || m <= 0) return now;
+  const start = new Date(now.getTime() - Math.min(m, MAX_BACKDATE_MIN) * 60_000);
+  return switchingFrom && start < switchingFrom ? new Date(switchingFrom) : start;
+}
+
 type TimerRow = { id: number; userId: number; taskId: number; note: string | null; startedAt: Date };
 
 /**

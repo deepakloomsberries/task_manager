@@ -60,6 +60,21 @@ export const CATEGORIES: Category[] = [
         ],
       },
       {
+        id: "welcome",
+        title: "Your first-week checklist",
+        audience: "Everyone",
+        summary:
+          "For your first month, the Dashboard shows a short “Getting started” checklist. Steps tick themselves off as you do them.",
+        shot: "welcome",
+        callouts: [
+          { spot: "checklist", title: "Getting started", body: "Your progress bar and the steps left. Admins and managers get a few extra steps (add your team, approve a timesheet).", side: "inside" },
+          { spot: "step", title: "Do the step", body: "Click a step to go straight to the right page.", side: "left" },
+          { spot: "showme", title: "Show me how", body: "Opens the matching part of this guide in a new tab.", side: "left" },
+          { spot: "guide", title: "5-minute guide", body: "The quick-start path for new people.", side: "bottom" },
+          { spot: "dismiss", title: "Dismiss", body: "Hide the checklist once you're comfortable. It also disappears when everything's done.", side: "bottom" },
+        ],
+      },
+      {
         id: "dashboard",
         title: "Find your way around the Dashboard",
         audience: "Everyone",
@@ -74,6 +89,10 @@ export const CATEGORIES: Category[] = [
           { spot: "stats", title: "Today at a glance", body: "Open, overdue and in-review counts. Managers also see timesheets waiting for approval.", side: "bottom" },
           { spot: "attention", title: "Needs your attention", body: "Click any row to open exactly the filtered list behind it.", side: "left" },
           { spot: "working", title: "Working right now", body: "Who has a timer running, on which task, and for how long.", side: "left" },
+        ],
+        tips: [
+          "🌙 in the top bar switches dark mode; ⇤ collapses the sidebar for more room.",
+          "Press ? on any page for help with that page.",
         ],
       },
       {
@@ -101,6 +120,34 @@ export const CATEGORIES: Category[] = [
           { spot: "results", title: "Type anything", body: "Task titles, a task code like TM-42, project names, people or page names. Use ↑ ↓ and Enter to open — Esc to close.", side: "right" },
         ],
         tips: ["The first result is always “Create task …” — a fast way to capture a to-do without leaving the page."],
+      },
+      {
+        id: "help-menu",
+        title: "Get help on any page",
+        audience: "Everyone",
+        summary:
+          "Stuck? The ? button in the top bar always knows which page you're on and opens the right part of this guide.",
+        shot: "help-menu",
+        callouts: [
+          { spot: "button", title: "Help button", body: "Click it — or just press the ? key anywhere (outside a text box).", side: "left" },
+          { spot: "thispage", title: "Help for this page", body: "Jumps straight to the guide article for the screen you're looking at.", side: "left" },
+          { spot: "related", title: "Related guides", body: "Other things people usually do on this page.", side: "left" },
+          { spot: "full", title: "Full guide", body: "Getting started, shortcuts, what's new and troubleshooting are one click away.", side: "left" },
+          { spot: "sidebar", title: "Help & guide in the sidebar", body: "Always at the bottom of the menu, on desktop and phone.", side: "right" },
+        ],
+      },
+      {
+        id: "search-results",
+        title: "Full search results",
+        audience: "Everyone",
+        summary:
+          "Press Enter in the ⌘K search (or choose “Search everything”) to see every match, grouped by type.",
+        shot: "search-results",
+        callouts: [
+          { spot: "tasks", title: "Tasks", body: "With project, owner, due date and status.", side: "left" },
+          { spot: "docs", title: "Documents", body: "Files and links whose name matches.", side: "left" },
+          { spot: "notes", title: "Your notes", body: "Only your own (and shared) notes — nobody else can find your private notes.", side: "left" },
+        ],
       },
     ],
   },
@@ -145,6 +192,33 @@ export const CATEGORIES: Category[] = [
         tips: ["Add an Estimate (e.g. “3h” or “1h 30m”) so managers can see workload and you can compare it with time actually logged."],
       },
       {
+        id: "ai-task",
+        title: "Draft a task with AI",
+        audience: "Everyone",
+        summary:
+          "Turn an email, WhatsApp message or screenshot into a task in seconds. AI fills in the details; nothing is saved until you check it.",
+        shot: "ai-task",
+        callouts: [
+          { spot: "box", title: "Paste anything", body: "An email, a chat message — or paste a screenshot with Ctrl/⌘ + V.", side: "bottom" },
+          { spot: "draft", title: "Draft with AI", body: "You get an editable form with title, description, priority, due date and assignee filled in.", side: "left" },
+          { spot: "close", title: "Close", body: "Changed your mind? Nothing has been created yet.", side: "bottom" },
+        ],
+        tips: ["Always read the draft before pressing Create — AI can misread dates or names."],
+      },
+      {
+        id: "import-tasks",
+        title: "Import tasks from a spreadsheet",
+        audience: "Managers",
+        summary: "Create or update dozens of tasks at once from Excel or CSV. You see a preview before anything changes.",
+        shot: "import-tasks",
+        callouts: [
+          { spot: "columns", title: "Supported columns", body: "Title is the only required one. Add a TM-ID column to update existing tasks instead of creating new ones.", side: "inside" },
+          { spot: "template", title: "Blank template", body: "Download a ready-made sheet with the right headings.", side: "left" },
+          { spot: "file", title: "Choose your file", body: ".xlsx, .xls or .csv.", side: "bottom" },
+          { spot: "preview", title: "Preview, then confirm", body: "Shows exactly what will be created or updated, and any rows with problems.", side: "bottom" },
+        ],
+      },
+      {
         id: "task-detail",
         title: "Work on a task",
         audience: "Everyone",
@@ -159,6 +233,32 @@ export const CATEGORIES: Category[] = [
         ],
       },
       {
+        id: "task-tags",
+        title: "Tags, and why Done is sometimes locked",
+        audience: "Everyone",
+        summary: "Tags group tasks across projects. A 🔒 on Done means something has to happen first.",
+        shot: "task-tags",
+        callouts: [
+          { spot: "tags", title: "Status, priority & tags", body: "Tags are coloured labels; click × to remove one. Filter the Tasks page by tag.", side: "left" },
+          { spot: "addtag", title: "+ tag", body: "Type a new or existing tag name.", side: "left" },
+          { spot: "blocked", title: "⛔ Blocked", body: "This task is waiting on another unfinished task (see Dependencies below).", side: "right" },
+          { spot: "done", title: "Done 🔒", body: "Locked while it's blocked, has open subtasks, or needs a reviewer's approval. Hover to see why.", side: "right" },
+        ],
+      },
+      {
+        id: "subtasks",
+        title: "Subtasks and dependencies",
+        audience: "Everyone",
+        summary: "Break big work into subtasks, and mark tasks that can't start until another one is finished.",
+        shot: "subtasks",
+        callouts: [
+          { spot: "blocker", title: "Blocked by", body: "The task that has to be finished first. The ⛔ icon clears automatically when it's done.", side: "top" },
+          { spot: "addblocker", title: "Add blocker", body: "Pick any task this one depends on.", side: "left" },
+          { spot: "progress", title: "Subtask progress", body: "The parent task can't be marked Done until every subtask is.", side: "right" },
+          { spot: "subtask", title: "Subtasks", body: "Each has its own owner. Tick the circle to complete it; add new ones below.", side: "bottom" },
+        ],
+      },
+      {
         id: "comments",
         title: "Comment, mention and attach files",
         audience: "Everyone",
@@ -168,6 +268,19 @@ export const CATEGORIES: Category[] = [
           { spot: "attachments", title: "Attachments", body: "Attach files up to 50 MB, paste a screenshot with Ctrl/⌘ + V, or add a Drive link for bigger files.", side: "left" },
           { spot: "comments", title: "Discussion", body: "Everyone on the task sees the thread. Newest at the bottom.", side: "inside" },
           { spot: "commentbox", title: "Write a comment", body: "Type @ and a name to mention someone — they get notified straight away.", side: "left" },
+        ],
+      },
+      {
+        id: "review-approve",
+        title: "Review and approve work",
+        audience: "Everyone",
+        summary:
+          "When a task needs approval, the assignee moves it to In Review. The person who created it approves it — or sends it back.",
+        shot: "review-approve",
+        callouts: [
+          { spot: "inreview", title: "In Review", body: "The assignee has finished and is waiting for you. You'll find these under “To review” on your Dashboard.", side: "bottom" },
+          { spot: "approve", title: "Approve", body: "Marks it Done and notifies the assignee.", side: "bottom" },
+          { spot: "todo", title: "Send back", body: "Not right yet? Move it back to To Do or In Progress and leave a comment saying what to change.", side: "bottom" },
         ],
       },
       {
@@ -224,6 +337,33 @@ export const CATEGORIES: Category[] = [
         ],
       },
       {
+        id: "backdate",
+        title: "Forgot to start the timer?",
+        audience: "Everyone",
+        summary: "Start it from when you really began — up to 8 hours back — instead of fixing the timesheet later.",
+        shot: "backdate",
+        callouts: [
+          { spot: "toggle", title: "⏪ Started earlier?", body: "Next to the Start timer button on every task.", side: "bottom" },
+          { spot: "minutes", title: "How long ago", body: "Pick 5 minutes up to 4 hours.", side: "bottom" },
+          { spot: "startthen", title: "Start from then", body: "The clock starts already counting. If you were timing another task, that one is logged up to the same moment.", side: "bottom" },
+        ],
+      },
+      {
+        id: "still-working",
+        title: "“Still working on this?” reminders",
+        audience: "Everyone",
+        summary:
+          "If a timer has been running for 4 hours, the app checks with you — so a forgotten timer doesn't run all night.",
+        shot: "welcome",
+        callouts: [
+          { spot: "pill", title: "Timer turns amber", body: "After 4 hours the top-bar timer changes colour as a first hint.", side: "bottom" },
+          { spot: "prompt", title: "Still working?", body: "A card appears (and a desktop notification, if you've allowed them).", side: "left" },
+          { spot: "keep", title: "Yes, keep going", body: "Hides the reminder for 2 hours.", side: "left" },
+          { spot: "stopnow", title: "Stop & log", body: "Stops the timer and logs the time. Then fix the hours on your Time sheet if you'd stopped earlier.", side: "top" },
+        ],
+        tips: ["Nothing is ever stopped without your click here. (Timers do stop on their own when the browser is closed or the laptop is shut down.)"],
+      },
+      {
         id: "timesheet",
         title: "Log time manually",
         audience: "Everyone",
@@ -248,12 +388,15 @@ export const CATEGORIES: Category[] = [
           { spot: "submit", title: "Submit week for approval", body: "Choose “This week” first. Once submitted the week is locked — you can Withdraw it while it's still pending.", side: "left" },
           { spot: "entries", title: "Check your entries", body: "Make sure every day adds up before you submit.", side: "inside" },
         ],
-        tips: ["If your manager requests changes, the week unlocks again: fix the entries and submit once more."],
+        tips: [
+          "If your manager requests changes, the week unlocks again: fix the entries and submit once more.",
+          "Forgot? On Friday afternoon you'll get a reminder (in the app and by email) if the week hasn't been submitted.",
+        ],
       },
     ],
   },
   {
-    id: "projects",
+    id: "planning",
     title: "Projects & planning",
     icon: "📁",
     blurb: "Group work into projects and plan it on the calendar.",
@@ -281,6 +424,20 @@ export const CATEGORIES: Category[] = [
           { spot: "addtask", title: "+ Add task", body: "Creates a task already linked to this project.", side: "top" },
           { spot: "tasks", title: "Task list", body: "Every task with its owner, priority, status and due date.", side: "inside" },
         ],
+      },
+      {
+        id: "templates",
+        title: "Project templates",
+        audience: "Managers",
+        summary:
+          "Set up a reusable task list once — e.g. “New marketplace launch” — and start every similar project from it.",
+        shot: "templates",
+        callouts: [
+          { spot: "create", title: "Create a template", body: "Give it a name and description.", side: "bottom" },
+          { spot: "row", title: "Your templates", body: "Each shows how many tasks it contains.", side: "left" },
+          { spot: "edit", title: "Edit tasks", body: "Add tasks with a priority and “due N days after the project starts”.", side: "left" },
+        ],
+        tips: ["Shortcut: open an existing project and click “Save as template” to copy its task list."],
       },
       {
         id: "calendar",
@@ -319,6 +476,18 @@ export const CATEGORIES: Category[] = [
         tips: ["Use the 📹 Call button at the top of a chat to start a video call — no separate meeting link needed."],
       },
       {
+        id: "video-calls",
+        title: "Video calls",
+        audience: "Everyone",
+        summary:
+          "Start a video call from any chat or group — no meeting link or extra app needed. Everyone in the conversation gets a ring.",
+        tips: [
+          "Open a chat and click 📹 Call in the top-right corner.",
+          "Allow camera and microphone when your browser asks. On a phone, use Chrome or Safari.",
+          "Calls work best on office Wi-Fi; if video freezes, turn your camera off and keep the audio.",
+        ],
+      },
+      {
         id: "groups",
         title: "Group chats (Discussion)",
         audience: "Everyone",
@@ -341,6 +510,22 @@ export const CATEGORIES: Category[] = [
           { spot: "tabs", title: "All / Unread", body: "Show just what's new.", side: "bottom" },
           { spot: "markall", title: "Mark all read", body: "Clear the badge in one click.", side: "left" },
           { spot: "item", title: "Open the item", body: "Click to go straight to the task or page it's about.", side: "bottom" },
+        ],
+      },
+      {
+        id: "notification-settings",
+        title: "Choose your notifications",
+        audience: "Everyone",
+        summary: "In-app notifications are always on. You choose whether you also get emails.",
+        shot: "notification-settings",
+        callouts: [
+          { spot: "email", title: "Email notifications", body: "Assignments, comments, reminders and the daily digest. Untick to stop emails.", side: "right" },
+          { spot: "save", title: "Save preferences", body: "Takes effect straight away.", side: "right" },
+          { spot: "password", title: "Change password", body: "Use a strong password: upper and lower case, a number and a symbol.", side: "right" },
+        ],
+        tips: [
+          "Browser pop-ups: allow notifications when the app asks, so you're alerted even when the tab is in the background.",
+          "On Friday afternoon you'll get a reminder if this week's timesheet hasn't been submitted yet.",
         ],
       },
     ],
@@ -409,6 +594,19 @@ export const CATEGORIES: Category[] = [
         ],
       },
       {
+        id: "people-profile",
+        title: "Someone's profile page",
+        audience: "Managers",
+        summary: "Click anyone's name or avatar to see their workload, output and what they're doing right now.",
+        shot: "people-profile",
+        callouts: [
+          { spot: "message", title: "Message", body: "Start a chat (or email them) straight from their profile.", side: "bottom" },
+          { spot: "manage", title: "Manage account", body: "Admins: change role, department, reset password or deactivate.", side: "left" },
+          { spot: "stats", title: "At a glance", body: "Open and overdue tasks, completions, on-time rate and hours this week.", side: "left" },
+          { spot: "now", title: "Working on now", body: "Their running timer, live.", side: "left" },
+        ],
+      },
+      {
         id: "workload",
         title: "Balance the workload",
         audience: "Managers",
@@ -431,6 +629,21 @@ export const CATEGORIES: Category[] = [
           { spot: "filters", title: "Filters", body: "Person, company, department and time window.", side: "inside" },
           { spot: "stats", title: "Headline numbers", body: "Total, by status and overdue — followed by throughput, on-time rate and per-person breakdowns.", side: "bottom" },
         ],
+      },
+      {
+        id: "estimates",
+        title: "Estimates vs actual",
+        audience: "Managers",
+        summary:
+          "On Reports, see how long finished tasks really took compared with their estimate — per person — and which open tasks are already over.",
+        shot: "reports-estimates",
+        callouts: [
+          { spot: "totals", title: "Overall accuracy", body: "Estimated vs logged hours for tasks finished in the window. 100% means spot on.", side: "inside" },
+          { spot: "bands", title: "Faster / on target / longer", body: "On target = within about 20% of the estimate.", side: "bottom" },
+          { spot: "people", title: "Per person", body: "Who estimates well and who needs more realistic plans — furthest from 100% first.", side: "inside" },
+          { spot: "over", title: "Already over", body: "Open tasks that have used more time than estimated. Worth a check-in.", side: "inside" },
+        ],
+        tips: ["Only tasks with both an estimate and logged time are compared — so add estimates and use the timer."],
       },
     ],
   },
@@ -456,10 +669,46 @@ export const CATEGORIES: Category[] = [
           "Departments are managed under Admin → Departments; deleted items can be restored from the Recycle bin.",
         ],
       },
+      {
+        id: "departments",
+        title: "Departments",
+        audience: "Admins",
+        summary: "Group people by department inside each company. Departments power the filters on Workload and Reports.",
+        shot: "departments",
+        callouts: [
+          { spot: "add", title: "Add a department", body: "Name it and pick the company (IND, UAE, KSA…).", side: "bottom" },
+          { spot: "list", title: "All departments", body: "With member counts. You can only delete a department once nobody is in it.", side: "right" },
+        ],
+      },
+      {
+        id: "billing",
+        title: "Billing",
+        audience: "Admins",
+        summary: "Internal per-seat cost for charging back to finance, based on active users.",
+        shot: "billing",
+        callouts: [
+          { spot: "month", title: "This month", body: "Active users × rate = projected total.", side: "inside" },
+          { spot: "rate", title: "Rate", body: "Set the per-seat monthly rate and currency.", side: "inside" },
+          { spot: "snapshot", title: "Generate snapshot", body: "Freezes this month's headcount and rate as a fixed record.", side: "bottom" },
+          { spot: "pdf", title: "Print / Save as PDF", body: "Invoice history for finance.", side: "left" },
+        ],
+      },
+      {
+        id: "recycle-bin",
+        title: "Recycle bin",
+        audience: "Admins",
+        summary: "Deleted tasks and notes land here first, so mistakes can be undone.",
+        shot: "recycle-bin",
+        callouts: [
+          { spot: "search", title: "Find it", body: "Search by task title, TM-ID or note text.", side: "bottom" },
+          { spot: "restore", title: "Restore", body: "Brings the task back with its subtasks, comments and time.", side: "left" },
+          { spot: "forever", title: "Delete forever", body: "Permanent — there's no undo after this.", side: "bottom" },
+        ],
+      },
     ],
   },
   {
-    id: "mobile",
+    id: "on-mobile",
     title: "On your phone",
     icon: "📱",
     blurb: "The whole app works in your phone's browser.",
@@ -482,6 +731,14 @@ export const CATEGORIES: Category[] = [
 ];
 
 export const FAQS: { q: string; a: string }[] = [
+  {
+    q: "I started work but forgot to press Start.",
+    a: "Open the task, click “⏪ Started earlier?”, choose how long ago you began, and press “Start from then”. Or add the time manually on your Time sheet.",
+  },
+  {
+    q: "The app keeps asking “Still working on this?”",
+    a: "Your timer has run for 4+ hours. Click “Yes, keep going” to hide it for 2 hours, or stop the timer if you'd forgotten it.",
+  },
   {
     q: "I forgot to stop my timer — what happens?",
     a: "If your browser was closed or your laptop shut down, the timer stops itself after 15 minutes of no activity and logs time only up to when you were last active. You'll get a notification; adjust the entry on the Time sheet if needed.",
@@ -506,6 +763,34 @@ export const FAQS: { q: string; a: string }[] = [
     q: "How do I get notifications on my phone?",
     a: "Open the app in your phone's browser, add it to your home screen, and allow notifications when asked.",
   },
+];
+
+/** Newest first. `link` is an article id. */
+export const WHATS_NEW: { date: string; title: string; body: string; link?: string }[] = [
+  { date: "Sep 2026", title: "Help on every page", body: "A ? button in the top bar (or press ?) opens the guide for the page you're on.", link: "help-menu" },
+  { date: "Sep 2026", title: "Getting-started checklist", body: "New accounts see a short checklist on the Dashboard that ticks itself off.", link: "welcome" },
+  { date: "Sep 2026", title: "Start a timer from earlier", body: "Forgot to press Start? Begin the timer from up to 8 hours ago.", link: "backdate" },
+  { date: "Sep 2026", title: "“Still working?” reminder", body: "Timers running for 4 hours ask if you're still on the task.", link: "still-working" },
+  { date: "Sep 2026", title: "Estimates vs actual", body: "Reports now compare estimated with logged hours, per person.", link: "estimates" },
+  { date: "Sep 2026", title: "Friday timesheet reminder", body: "A nudge if this week's timesheet hasn't been submitted.", link: "submit-week" },
+  { date: "Sep 2026", title: "Timers stop themselves", body: "Closing the browser or shutting the laptop stops and logs a running timer.", link: "timer" },
+  { date: "Sep 2026", title: "Timesheet change history", body: "Managers can see every add, edit and delete on a person's time entries.", link: "person-hours" },
+  { date: "Sep 2026", title: "Safer sign-in", body: "Repeated wrong passwords now pause the account for 15 minutes.", link: "sign-in" },
+];
+
+export const GLOSSARY: { term: string; meaning: string }[] = [
+  { term: "To Do → In Progress → In Review → Done", meaning: "A task's status. Starting a timer moves To Do to In Progress automatically." },
+  { term: "Low · Medium · High · Urgent", meaning: "Priority. Urgent tasks are shown in red everywhere." },
+  { term: "TM-42", meaning: "A task's ID. Type it in search (⌘K) to jump straight to the task." },
+  { term: "Assignee", meaning: "The one person who owns a task." },
+  { term: "Collaborator", meaning: "Someone who works on the task with the assignee and can complete it too." },
+  { term: "Watcher", meaning: "Someone who gets notified about changes but doesn't work on it." },
+  { term: "Review required", meaning: "The assignee can't mark it Done; the creator approves it from In Review." },
+  { term: "Blocked", meaning: "Waiting on another unfinished task (a dependency)." },
+  { term: "Estimate", meaning: "Expected effort in hours. Drives Workload and the estimates-vs-actual report." },
+  { term: "Recurring", meaning: "A daily, weekly or monthly job that recreates itself each period." },
+  { term: "Timesheet week", meaning: "Sunday to Saturday. Once submitted it's locked until approved or sent back." },
+  { term: "Employee · Manager · Admin", meaning: "Roles. Managers see team views and approvals; admins also manage users and billing." },
 ];
 
 export const QUICK_STARTS: { audience: Audience; title: string; icon: string; steps: { label: string; href: string }[] }[] = [

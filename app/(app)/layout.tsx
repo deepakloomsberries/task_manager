@@ -6,6 +6,8 @@ import MobileSidebar from "@/components/MobileSidebar";
 import ThemeToggle from "@/components/ThemeToggle";
 import UserAvatar from "@/components/UserAvatar";
 import Heartbeat from "@/components/Heartbeat";
+import HelpMenu from "@/components/HelpMenu";
+import LongTimerPrompt from "@/components/LongTimerPrompt";
 import RunningTimerPill from "@/components/RunningTimerPill";
 import PushSetup from "@/components/PushSetup";
 import CommandPalette, { CommandButton } from "@/components/CommandPalette";
@@ -80,6 +82,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             />
           )}
           <ThemeToggle />
+          <HelpMenu />
           <Link
             href="/notifications"
             className="relative rounded-lg p-2 text-xl leading-none text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
@@ -121,6 +124,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </form>
         </header>
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
+        {activeTimer && (
+          <LongTimerPrompt
+            taskId={activeTimer.task.id}
+            title={activeTimer.task.title}
+            startedAt={activeTimer.startedAt.toISOString()}
+          />
+        )}
       </div>
     </div>
     </SidebarProvider>

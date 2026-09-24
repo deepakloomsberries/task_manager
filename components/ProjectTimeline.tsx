@@ -148,6 +148,8 @@ export default function ProjectTimeline({
                     <div
                       className="absolute top-0 z-0 h-full border-l border-dashed border-rose-400/70"
                       style={{ left: `${todayLeft}%` }}
+                      // "Now" moves a hair between server render and hydration.
+                      suppressHydrationWarning
                       title="Today"
                     />
                   )}

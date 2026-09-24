@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import AnnotatedShot, { type ShotData } from "./AnnotatedShot";
 import GuideSearch from "./GuideSearch";
-import { CATEGORIES, FAQS, QUICK_STARTS, type Article, type Audience } from "./content";
+import { CopyLink, MarkDone, PathProgress, PrintGuide, StepTick } from "./Progress";
+import { CATEGORIES, FAQS, GLOSSARY, QUICK_STARTS, WHATS_NEW, type Article, type Audience } from "./content";
+import { appPathFor } from "@/lib/guideLinks";
 import shots from "./shots.json";
 
 const TITLE = "How to use Looms & Berries Tasks — Guide";
@@ -25,11 +27,37 @@ export const metadata: Metadata = {
 
 const SHOTS = shots as Record<string, ShotData>;
 
+const GUIDE_CSS = `
+        [data-toc] a[aria-current="true"]{color:rgb(2 132 199);font-weight:600;border-color:rgb(2 132 199)}
+        .guide-article:target{animation:guide-flash 2.4s ease-out}
+        @keyframes guide-flash{0%,30%{background:rgb(224 242 254 / .9);box-shadow:0 0 0 12px rgb(224 242 254 / .9)}100%{background:transparent;box-shadow:0 0 0 12px transparent}}
+        .dark .guide-article:target{animation-name:guide-flash-dark}
+        @keyframes guide-flash-dark{0%,30%{background:rgb(12 74 110 / .45);box-shadow:0 0 0 12px rgb(12 74 110 / .45)}100%{background:transparent;box-shadow:0 0 0 12px transparent}}
+        @media print{[data-article][hidden],[data-category][hidden]{display:block!important}.guide-article{break-inside:auto}}
+      `;
+
 const AUDIENCE_STYLE: Record<Audience, string> = {
   Everyone: "bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-950/50 dark:text-sky-300 dark:ring-sky-900",
   Managers: "bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900",
   Admins: "bg-violet-50 text-violet-700 ring-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:ring-violet-900",
 };
+
+const EXTRAS = [
+  { id: "whats-new", title: "✨ What's new" },
+  { id: "shortcuts", title: "⌨️ Shortcuts" },
+  { id: "glossary", title: "📖 Glossary" },
+  { id: "faq", title: "❓ Troubleshooting & FAQ" },
+];
+
+const SHORTCUTS: [string, string][] = [
+  ["Ctrl / ⌘ + K", "Search anything, or create a task"],
+  ["?", "Help for the page you're on"],
+  ["Ctrl / ⌘ + V", "Paste a screenshot into a task, comment or chat"],
+  ["@name", "Mention someone in a comment"],
+  ["Esc", "Close a dialog, menu or the search box"],
+  ["/", "Search this guide"],
+  ["← →", "Previous / next step in “Step by step” mode"],
+];
 
 function searchText(a: Article, category: string) {
   return [a.title, a.summary, category, a.audience, ...(a.callouts ?? []).flatMap((c) => [c.title, c.body]), ...(a.tips ?? [])]
@@ -39,8 +67,15 @@ function searchText(a: Article, category: string) {
 
 function ArticleBlock({ a, category }: { a: Article; category: string }) {
   const shot = a.shot ? SHOTS[a.shot] : undefined;
+  const appPath = appPathFor(a.id);
   return (
-    <article id={a.id} data-article data-search={searchText(a, category)} className="scroll-mt-24 py-10 first:pt-2">
+    <article
+      id={a.id}
+      data-article
+      data-audience={a.audience}
+      data-search={searchText(a, category)}
+      className="guide-article scroll-mt-24 rounded-2xl py-10 first:pt-2 print:py-6"
+    >
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-xl font-bold tracking-tight sm:text-2xl">
           <a href={`#${a.id}`} className="group">
@@ -72,7 +107,7 @@ function ArticleBlock({ a, category }: { a: Article; category: string }) {
           {a.tips.map((t) => (
             <p
               key={t}
-              className="flex gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"
+              className="flex gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 break-inside-avoid dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"
             >
               <span aria-hidden>💡</span>
               <span>{t}</span>
@@ -80,19 +115,32 @@ function ArticleBlock({ a, category }: { a: Article; category: string }) {
           ))}
         </div>
       )}
+
+      <div className="mt-4 flex flex-wrap items-center gap-3 print:hidden">
+        <MarkDone id={a.id} />
+        {appPath && (
+          <Link href={appPath} className="text-xs font-medium text-sky-700 hover:underline dark:text-sky-400">
+            Try it in the app →
+          </Link>
+        )}
+        <span className="flex-1" />
+        <CopyLink id={a.id} />
+      </div>
     </article>
   );
 }
 
 export default function GuidePage() {
   const articleCount = CATEGORIES.reduce((n, c) => n + c.articles.length, 0);
+  const titleOf = new Map(CATEGORIES.flatMap((c) => c.articles.map((a) => [a.id, a.title] as const)));
 
   return (
     <div className="min-h-screen bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      <style>{`[data-toc] a[aria-current="true"]{color:rgb(2 132 199);font-weight:600;border-color:rgb(2 132 199)}`}</style>
+      {/* dangerouslySetInnerHTML: a text child would be HTML-escaped on the server and fail hydration. */}
+      <style dangerouslySetInnerHTML={{ __html: GUIDE_CSS }} />
 
       {/* Nav */}
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur print:hidden dark:border-slate-800 dark:bg-slate-950/90">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3 sm:px-6">
           <Link href="/about" className="whitespace-nowrap text-base font-bold sm:text-lg">
             Looms <span className="text-sky-600">&amp;</span> Berries
@@ -105,32 +153,34 @@ export default function GuidePage() {
             <a href="#faq" className="hidden rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 sm:block">
               FAQ
             </a>
-            <Link href="/login" className="btn-primary whitespace-nowrap">
-              Open the app →
+            <PrintGuide />
+            <Link href="/dashboard" className="btn-primary whitespace-nowrap">
+              <span className="sm:hidden">Open app</span>
+              <span className="hidden sm:inline">Open the app →</span>
             </Link>
           </nav>
         </div>
       </header>
 
       {/* Hero */}
-      <section className="relative overflow-hidden border-b border-slate-200 bg-gradient-to-b from-sky-50 to-white dark:border-slate-800 dark:from-slate-900 dark:to-slate-950">
-        <div className="mx-auto max-w-3xl px-5 py-14 text-center sm:py-20">
-          <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-medium text-sky-700 shadow-sm ring-1 ring-sky-100 dark:bg-slate-900 dark:text-sky-300 dark:ring-slate-700">
+      <section className="relative overflow-hidden border-b border-slate-200 bg-gradient-to-b from-sky-50 to-white print:border-0 print:bg-none dark:border-slate-800 dark:from-slate-900 dark:to-slate-950">
+        <div className="mx-auto max-w-3xl px-5 py-14 text-center sm:py-20 print:py-6">
+          <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-medium text-sky-700 shadow-sm ring-1 ring-sky-100 print:hidden dark:bg-slate-900 dark:text-sky-300 dark:ring-slate-700">
             📘 Knowledge base · {articleCount} guides
           </span>
           <h1 className="mt-5 text-4xl font-bold tracking-tight sm:text-5xl">How to use Looms &amp; Berries Tasks</h1>
           <p className="mx-auto mt-4 max-w-xl text-lg text-slate-600 dark:text-slate-300">
-            Real screenshots with numbered arrows showing exactly where to click. Hover a step to
-            highlight it on the picture.
+            Real screenshots with numbered arrows showing exactly where to click. Press{" "}
+            <b className="whitespace-nowrap">▶ Step by step</b> on any picture to be walked through it.
           </p>
-          <div className="mx-auto mt-8 max-w-xl">
+          <div className="mx-auto mt-8 max-w-xl print:hidden">
             <GuideSearch />
           </div>
         </div>
       </section>
 
       {/* Quick starts */}
-      <section data-hide-when-searching className="mx-auto max-w-7xl px-5 py-12 sm:px-6">
+      <section id="start-here" data-hide-when-searching className="mx-auto max-w-7xl scroll-mt-20 px-5 py-12 print:hidden sm:px-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Start here</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-3">
           {QUICK_STARTS.map((qs) => (
@@ -152,10 +202,12 @@ export default function GuidePage() {
                         {i + 1}
                       </span>
                       <span className="text-slate-700 group-hover:text-sky-700 dark:text-slate-200 dark:group-hover:text-sky-300">{s.label}</span>
+                      <StepTick id={s.href.slice(1)} />
                     </a>
                   </li>
                 ))}
               </ol>
+              <PathProgress ids={qs.steps.map((s) => s.href.slice(1))} />
             </div>
           ))}
         </div>
@@ -170,14 +222,50 @@ export default function GuidePage() {
               <div className="text-2xl">{c.icon}</div>
               <div className="mt-2 font-semibold">{c.title}</div>
               <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{c.blurb}</div>
+              <div className="mt-2 text-[11px] text-slate-400">{c.articles.length} guides</div>
             </a>
           ))}
         </div>
       </section>
 
+      {/* Phones / tablets: compact "jump to" menu in place of the sidebar */}
+      <div className="sticky top-[57px] z-20 border-y border-slate-200 bg-white/95 px-5 py-2 backdrop-blur print:hidden dark:border-slate-800 dark:bg-slate-950/95 lg:hidden">
+        <details className="group">
+          <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-medium [&::-webkit-details-marker]:hidden">
+            <span>📑 Jump to a guide…</span>
+            <span className="text-slate-400 transition group-open:rotate-180">▾</span>
+          </summary>
+          <nav aria-label="Guide contents" className="mt-2 max-h-[60vh] overflow-y-auto pb-2 text-sm">
+            {CATEGORIES.map((c) => (
+              <div key={c.id} className="mb-3">
+                <a href={`#${c.id}`} className="font-semibold">
+                  {c.icon} {c.title}
+                </a>
+                <ul className="mt-1 grid grid-cols-1 gap-0.5 pl-6 sm:grid-cols-2">
+                  {c.articles.map((a) => (
+                    <li key={a.id}>
+                      <a href={`#${a.id}`} className="block py-1 text-slate-600 dark:text-slate-300">
+                        {a.title}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+            <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-100 pt-2 dark:border-slate-800">
+              {EXTRAS.map((x) => (
+                <a key={x.id} href={`#${x.id}`} className="py-1 text-slate-600 dark:text-slate-300">
+                  {x.title}
+                </a>
+              ))}
+            </div>
+          </nav>
+        </details>
+      </div>
+
       {/* Body: TOC + articles */}
       <div className="mx-auto max-w-7xl px-5 pb-16 sm:px-6 lg:grid lg:grid-cols-[230px_1fr] lg:gap-10">
-        <aside className="hidden lg:block">
+        <aside className="hidden lg:block print:hidden">
           <nav aria-label="Guide contents" className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto pb-6 pr-2 text-sm">
             {CATEGORIES.map((c) => (
               <div key={c.id} data-toc-category className="mb-5">
@@ -198,10 +286,25 @@ export default function GuidePage() {
                 </ul>
               </div>
             ))}
+            <div data-hide-when-searching className="space-y-1 border-t border-slate-200 pt-4 dark:border-slate-700">
+              {EXTRAS.map((x) => (
+                <a key={x.id} href={`#${x.id}`} className="block py-0.5 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
+                  {x.title}
+                </a>
+              ))}
+            </div>
           </nav>
         </aside>
 
         <main id="main-content" className="min-w-0">
+          <div id="no-results" hidden className="rounded-2xl border border-dashed border-slate-300 p-10 text-center dark:border-slate-700">
+            <div className="text-3xl">🔍</div>
+            <p className="mt-2 font-semibold">No guides match that.</p>
+            <p className="mt-1 text-sm text-slate-500">
+              Try a different word — or ask in the app: message your manager or an admin.
+            </p>
+          </div>
+
           {CATEGORIES.map((c) => (
             <section key={c.id} id={c.id} data-category className="scroll-mt-20 border-t border-slate-200 pt-10 first:border-t-0 dark:border-slate-800">
               <div className="flex items-center gap-3">
@@ -219,21 +322,56 @@ export default function GuidePage() {
             </section>
           ))}
 
+          {/* What's new */}
+          <section id="whats-new" data-hide-when-searching className="scroll-mt-20 border-t border-slate-200 pt-12 dark:border-slate-800">
+            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">✨ What&apos;s new</h2>
+            <ol className="mt-6 space-y-4 border-l-2 border-sky-100 pl-6 dark:border-sky-900">
+              {WHATS_NEW.map((w) => (
+                <li key={w.title} className="relative break-inside-avoid">
+                  <span className="absolute -left-[31px] top-1.5 h-3 w-3 rounded-full border-2 border-white bg-sky-500 dark:border-slate-950" />
+                  <div className="text-xs font-medium text-slate-400">{w.date}</div>
+                  <div className="font-semibold">{w.title}</div>
+                  <p className="text-sm text-slate-600 dark:text-slate-300">
+                    {w.body}{" "}
+                    {w.link && (
+                      <a href={`#${w.link}`} className="whitespace-nowrap text-sky-700 hover:underline dark:text-sky-400">
+                        {titleOf.get(w.link) ? "How it works →" : ""}
+                      </a>
+                    )}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          </section>
+
           {/* Keyboard shortcuts */}
-          <section data-hide-when-searching className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-6 dark:border-slate-800 dark:bg-slate-900/40">
+          <section
+            id="shortcuts"
+            data-hide-when-searching
+            className="mt-14 scroll-mt-20 rounded-2xl border border-slate-200 bg-slate-50 p-6 break-inside-avoid dark:border-slate-800 dark:bg-slate-900/40"
+          >
             <h2 className="text-lg font-bold">⌨️ Handy shortcuts</h2>
             <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-              {[
-                ["Ctrl / ⌘ + K", "Search anything, or create a task"],
-                ["Ctrl / ⌘ + V", "Paste a screenshot into a task, comment or chat"],
-                ["@name", "Mention someone in a comment"],
-                ["Esc", "Close a dialog or the search box"],
-              ].map(([k, v]) => (
+              {SHORTCUTS.map(([k, v]) => (
                 <div key={k} className="flex items-center gap-3">
                   <dt>
                     <kbd className="rounded-md border border-slate-300 bg-white px-2 py-1 font-mono text-xs shadow-sm dark:border-slate-600 dark:bg-slate-800">{k}</kbd>
                   </dt>
                   <dd className="text-slate-600 dark:text-slate-300">{v}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+
+          {/* Glossary */}
+          <section id="glossary" data-hide-when-searching className="scroll-mt-20 pt-14">
+            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">📖 Glossary</h2>
+            <p className="mt-1 text-sm text-slate-500">Words you&apos;ll see around the app.</p>
+            <dl className="mt-6 grid gap-x-8 gap-y-4 sm:grid-cols-2">
+              {GLOSSARY.map((g) => (
+                <div key={g.term} className="break-inside-avoid border-b border-slate-100 pb-3 dark:border-slate-800">
+                  <dt className="font-semibold">{g.term}</dt>
+                  <dd className="mt-0.5 text-sm text-slate-600 dark:text-slate-300">{g.meaning}</dd>
                 </div>
               ))}
             </dl>
@@ -255,13 +393,13 @@ export default function GuidePage() {
             </div>
           </section>
 
-          <section className="mt-14 rounded-2xl bg-gradient-to-br from-slate-900 to-sky-900 p-8 text-center text-white">
+          <section className="mt-14 rounded-2xl bg-gradient-to-br from-slate-900 to-sky-900 p-8 text-center text-white print:hidden">
             <h2 className="text-2xl font-bold">Still stuck?</h2>
             <p className="mx-auto mt-2 max-w-md text-sky-50/90">
               Message your manager or an admin from inside the app — or email us and we&apos;ll help.
             </p>
             <div className="mt-5 flex flex-wrap justify-center gap-3">
-              <Link href="/login" className="rounded-lg bg-white px-5 py-2.5 font-semibold text-sky-800 hover:bg-sky-50">
+              <Link href="/dashboard" className="rounded-lg bg-white px-5 py-2.5 font-semibold text-sky-800 hover:bg-sky-50">
                 Open the app
               </Link>
               <a href="mailto:sales@loomsberries.com?subject=Help%20with%20Looms%20%26%20Berries%20Tasks" className="rounded-lg border border-white/40 px-5 py-2.5 font-semibold hover:bg-white/10">
@@ -272,7 +410,7 @@ export default function GuidePage() {
         </main>
       </div>
 
-      <footer className="border-t border-slate-200 py-8 dark:border-slate-800">
+      <footer className="border-t border-slate-200 py-8 print:hidden dark:border-slate-800">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-5 text-sm text-slate-500 dark:text-slate-400 sm:px-6">
           <span>© {new Date().getFullYear()} Looms &amp; Berries Tasks · Screenshots use fictional demo data.</span>
           <div className="flex gap-4">

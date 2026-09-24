@@ -17,6 +17,8 @@ function useElapsed(startedAt: string | null) {
   return (now - new Date(startedAt).getTime()) / 1000;
 }
 
+const BACKDATE_OPTIONS = [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240];
+
 export default function TaskTimer({
   taskId,
   loggedHours,
@@ -31,6 +33,7 @@ export default function TaskTimer({
   otherTimer: { taskId: number; title: string } | null;
 }) {
   const elapsed = useElapsed(runningStartedAt);
+  const [backdating, setBackdating] = useState(false);
   const back = `/tasks/${taskId}`;
   const running = !!runningStartedAt;
 
@@ -49,7 +52,10 @@ export default function TaskTimer({
           <div>
             <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Time tracking</div>
             <div className="flex items-baseline gap-2">
-              <span className={`font-mono text-2xl font-bold tabular-nums ${running ? "text-sky-600 dark:text-sky-400" : "text-slate-800 dark:text-slate-100"}`}>
+              <span
+                className={`font-mono text-2xl font-bold tabular-nums ${running ? "text-sky-600 dark:text-sky-400" : "text-slate-800 dark:text-slate-100"}`}
+                suppressHydrationWarning
+              >
                 {running ? fmtDuration(elapsed) : fmtHours(loggedHours)}
               </span>
               {running ? (
@@ -84,16 +90,54 @@ export default function TaskTimer({
               </form>
             </>
           ) : (
-            <form action={startTaskTimer}>
-              <input type="hidden" name="taskId" value={taskId} />
-              <input type="hidden" name="back" value={back} />
-              <button type="submit" className="btn-primary">
-                ▶ {otherTimer ? "Switch timer here" : "Start timer"}
+            <>
+              <button
+                type="button"
+                onClick={() => setBackdating((b) => !b)}
+                className="btn-secondary !px-3 text-xs"
+                title="Forgot to start the timer? Start it from an earlier time"
+                aria-expanded={backdating}
+              >
+                ⏪ Started earlier?
               </button>
-            </form>
+              <form action={startTaskTimer}>
+                <input type="hidden" name="taskId" value={taskId} />
+                <input type="hidden" name="back" value={back} />
+                <button type="submit" className="btn-primary">
+                  ▶ {otherTimer ? "Switch timer here" : "Start timer"}
+                </button>
+              </form>
+            </>
           )}
         </div>
       </div>
+
+      {!running && backdating && (
+        <form
+          action={startTaskTimer}
+          className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm dark:border-amber-900/60 dark:bg-amber-950/30"
+        >
+          <input type="hidden" name="taskId" value={taskId} />
+          <input type="hidden" name="back" value={back} />
+          <span className="text-amber-900 dark:text-amber-200">Forgot to start it? I actually started</span>
+          <select name="minutesAgo" defaultValue="15" className="input !w-auto !py-1 text-sm" aria-label="How long ago you started">
+            {BACKDATE_OPTIONS.map((m) => (
+              <option key={m} value={m}>
+                {m < 60 ? `${m} min` : `${m / 60} h${m % 60 ? ` ${m % 60} min` : ""}`}
+              </option>
+            ))}
+          </select>
+          <span className="text-amber-900 dark:text-amber-200">ago</span>
+          <button type="submit" className="btn-primary !py-1 text-xs">
+            ▶ Start from then
+          </button>
+          {otherTimer && (
+            <span className="w-full text-xs text-amber-800/80 dark:text-amber-300/80">
+              Your timer on the other task will be logged up to that moment.
+            </span>
+          )}
+        </form>
+      )}
 
       {!running && otherTimer && (
         <p className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-slate-700">
