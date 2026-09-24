@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { fmtHours } from "@/lib/ui";
 
 export type AuditAction = "create" | "update" | "delete" | "timer" | "auto_stop";
 
@@ -56,7 +57,7 @@ export async function auditTimeEntry(
 export function describeChange(before: string | null, after: string | null): string {
   const b = before ? JSON.parse(before) : null;
   const a = after ? JSON.parse(after) : null;
-  const h = (x: number) => `${Math.round(x * 60)}m`;
+  const h = (x: number) => fmtHours(x);
   const day = (iso: string) => iso.slice(0, 10);
   if (!b && a) return `${h(a.hours)} on ${day(a.date)}`;
   if (b && !a) return `${h(b.hours)} on ${day(b.date)}`;

@@ -9,11 +9,13 @@ const PUBLIC_PATHS = ["/login", "/forgot"];
 // Public regardless of auth state, in either direction — unlike /login and
 // /forgot, an already-signed-in visitor should still be able to see this
 // (e.g. checking their own marketing page), not get bounced to /dashboard.
-const ALWAYS_PUBLIC_PATHS = ["/about"];
+const ALWAYS_PUBLIC_PATHS = ["/about", "/use"];
+// Exact path or a sub-path — never a bare prefix, so "/use" can't expose "/users".
+const matchesPath = (pathname: string, p: string) => pathname === p || pathname.startsWith(`${p}/`);
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  if (ALWAYS_PUBLIC_PATHS.some((p) => pathname.startsWith(p))) return NextResponse.next();
+  if (ALWAYS_PUBLIC_PATHS.some((p) => matchesPath(pathname, p))) return NextResponse.next();
 
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
   const token = req.cookies.get("tm_session")?.value;
@@ -52,8 +54,8 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    // marketing/ holds the public /about page's screenshots — static assets,
-    // never auth-gated, same as the icon files already excluded here.
-    "/((?!_next/static|_next/image|favicon.ico|api|manifest.webmanifest|sw.js|icon.png|icon-192.png|icon-512.png|apple-touch-icon.png|marketing/).*)",
+    // marketing/ and guide/ hold the public /about and /use pages' screenshots —
+    // static assets, never auth-gated, same as the icon files already excluded here.
+    "/((?!_next/static|_next/image|favicon.ico|api|manifest.webmanifest|sw.js|icon.png|icon-192.png|icon-512.png|apple-touch-icon.png|marketing/|guide/).*)",
   ],
 };
