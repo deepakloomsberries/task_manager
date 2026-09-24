@@ -7,6 +7,7 @@ import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import { pushNotification, logActivity } from "@/lib/notify";
 import { parseHours } from "@/lib/ui";
 import { weekStartOf } from "@/lib/timerange";
+import { commitTimer } from "@/lib/timers";
 
 /** Whether a user's week has been submitted/approved and is therefore locked. */
 async function weekLocked(userId: number, date: Date | string) {
@@ -112,32 +113,6 @@ export async function deleteTimeEntry(formData: FormData) {
   redirect(back);
 }
 
-/** Converts a running timer into a logged time entry. Returns the hours logged. */
-async function commitTimer(timer: { id: number; userId: number; taskId: number; note: string | null; startedAt: Date }) {
-  const elapsedHours = (Date.now() - new Date(timer.startedAt).getTime()) / 3600000;
-  // Round to the nearest minute (1/60h) and never log a zero-length entry.
-  const hours = Math.max(0.02, Math.round(elapsedHours * 60) / 60);
-  const task = await db.task.findUnique({ where: { id: timer.taskId }, select: { projectId: true } });
-
-  await db.$transaction([
-    db.timeEntry.create({
-      data: {
-        userId: timer.userId,
-        taskId: timer.taskId,
-        projectId: task?.projectId ?? null,
-        date: new Date(timer.startedAt),
-        hours,
-        startedAt: new Date(timer.startedAt),
-        endedAt: new Date(),
-        note: timer.note,
-        source: "timer",
-      },
-    }),
-    db.taskTimer.delete({ where: { id: timer.id } }),
-  ]);
-  return hours;
-}
-
 /**
  * Stops every running timer on a task and banks the elapsed time. Called when a
  * task is completed, so nobody keeps accruing time against finished work.
@@ -162,7 +137,7 @@ export async function startTimerFor(userId: number, taskId: number) {
     if (existing.taskId === taskId) return; // already timing this task
     await commitTimer(existing);
   }
-  await db.taskTimer.create({ data: { userId, taskId } });
+  await db.taskTimer.create({ data: { userId, taskId, lastPingAt: new Date() } });
 }
 
 /**

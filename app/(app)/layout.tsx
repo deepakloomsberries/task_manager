@@ -12,6 +12,7 @@ import CommandPalette, { CommandButton } from "@/components/CommandPalette";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { logout } from "@/lib/actions/auth";
+import { reapStaleTimers } from "@/lib/timers";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
@@ -26,6 +27,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Tasks assigned to me that need attention now — overdue or due by end of today.
   const endOfToday = new Date();
   endOfToday.setHours(23, 59, 59, 999);
+
+  // Stop timers left running on a closed browser / shut-down laptop.
+  await reapStaleTimers();
 
   const [unread, unreadMessages, activeTimer, myTasksDue, paletteUsers, paletteProjects] =
     await Promise.all([

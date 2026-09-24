@@ -506,6 +506,9 @@ model TaskTimer {
   taskId    Int
   note      String?
   startedAt DateTime @default(now())
+  /// Last ping from any open tab; a stale value means the browser was closed
+  /// or the laptop shut down, and the timer is stopped automatically.
+  lastPingAt DateTime?
 }
 
 /**
