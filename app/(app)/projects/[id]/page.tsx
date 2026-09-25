@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { taskHref } from "@/lib/backLink";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
@@ -353,7 +354,7 @@ export default async function ProjectDetailPage({
               return (
                 <Link
                   key={t.id}
-                  href={`/tasks/${t.id}`}
+                  href={taskHref(t.id, `/projects/${project.id}`)}
                   className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-3 hover:bg-slate-50"
                 >
                   <div className="min-w-0 flex-1 basis-full sm:basis-auto">
@@ -503,6 +504,7 @@ export default async function ProjectDetailPage({
       <div className="card p-6">
         <h2 className="mb-4 font-semibold">Timeline</h2>
         <ProjectTimeline
+          back={`/projects/${project.id}`}
           tasks={project.tasks.map((t) => ({
             id: t.id,
             title: t.title,

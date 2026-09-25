@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { taskHref } from "@/lib/backLink";
 import { useEffect, useState, useTransition } from "react";
 import { rescheduleTask } from "@/lib/actions/tasks";
 import DatePicker from "@/components/DatePicker";
@@ -32,7 +33,10 @@ export default function CalendarGrid({
   month,
   todayDay,
   tasks,
+  back,
 }: {
+  /** The calendar URL (with its filters) that task links return to. */
+  back?: string;
   year: number;
   month: number; // 0-based
   todayDay: number | null;
@@ -125,7 +129,7 @@ export default function CalendarGrid({
                   {(byDay.get(day) ?? []).slice(0, 4).map((t) => (
                     <Link
                       key={t.id}
-                      href={`/tasks/${t.id}`}
+                      href={back ? taskHref(t.id, back) : `/tasks/${t.id}`}
                       draggable={t.editable}
                       onDragStart={(e) => t.editable && e.dataTransfer.setData("text/task-id", String(t.id))}
                       title={`${t.title}${t.assigneeName ? ` — ${t.assigneeName}` : ""}${t.editable ? " · drag to reschedule" : ""}`}
@@ -192,7 +196,7 @@ export default function CalendarGrid({
                 >
                   <span className={`h-2 w-2 shrink-0 rounded-full ${t.badge}`} />
                   <Link
-                    href={`/tasks/${t.id}`}
+                    href={back ? taskHref(t.id, back) : `/tasks/${t.id}`}
                     onClick={() => setOpenDay(null)}
                     title={t.assigneeName ? `${t.title} — ${t.assigneeName}` : t.title}
                     className={`flex-1 truncate ${t.status === "DONE" ? "line-through" : ""}`}

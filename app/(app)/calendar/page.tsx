@@ -199,7 +199,18 @@ export default async function CalendarPage({
         )}
       </form>
 
-      <CalendarGrid year={year} month={month} todayDay={todayDay} tasks={calTasks} />
+      <CalendarGrid
+        year={year}
+        month={month}
+        todayDay={todayDay}
+        tasks={calTasks}
+        back={`/calendar${(() => {
+          const q = new URLSearchParams(
+            Object.entries(searchParams).filter((e): e is [string, string] => typeof e[1] === "string" && e[1] !== "")
+          ).toString();
+          return q ? `?${q}` : "";
+        })()}`}
+      />
     </div>
   );
 }

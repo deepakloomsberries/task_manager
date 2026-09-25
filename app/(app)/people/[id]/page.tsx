@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { taskHref } from "@/lib/backLink";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
@@ -417,7 +418,7 @@ export default async function PersonProfilePage({
               return (
                 <Link
                   key={t.id}
-                  href={`/tasks/${t.id}`}
+                  href={taskHref(t.id, `/people/${person.id}`)}
                   className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/50"
                 >
                   <div className="min-w-0 flex-1">
@@ -458,7 +459,7 @@ export default async function PersonProfilePage({
             {doneRecent.map((t) => (
               <Link
                 key={t.id}
-                href={`/tasks/${t.id}`}
+                href={taskHref(t.id, `/people/${person.id}`)}
                 className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/50"
               >
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-500 text-xs text-white">

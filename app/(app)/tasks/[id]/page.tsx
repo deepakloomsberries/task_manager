@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { backLabel, safeBack } from "@/lib/backLink";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
@@ -90,7 +91,7 @@ export default async function TaskDetailPage({
   // Where "Back to tasks" returns to — the filtered list/board the user came
   // from, when passed along; otherwise the plain tasks page. Only accept
   // internal /tasks URLs so `back` can't be used to redirect off-site.
-  const backTo = searchParams.back && searchParams.back.startsWith("/tasks") ? searchParams.back : "/tasks";
+  const backTo = safeBack(searchParams.back, "/tasks");
   // For an action that should leave you right where you are — commenting,
   // tagging, watching, adding a collaborator/dependency, saving an edit —
   // redirect back to this same task, carrying `backTo` forward as its own
@@ -281,7 +282,7 @@ export default async function TaskDetailPage({
         prefetch={false}
         className="text-sm text-slate-500 hover:underline"
       >
-        ← {task.parent ? `Back to "${task.parent.title}"` : "Back to tasks"}
+        ← {task.parent ? `Back to "${task.parent.title}"` : backLabel(backTo, task.project?.name)}
       </Link>
 
       {banner && (

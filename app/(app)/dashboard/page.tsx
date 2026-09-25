@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { taskHref } from "@/lib/backLink";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { setTaskStatus } from "@/lib/actions/tasks";
@@ -183,7 +184,7 @@ export default async function DashboardPage() {
                 <div className="flex items-center gap-3">
                   <span className="flex h-11 w-11 items-center justify-center rounded-full bg-sky-100 text-xl">⏱️</span>
                   <div className="min-w-0">
-                    <Link href={`/tasks/${timer.task.id}`} className="block truncate font-medium hover:text-sky-700">
+                    <Link href={taskHref(timer.task.id, "/dashboard")} className="block truncate font-medium hover:text-sky-700">
                       {timer.task.title}
                     </Link>
                     <LiveElapsed startedAt={timer.startedAt.toISOString()} className="text-sm text-sky-600" />
@@ -199,7 +200,7 @@ export default async function DashboardPage() {
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div className="min-w-0">
                   <div className="mb-0.5 text-xs text-slate-400">Suggested next task</div>
-                  <Link href={`/tasks/${focus.id}`} className="block truncate font-medium hover:text-sky-700">
+                  <Link href={taskHref(focus.id, "/dashboard")} className="block truncate font-medium hover:text-sky-700">
                     {focus.title}
                   </Link>
                   <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
@@ -415,7 +416,7 @@ function AgendaGroup({
                 </button>
               </form>
               <div className="min-w-0 flex-1">
-                <Link href={`/tasks/${t.id}`} className="block truncate text-sm font-medium hover:text-sky-700">
+                <Link href={taskHref(t.id, "/dashboard")} className="block truncate text-sm font-medium hover:text-sky-700">
                   {t.title}
                 </Link>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">

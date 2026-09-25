@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { taskHref } from "@/lib/backLink";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { TASK_STATUSES, lookup, fmtDate } from "@/lib/ui";
@@ -86,7 +87,7 @@ export default async function SearchPage({
             {tasks.map((t) => {
               const status = lookup(TASK_STATUSES, t.status);
               return (
-                <Link key={t.id} href={`/tasks/${t.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50">
+                <Link key={t.id} href={taskHref(t.id, `/search?q=${encodeURIComponent(q)}`)} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50">
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium">
                       <span className="mr-1.5 font-mono text-[10px] text-slate-400">TM-{t.id}</span>
