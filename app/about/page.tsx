@@ -70,7 +70,7 @@ const FEATURE_GROUPS: FeatureGroup[] = [
       {
         icon: "🗓️",
         title: "Calendar & scheduling",
-        body: "Every due date, meeting and project milestone on one calendar — filterable by project, person or department.",
+        body: "Every due date, holiday and who's on leave on one calendar — and synced to Google, Outlook or Apple Calendar.",
       },
       {
         icon: "🗄️",
@@ -87,6 +87,11 @@ const FEATURE_GROUPS: FeatureGroup[] = [
   {
     title: "Track time & workload",
     items: [
+      {
+        icon: "🌴",
+        title: "Leave & holidays",
+        body: "Leave requests and approvals, per-office holidays and weekends — and Workload, calendars and reminders all know who's away.",
+      },
       {
         icon: "🔁",
         title: "Recurring jobs tracker",

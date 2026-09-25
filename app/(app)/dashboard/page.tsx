@@ -13,6 +13,7 @@ import ReviewTasksBanner from "@/components/ReviewTasksBanner";
 import AutoRefresh from "@/components/AutoRefresh";
 import AdminDashboard from "./AdminDashboard";
 import GettingStarted from "@/components/GettingStarted";
+import WhosOff from "@/components/WhosOff";
 import { companyTimezone, zonedStartOfToday, zonedHour, zonedDateLine } from "@/lib/tz";
 import {
   TASK_PRIORITIES,
@@ -250,6 +251,7 @@ export default async function DashboardPage() {
 
         {/* Right: week + people + activity */}
         <div className="space-y-6">
+          <WhosOff user={user} />
           {/* This week */}
           <div className="card p-5">
             <div className="flex items-baseline justify-between">

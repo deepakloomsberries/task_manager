@@ -34,8 +34,8 @@ export default async function SearchPage({
       where: {
         deletedAt: null,
         OR: [
-          { title: { contains: q } },
-          { description: { contains: q } },
+          { title: { contains: q, mode: "insensitive" as const } },
+          { description: { contains: q, mode: "insensitive" as const } },
           ...(idMatch ? [{ id: Number(idMatch[1]) }] : []),
         ],
       },
@@ -44,12 +44,12 @@ export default async function SearchPage({
       orderBy: { updatedAt: "desc" },
     }),
     db.project.findMany({
-      where: { OR: [{ name: { contains: q } }, { description: { contains: q } }] },
+      where: { OR: [{ name: { contains: q, mode: "insensitive" as const } }, { description: { contains: q, mode: "insensitive" as const } }] },
       include: { company: true },
       take: 10,
     }),
     db.attachment.findMany({
-      where: { originalName: { contains: q } },
+      where: { originalName: { contains: q, mode: "insensitive" as const } },
       include: { uploadedBy: true },
       take: 10,
       orderBy: { createdAt: "desc" },
@@ -58,12 +58,12 @@ export default async function SearchPage({
       where: {
         userId: user.id,
         deletedAt: null,
-        OR: [{ title: { contains: q } }, { body: { contains: q } }],
+        OR: [{ title: { contains: q, mode: "insensitive" as const } }, { body: { contains: q, mode: "insensitive" as const } }],
       },
       take: 10,
     }),
     db.user.findMany({
-      where: { active: true, OR: [{ name: { contains: q } }, { email: { contains: q } }] },
+      where: { active: true, OR: [{ name: { contains: q, mode: "insensitive" as const } }, { email: { contains: q, mode: "insensitive" as const } }] },
       include: { company: true, department: true },
       take: 10,
     }),

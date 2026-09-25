@@ -1,4 +1,8 @@
 import Link from "next/link";
+import { googleCalendarLink } from "@/lib/ics";
+import { companyTimezone } from "@/lib/tz";
+import { fmtRange, leaveType, todayIn, ymd } from "@/lib/leave";
+import { leaveBetween } from "@/lib/leaveData";
 import { backLabel, safeBack } from "@/lib/backLink";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -231,6 +235,15 @@ export default async function TaskDetailPage({
   // is flagged review-required — they must send it to Review for the owner.
   const canCompleteDone = canEdit || (!user.requiresApproval && !task.reviewRequired);
   const editing = searchParams.edit === "1" && canEdit;
+
+  // Is the assignee away now, or before this is due? Worth knowing before
+  // chasing them or piling more on.
+  const todayLocal = todayIn(companyTimezone(user.company));
+  const dueDay = task.dueDate ? ymd(task.dueDate) : todayLocal;
+  const assigneeLeave =
+    task.assignee && task.status !== "DONE"
+      ? (await leaveBetween(todayLocal, dueDay > todayLocal ? dueDay : todayLocal, { userIds: [task.assignee.id] }))[0] ?? null
+      : null;
   const taskCode = `TM-${task.id}`;
 
   // A quiet floating toast after a one-click status change.
@@ -284,6 +297,23 @@ export default async function TaskDetailPage({
       >
         ← {task.parent ? `Back to "${task.parent.title}"` : backLabel(backTo, task.project?.name)}
       </Link>
+
+      {assigneeLeave && task.assignee && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+          {leaveType(assigneeLeave.type).emoji}{" "}
+          {ymd(assigneeLeave.startDate) <= todayLocal ? (
+            <>
+              <b>{task.assignee.name}</b> is on leave today{assigneeLeave.halfDay ? " (half day)" : ""} — back after{" "}
+              {fmtRange(assigneeLeave.endDate, assigneeLeave.endDate)}.
+            </>
+          ) : (
+            <>
+              <b>{task.assignee.name}</b> will be on leave {fmtRange(assigneeLeave.startDate, assigneeLeave.endDate)}
+              {task.dueDate ? ", before this task is due" : ""}.
+            </>
+          )}
+        </div>
+      )}
 
       {banner && (
         <div
@@ -477,6 +507,21 @@ export default async function TaskDetailPage({
                 <dt className="text-xs text-slate-500">Due date</dt>
                 <dd className="mt-0.5 font-medium">
                   {fmtDate(task.dueDate)}
+                  {task.dueDate && task.status !== "DONE" && (
+                    <a
+                      href={googleCalendarLink({
+                        title: `TM-${task.id} · ${task.title}`,
+                        day: toInputDate(task.dueDate),
+                        details: `${process.env.APP_URL ?? ""}/tasks/${task.id}`,
+                      })}
+                      target="_blank"
+                      rel="noopener"
+                      className="mt-0.5 block text-xs font-normal text-sky-700 hover:underline dark:text-sky-400"
+                      title="Add this due date to your Google Calendar"
+                    >
+                      ＋ Google Calendar
+                    </a>
+                  )}
                 </dd>
               </div>
               <div>

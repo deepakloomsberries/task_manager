@@ -18,6 +18,7 @@ const NAV: { label: string; href: string; icon: string }[] = [
   { label: "Calendar", href: "/calendar", icon: "▧" },
   { label: "Messages", href: "/messages", icon: "✉" },
   { label: "Time sheet", href: "/timesheet", icon: "◷" },
+  { label: "Leave & holidays", href: "/leave", icon: "✈" },
   { label: "Notes", href: "/notes", icon: "✎" },
   { label: "Reports", href: "/reports", icon: "▙" },
   { label: "Settings", href: "/settings", icon: "⚙" },

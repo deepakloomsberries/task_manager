@@ -33,7 +33,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Stop timers left running on a closed browser / shut-down laptop.
   await reapStaleTimers();
 
-  const [unread, unreadMessages, activeTimer, myTasksDue] =
+  const isApprover = user.role === "ADMIN" || user.role === "MANAGER";
+  const [unread, unreadMessages, activeTimer, myTasksDue, pendingLeave] =
     await Promise.all([
       db.notification.count({ where: { userId: user.id, read: false } }),
       db.directMessage.count({ where: { recipientId: user.id, read: false } }),
@@ -49,12 +50,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           OR: [{ assigneeId: user.id }, { collaborators: { some: { userId: user.id } } }],
         },
       }),
+      isApprover ? db.leave.count({ where: { status: "PENDING", userId: { not: user.id } } }) : Promise.resolve(0),
     ]);
 
   const navBadges: Record<string, number> = {
     "/messages": unreadMessages,
     "/my-tasks": myTasksDue,
     "/notifications": unread,
+    "/leave": pendingLeave,
   };
 
   const isAdmin = user.role === "ADMIN";

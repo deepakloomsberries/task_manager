@@ -17,6 +17,7 @@ const MAIN_NAV: NavItem[] = [
   { href: "/messages", label: "Messages", icon: "✉" },
   { href: "/documents", label: "Documents", icon: "▣" },
   { href: "/timesheet", label: "Time sheet", icon: "◷" },
+  { href: "/leave", label: "Leave", icon: "✈" },
   { href: "/notes", label: "Notes", icon: "✎" },
   { href: "/reports", label: "Reports", icon: "▙" },
 ];

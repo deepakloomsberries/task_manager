@@ -273,6 +273,43 @@ async function main() {
     await db.attachment.create({ data: { originalName, externalUrl, mimeType: "text/uri-list", size: 0, taskId, uploadedById, createdAt: at(-1, 12) } });
   }
 
+  // Office weekends, holidays and a mix of leave for the Leave pages.
+  await db.company.update({ where: { id: ind.id }, data: { weekendDays: "0" } });
+  await db.company.update({ where: { id: uae.id }, data: { weekendDays: "0,6" } });
+  await db.company.update({ where: { id: ksa.id }, data: { weekendDays: "5,6" } });
+  const dayUtc = (days: number) => {
+    const x = new Date(Date.now() + days * DAY);
+    return new Date(Date.UTC(x.getFullYear(), x.getMonth(), x.getDate()));
+  };
+  await db.holiday.createMany({
+    data: [
+      { date: dayUtc(7), name: "Gandhi Jayanti", companyId: ind.id },
+      { date: dayUtc(14), name: "Company offsite", companyId: null },
+      { date: dayUtc(25), name: "Dussehra", companyId: ind.id },
+      { date: dayUtc(44), name: "Diwali", companyId: ind.id },
+      { date: dayUtc(68), name: "UAE National Day", companyId: uae.id },
+      { date: dayUtc(-2), name: "Saudi National Day", companyId: ksa.id },
+    ],
+  });
+  const leave = (userId: number, from: number, to: number, type: string, status: string, days: number, extra: object = {}) =>
+    db.leave.create({
+      data: {
+        userId, type, status, days, startDate: dayUtc(from), endDate: dayUtc(to), createdAt: at(-4),
+        ...(status === "APPROVED" || status === "REJECTED" ? { reviewedById: priya.id, reviewedAt: at(-3) } : {}),
+        ...extra,
+      },
+    });
+  await leave(rohan.id, 0, 0, "SICK", "APPROVED", 1, { reason: "Fever" });
+  await leave(karan.id, 3, 4, "ANNUAL", "APPROVED", 2, { reason: "Cousin's wedding" });
+  await leave(arjun.id, 6, 8, "ANNUAL", "APPROVED", 3);
+  await leave(sara.id, 10, 14, "ANNUAL", "PENDING", 3, { reason: "Family wedding in Jeddah" });
+  await leave(fatima.id, 2, 2, "CASUAL", "PENDING", 0.5, { halfDay: true, reason: "Bank appointment" });
+  await leave(fatima.id, -30, -28, "ANNUAL", "APPROVED", 3);
+  await leave(fatima.id, -12, -12, "SICK", "APPROVED", 1);
+  await leave(fatima.id, 20, 21, "ANNUAL", "APPROVED", 2, { reason: "Long weekend trip" });
+  await leave(fatima.id, -50, -49, "UNPAID", "REJECTED", 2, { reviewNote: "Clashes with the stock audit" });
+  await db.user.update({ where: { id: priya.id }, data: { calendarToken: "demo-calendar-link-3f9a0c7b2e41d8a6" } });
+
   console.log(`Demo data ready. Sign in as priya@demo.local / Demo@12345 (${people.length} people).`);
 }
 

@@ -396,6 +396,82 @@ export const CATEGORIES: Category[] = [
     ],
   },
   {
+    id: "leave-calendar",
+    title: "Leave & calendar",
+    icon: "🌴",
+    blurb: "Time off, office holidays, and your tasks in Google Calendar.",
+    articles: [
+      {
+        id: "leave",
+        title: "Request leave",
+        audience: "Everyone",
+        summary:
+          "Ask for time off from the Leave page. Weekends and office holidays inside your dates aren't counted, and your manager gets a notification to approve it.",
+        shot: "leave",
+        callouts: [
+          { spot: "summary", title: "Your year so far", body: "Days of leave approved this year, by type, and anything still waiting for approval.", side: "inside" },
+          { spot: "type", title: "Leave type", body: "Annual, sick, casual, unpaid or other.", side: "right" },
+          { spot: "dates", title: "From / To", body: "Leave “To” empty for a single day. Days are counted for your own office's weekend.", side: "right" },
+          { spot: "halfday", title: "Half day", body: "For a single morning or afternoon — counts as 0.5.", side: "right" },
+          { spot: "send", title: "Send request", body: "Managers are notified straight away; you're notified when they decide.", side: "right" },
+          { spot: "requests", title: "My requests", body: "Status, who approved it, and any note from them.", side: "inside" },
+          { spot: "withdraw", title: "Withdraw / Cancel", body: "Withdraw a pending request, or cancel approved leave that hasn't started.", side: "left" },
+        ],
+        tips: [
+          "While you're on leave you won't get the daily due-task email or the Friday timesheet reminder, and your daily recurring jobs aren't marked as missed.",
+          "Everyone can see who's off today on their Dashboard, and a banner on a task tells people when its assignee is away.",
+        ],
+      },
+      {
+        id: "approve-leave",
+        title: "Approve leave & see who's off",
+        audience: "Managers",
+        summary: "Leave → Team lists every pending request and a three-week view of who's away.",
+        shot: "leave-team",
+        callouts: [
+          { spot: "badge", title: "Pending count", body: "The Leave menu item shows how many requests are waiting for you.", side: "right" },
+          { spot: "pending", title: "Waiting for approval", body: "Type, dates, working days and the reason.", side: "inside" },
+          { spot: "approve", title: "Approve", body: "The person is notified and it appears on calendars, Workload and the Dashboard.", side: "bottom" },
+          { spot: "decline", title: "Decline", body: "Add a short reason so they know what to change.", side: "bottom" },
+          { spot: "grid", title: "Who's off — next 21 days", body: "One row per person. Faded = still pending; grey = their weekend or an office holiday.", side: "inside" },
+        ],
+        tips: ["You can't approve your own leave — another manager or an admin does that. Admins' own leave is booked directly."],
+      },
+      {
+        id: "holidays",
+        title: "Holidays & weekends",
+        audience: "Admins",
+        summary: "Set each office's public holidays and weekend days. They're skipped when leave is counted and shown on everyone's calendar.",
+        shot: "holidays",
+        callouts: [
+          { spot: "list", title: "Holidays this year", body: "Each shows which office it applies to. Use the arrows to plan next year.", side: "inside" },
+          { spot: "add", title: "Add a holiday", body: "Pick a date and a name.", side: "inside" },
+          { spot: "office", title: "Which office", body: "One office (IND, UAE, KSA) or all of them.", side: "left" },
+          { spot: "weekend", title: "Weekend days", body: "E.g. India Sunday, UAE Saturday + Sunday, KSA Friday + Saturday. Tick and Save.", side: "inside" },
+        ],
+      },
+      {
+        id: "calendar-sync",
+        title: "See your tasks in Google Calendar",
+        audience: "Everyone",
+        summary:
+          "Subscribe once and your task due dates, your leave and your office's holidays appear in Google Calendar — and stay up to date on their own.",
+        shot: "calendar-sync",
+        callouts: [
+          { spot: "google", title: "Add to Google Calendar", body: "Opens Google Calendar with the subscription ready — click Add. (First click “Create my calendar link” in Settings.)", side: "bottom" },
+          { spot: "other", title: "Outlook or Apple Calendar", body: "Opens your computer's or phone's calendar app with the same feed.", side: "bottom" },
+          { spot: "link", title: "Your private link", body: "Or copy it: Google Calendar → ＋ next to Other calendars → From URL → paste.", side: "top" },
+          { spot: "reset", title: "Reset link", body: "If the link was shared by mistake — the old one stops working immediately.", side: "right" },
+        ],
+        tips: [
+          "Google refreshes subscribed calendars every few hours, so a change here can take a while to show there.",
+          "The sync is one-way: change dates in this app, not in Google Calendar.",
+          "Just one task? Open it and click “＋ Google Calendar” under its due date.",
+        ],
+      },
+    ],
+  },
+  {
     id: "planning",
     title: "Projects & planning",
     icon: "📁",
@@ -521,11 +597,11 @@ export const CATEGORIES: Category[] = [
         callouts: [
           { spot: "email", title: "Email notifications", body: "Assignments, comments, reminders and the daily digest. Untick to stop emails.", side: "right" },
           { spot: "save", title: "Save preferences", body: "Takes effect straight away.", side: "right" },
-          { spot: "password", title: "Change password", body: "Use a strong password: upper and lower case, a number and a symbol.", side: "right" },
         ],
         tips: [
           "Browser pop-ups: allow notifications when the app asks, so you're alerted even when the tab is in the background.",
           "On Friday afternoon you'll get a reminder if this week's timesheet hasn't been submitted yet.",
+          "Further down Settings: Calendar sync (Google Calendar) and Change password.",
         ],
       },
     ],
@@ -615,7 +691,7 @@ export const CATEGORIES: Category[] = [
         callouts: [
           { spot: "filters", title: "Filter", body: "By person, company or department — or tick “Over capacity only”.", side: "inside" },
           { spot: "week", title: "Pick a week", body: "Plan ahead with Next week.", side: "bottom" },
-          { spot: "grid", title: "Daily load", body: "Blue ≤ 4h, amber ≤ 8h, red > 8h. The green chip shows what someone is timing right now.", side: "inside" },
+          { spot: "grid", title: "Daily load", body: "Blue ≤ 4h, amber ≤ 8h, red > 8h. 🌴 = on leave, 🎉 = holiday (a red ring means work is due while they're away). The green chip shows what someone is timing now.", side: "inside" },
         ],
       },
       {
@@ -732,6 +808,14 @@ export const CATEGORIES: Category[] = [
 
 export const FAQS: { q: string; a: string }[] = [
   {
+    q: "My leave shows fewer days than the dates I picked.",
+    a: "Weekends and office holidays inside your dates aren't counted — only working days for your own office.",
+  },
+  {
+    q: "My tasks aren't showing in Google Calendar yet.",
+    a: "Google refreshes subscribed calendars every few hours. Check the calendar is ticked under “Other calendars”; if you reset your link, add the new one.",
+  },
+  {
     q: "I started work but forgot to press Start.",
     a: "Open the task, click “⏪ Started earlier?”, choose how long ago you began, and press “Start from then”. Or add the time manually on your Time sheet.",
   },
@@ -767,6 +851,9 @@ export const FAQS: { q: string; a: string }[] = [
 
 /** Newest first. `link` is an article id. */
 export const WHATS_NEW: { date: string; title: string; body: string; link?: string }[] = [
+  { date: "Sep 2026", title: "Leave & holidays", body: "Request leave, approve it, and set each office's holidays and weekends. Workload, calendars and reminders all know who's away.", link: "leave" },
+  { date: "Sep 2026", title: "Google Calendar sync", body: "Your due dates, leave and holidays in Google, Outlook or Apple Calendar.", link: "calendar-sync" },
+  { date: "Sep 2026", title: "Back to where you were", body: "Open a task from a project (or the calendar, My Tasks…) and “Back” returns you there after any change.", link: "task-detail" },
   { date: "Sep 2026", title: "Help on every page", body: "A ? button in the top bar (or press ?) opens the guide for the page you're on.", link: "help-menu" },
   { date: "Sep 2026", title: "Getting-started checklist", body: "New accounts see a short checklist on the Dashboard that ticks itself off.", link: "welcome" },
   { date: "Sep 2026", title: "Start a timer from earlier", body: "Forgot to press Start? Begin the timer from up to 8 hours ago.", link: "backdate" },
@@ -779,6 +866,7 @@ export const WHATS_NEW: { date: string; title: string; body: string; link?: stri
 ];
 
 export const GLOSSARY: { term: string; meaning: string }[] = [
+  { term: "Working day", meaning: "Not your office's weekend and not a holiday. Leave is counted in working days." },
   { term: "To Do → In Progress → In Review → Done", meaning: "A task's status. Starting a timer moves To Do to In Progress automatically." },
   { term: "Low · Medium · High · Urgent", meaning: "Priority. Urgent tasks are shown in red everywhere." },
   { term: "TM-42", meaning: "A task's ID. Type it in search (⌘K) to jump straight to the task." },

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { isManagerOrAdmin } from "@/lib/auth";
+import { daysOffMap } from "@/lib/leaveData";
 import AutoRefresh from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +12,7 @@ function ymd(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-type Cell = { id: number; state: "done" | "missed" | "pending" | "retired"; };
+type Cell = { id: number; state: "done" | "missed" | "pending" | "off" | "retired"; };
 
 export default async function RecurringPage({
   searchParams,
@@ -49,7 +50,7 @@ export default async function RecurringPage({
       seriesId: { not: null },
       recurrence: { not: null },
       dueDate: { gte: monthStart, lt: monthEnd },
-      ...(q ? { title: { contains: q } } : {}),
+      ...(q ? { title: { contains: q, mode: "insensitive" as const } } : {}),
       ...(canSeeAll
         ? selectedAssignee
           ? { assigneeId: selectedAssignee }
@@ -64,10 +65,14 @@ export default async function RecurringPage({
       completedAt: true,
       missedAt: true,
       deletedAt: true,
-      assignee: { select: { id: true, name: true } },
+      assignee: { select: { id: true, name: true, companyId: true } },
     },
     orderBy: { dueDate: "asc" },
   });
+
+  // Holidays and approved leave: an occurrence not done on a day off isn't a miss.
+  const assignees = Array.from(new Map(rows.filter((r) => r.assignee).map((r) => [r.assignee!.id, r.assignee!])).values());
+  const offDays = await daysOffMap(assignees, ymd(days[0]), ymd(days[days.length - 1]));
 
   // Group into one row per series.
   type Series = {
@@ -85,7 +90,7 @@ export default async function RecurringPage({
   // roll-over archived as missed alongside the live one). Show the most
   // meaningful: done beats a still-live pending, which beats missed, which
   // beats a manually-retired duplicate (nothing to see there).
-  const RANK: Record<Cell["state"], number> = { done: 4, pending: 3, missed: 2, retired: 1 };
+  const RANK: Record<Cell["state"], number> = { done: 5, pending: 4, off: 3, missed: 2, retired: 1 };
   const series = new Map<string, Series>();
   for (const t of rows) {
     let s = series.get(t.seriesId!);
@@ -104,6 +109,8 @@ export default async function RecurringPage({
     if (t.completedAt) {
       state = "done";
       if (!s.lastDone || t.completedAt > s.lastDone) s.lastDone = t.completedAt;
+    } else if (t.assignee && offDays.has(`${t.assignee.id}:${key}`) && (past || t.deletedAt)) {
+      state = "off";
     } else if (t.deletedAt && !t.missedAt) {
       // The nightly roll-over always stamps missedAt (or completedAt) on
       // anything it archives, so deletedAt-without-either means a person
@@ -222,6 +229,7 @@ export default async function RecurringPage({
     missed: "bg-rose-500 text-white shadow-sm",
     pending: "bg-amber-100 text-amber-700 ring-1 ring-amber-400",
     retired: "bg-slate-300 text-slate-500 dark:bg-slate-600 dark:text-slate-400",
+    off: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900",
   };
   const SORTS: { key: string; label: string }[] = [
     { key: "name", label: "Name" },
@@ -238,7 +246,7 @@ export default async function RecurringPage({
           <h1 className="text-2xl font-bold">Recurring tasks</h1>
           <p
             className="text-sm text-slate-500"
-            title="✓ done · ✕ missed · • today · – retired (that day deleted by hand). A struck-through task name means the whole job is retired — its most recent occurrence was deleted and nothing has replaced it. Weekends are tinted."
+            title="✓ done · ✕ missed · • today · 🌴 day off (holiday/leave, not counted) · – retired (that day deleted by hand). A struck-through task name means the whole job is retired — its most recent occurrence was deleted and nothing has replaced it. Weekends are tinted."
           >
             Every recurring job, day by day.{" "}
             <span className="font-medium text-green-600">✓</span>{" "}
@@ -441,7 +449,7 @@ export default async function RecurringPage({
                           </td>
                         );
                       }
-                      const label = cell.state === "done" ? "✓" : cell.state === "missed" ? "✕" : cell.state === "retired" ? "–" : "•";
+                      const label = cell.state === "done" ? "✓" : cell.state === "missed" ? "✕" : cell.state === "retired" ? "–" : cell.state === "off" ? "🌴" : "•";
                       const dayLabel = m.d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
                       if (cell.state === "retired") {
                         // Deleted by hand — there's no live task to open, so this
@@ -462,7 +470,7 @@ export default async function RecurringPage({
                         <td key={m.key} className={`border-b border-slate-100 px-0.5 py-1 text-center dark:border-slate-700 ${tint}`}>
                           <Link
                             href={`/tasks/${cell.id}`}
-                            title={`${dayLabel} — ${cell.state}`}
+                            title={`${dayLabel} — ${cell.state === "off" ? "day off (holiday or leave), not counted" : cell.state}`}
                             className={`mx-auto flex h-6 w-6 items-center justify-center rounded-md text-[11px] font-bold transition hover:scale-110 ${CELL[cell.state]}`}
                           >
                             {label}

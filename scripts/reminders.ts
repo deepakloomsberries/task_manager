@@ -58,8 +58,20 @@ async function main() {
       })
     : null;
 
+  // Nobody on approved leave today gets the digest.
+  const todayDay = new Date(`${todayStart.getFullYear()}-${String(todayStart.getMonth() + 1).padStart(2, "0")}-${String(todayStart.getDate()).padStart(2, "0")}T00:00:00Z`);
+  const away = new Set(
+    (
+      await db.leave.findMany({
+        where: { status: "APPROVED", startDate: { lte: todayDay }, endDate: { gte: todayDay } },
+        select: { userId: true },
+      })
+    ).map((l) => l.userId)
+  );
+
   let sent = 0;
   for (const user of users) {
+    if (away.has(user.id)) continue;
     const overdue = user.tasksAssigned.filter((t) => t.dueDate! < todayStart);
     const dueToday = user.tasksAssigned.filter((t) => t.dueDate! >= todayStart);
     if (overdue.length === 0 && dueToday.length === 0) continue;

@@ -2,7 +2,9 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import { TASK_PRIORITIES, TASK_STATUSES, lookup } from "@/lib/ui";
-import CalendarGrid, { type CalTask } from "@/components/CalendarGrid";
+import CalendarGrid, { type CalMark, type CalTask } from "@/components/CalendarGrid";
+import { eachDay, isWorkingDay, leaveType, weekendSet, ymd } from "@/lib/leave";
+import { holidaysFor, leaveBetween } from "@/lib/leaveData";
 import SearchSelect from "@/components/SearchSelect";
 import AutoRefresh from "@/components/AutoRefresh";
 
@@ -50,6 +52,33 @@ export default async function CalendarPage({
   const mine = searchParams.scope !== "all" && !assigneeId;
   const monthStart = new Date(year, month, 1);
   const monthEnd = new Date(year, month + 1, 1);
+
+  // Holidays and approved leave in this month, shown on the day cells.
+  const firstDay = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+  const lastDay = ymd(new Date(Date.UTC(year, month + 1, 0)));
+  const [monthHolidays, monthLeave] = await Promise.all([
+    holidaysFor(mine ? user.companyId : null, firstDay, lastDay),
+    leaveBetween(firstDay, lastDay, assigneeId ? { userIds: [assigneeId] } : mine ? { userIds: [user.id] } : {}),
+  ]);
+  const marks: CalMark[] = [];
+  for (const h of monthHolidays) {
+    marks.push({ day: Number(ymd(h.date).slice(8)), kind: "holiday", label: h.name, title: `${h.name} — ${h.company?.code ?? "all offices"}` });
+  }
+  // Leave labels only on days the person would otherwise be working.
+  const offices = await db.company.findMany({ select: { id: true, weekendDays: true } });
+  const weekendOf = new Map(offices.map((c) => [c.id, weekendSet(c.weekendDays)]));
+  const allHolidays = monthLeave.length ? await holidaysFor(null, firstDay, lastDay) : [];
+  for (const l of monthLeave) {
+    const theirHolidays = new Set(
+      allHolidays.filter((h) => h.companyId === null || h.companyId === l.user.companyId).map((h) => ymd(h.date))
+    );
+    for (const d of eachDay(ymd(l.startDate), ymd(l.endDate))) {
+      if (d < firstDay || d > lastDay) continue;
+      if (!isWorkingDay(d, weekendOf.get(l.user.companyId) ?? new Set(), theirHolidays)) continue;
+      const label = l.userId === user.id ? "You're off" : l.user.name.split(" ")[0];
+      marks.push({ day: Number(d.slice(8)), kind: "leave", label, title: `${l.user.name} — ${leaveType(l.type).label}${l.halfDay ? " (half day)" : ""}` });
+    }
+  }
 
   const [tasks, users, projects] = await Promise.all([
     db.task.findMany({
@@ -204,6 +233,7 @@ export default async function CalendarPage({
         month={month}
         todayDay={todayDay}
         tasks={calTasks}
+        marks={marks}
         back={`/calendar${(() => {
           const q = new URLSearchParams(
             Object.entries(searchParams).filter((e): e is [string, string] => typeof e[1] === "string" && e[1] !== "")

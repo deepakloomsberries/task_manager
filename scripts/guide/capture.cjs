@@ -453,6 +453,53 @@ const SHOTS = [
     },
   },
   {
+    id: "leave", path: "/leave", as: "fatima",
+    spots: {
+      summary: (p) => p.getByText(/days of leave in/).locator("xpath=ancestor::div[contains(@class,'grid')][1]"),
+      type: (p) => p.locator("select[name=type]"),
+      dates: (p) => p.getByText("From *").locator("xpath=../.."),
+      halfday: (p) => p.getByText("Half day (single day only)"),
+      send: (p) => p.getByRole("button", { name: "Send request" }),
+      requests: (p) => p.getByRole("heading", { name: "My requests" }).locator("xpath=ancestor::div[contains(@class,'card')][1]"),
+      withdraw: (p) => p.getByRole("button", { name: "Withdraw" }).first(),
+    },
+  },
+  {
+    id: "leave-team", path: "/leave/team",
+    spots: {
+      pending: (p) => p.getByLabel("Pending requests"),
+      approve: (p) => p.getByRole("button", { name: /Approve/ }).first(),
+      decline: (p) => p.getByRole("button", { name: "Decline" }).first(),
+      grid: (p) => p.getByLabel("Who's off"),
+      badge: (p) => p.locator('aside a[href="/leave"]').first(),
+    },
+  },
+  {
+    id: "holidays", path: "/leave/holidays",
+    spots: {
+      list: (p) => p.getByLabel("Holidays"),
+      add: (p) => p.getByLabel("Add a holiday"),
+      office: (p) => p.locator("select[name=companyId]"),
+      weekend: (p) => p.getByLabel("Weekends"),
+    },
+  },
+  {
+    id: "calendar-sync", path: "/settings",
+    before: async (p) => {
+      await p.locator("#calendar").scrollIntoViewIfNeeded();
+      await p.evaluate(() => {
+        document.getElementById("calendar")?.scrollIntoView({ block: "start" });
+        document.querySelector("main")?.scrollBy(0, -80);
+      });
+    },
+    spots: {
+      google: (p) => p.getByRole("link", { name: /Add to Google Calendar/ }),
+      other: (p) => p.getByRole("link", { name: /Outlook/ }),
+      link: (p) => p.getByLabel("Calendar feed link"),
+      reset: (p) => p.getByRole("button", { name: "Reset link" }),
+    },
+  },
+  {
     id: "timer-running", path: "/tasks/6",
     before: async (p) => {
       const start = p.getByRole("button", { name: /Start timer|Switch timer/ });
@@ -498,8 +545,9 @@ async function box(page, loc, clipY) {
   const ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 2 });
   const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
   const karan = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 2 });
+  const fatima = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 2 });
 
-  for (const [c, email] of [[ctx, "priya@demo.local"], [phone, "priya@demo.local"], [karan, "karan@demo.local"]]) {
+  for (const [c, email] of [[ctx, "priya@demo.local"], [phone, "priya@demo.local"], [karan, "karan@demo.local"], [fatima, "fatima@demo.local"]]) {
     const p = await c.newPage();
     await p.goto(`${BASE}/login`);
     await p.fill("input[name=email]", email);
@@ -510,7 +558,7 @@ async function box(page, loc, clipY) {
 
   for (const shot of SHOTS) {
     if (ONLY && !ONLY.includes(shot.id)) continue;
-    const c = shot.auth === false ? anon : shot.mobile ? phone : shot.as === "karan" ? karan : ctx;
+    const c = shot.auth === false ? anon : shot.mobile ? phone : shot.as === "karan" ? karan : shot.as === "fatima" ? fatima : ctx;
     const p = await c.newPage();
     await p.goto(BASE + shot.path, { waitUntil: "networkidle" });
     await p.addStyleTag({ content: "*{caret-color:transparent!important} nextjs-portal{display:none!important}" });

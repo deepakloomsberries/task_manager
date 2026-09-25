@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -14,6 +14,10 @@ model Company {
   users       User[]
   departments Department[]
   projects    Project[]
+  holidays    Holiday[]
+  /// Days off each week as JS weekday numbers (0 = Sunday … 6 = Saturday),
+  /// comma-separated, e.g. "0" or "5,6". Leave days are counted around these.
+  weekendDays String       @default("0")
 }
 
 model Department {
@@ -78,6 +82,11 @@ model User {
   groupMessagesSent    GroupMessage[]        @relation("groupMessageSender")
   groupMessageReactions GroupMessageReaction[]
   groupMessageStars    GroupMessageStar[]
+  leaves               Leave[]               @relation("leaveUser")
+  leaveReviews         Leave[]               @relation("leaveReviewer")
+  /// Secret for the personal calendar feed (/api/calendar/<token>). Rotating it
+  /// cuts off every calendar that subscribed with the old link.
+  calendarToken        String?               @unique
 }
 
 /**
@@ -652,4 +661,45 @@ model BillingSnapshot {
   generatedAt   DateTime @default(now())
   generatedBy   User     @relation(fields: [generatedById], references: [id])
   generatedById Int
+}
+
+/**
+ * A public holiday / office closure. `companyId` null means every office.
+ * Dates are stored as UTC midnight of the calendar day.
+ */
+model Holiday {
+  id        Int      @id @default(autoincrement())
+  date      DateTime
+  name      String
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyId Int?
+  createdAt DateTime @default(now())
+
+  @@index([date])
+}
+
+/**
+ * A leave request. Dates are calendar days (UTC midnight), end inclusive.
+ * PENDING until a manager/admin approves or rejects it; the person can cancel.
+ */
+model Leave {
+  id           Int       @id @default(autoincrement())
+  user         User      @relation("leaveUser", fields: [userId], references: [id], onDelete: Cascade)
+  userId       Int
+  type         String    @default("ANNUAL") // ANNUAL | SICK | CASUAL | UNPAID | OTHER
+  startDate    DateTime
+  endDate      DateTime
+  halfDay      Boolean   @default(false) // only for single-day leave
+  days         Float     @default(0) // working days, worked out when requested
+  reason       String?
+  status       String    @default("PENDING") // PENDING | APPROVED | REJECTED | CANCELLED
+  reviewedBy   User?     @relation("leaveReviewer", fields: [reviewedById], references: [id])
+  reviewedById Int?
+  reviewedAt   DateTime?
+  reviewNote   String?
+  createdAt    DateTime  @default(now())
+
+  @@index([userId, startDate])
+  @@index([status])
+  @@index([startDate, endDate])
 }

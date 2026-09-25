@@ -1,6 +1,8 @@
 import { db } from "@/lib/db";
 import { weekStartOf } from "@/lib/timerange";
 import { fmtHours } from "@/lib/ui";
+import { ymdLocal } from "@/lib/leave";
+import { usersOnLeave } from "@/lib/leaveData";
 
 export const REMINDER_PREFIX = "⏰ Timesheet reminder";
 export const REMINDER_LINK = "/timesheet?range=week";
@@ -30,7 +32,7 @@ export async function findTimesheetReminders(
   const todayStart = new Date(now);
   todayStart.setHours(0, 0, 0, 0);
 
-  const [users, subs, hours, alreadyReminded] = await Promise.all([
+  const [users, subs, hours, alreadyReminded, away] = await Promise.all([
     db.user.findMany({
       where: { active: true, role: { in: roles } },
       select: { id: true, name: true, email: true, emailNotifications: true },
@@ -48,6 +50,7 @@ export async function findTimesheetReminders(
       where: { createdAt: { gte: todayStart }, message: { startsWith: REMINDER_PREFIX } },
       select: { userId: true },
     }),
+    usersOnLeave(ymdLocal(now)),
   ]);
 
   const done = new Set(subs.map((s) => s.userId));
@@ -55,7 +58,8 @@ export async function findTimesheetReminders(
   const logged = new Map(hours.map((h) => [h.userId, h._sum.hours ?? 0]));
 
   return users
-    .filter((u) => !done.has(u.id) && !reminded.has(u.id))
+    // People on leave today are left alone; they'll catch up when back.
+    .filter((u) => !done.has(u.id) && !reminded.has(u.id) && !away.has(u.id))
     .map((u) => {
       const h = logged.get(u.id) ?? 0;
       const message =

@@ -1,4 +1,8 @@
 import { requireUser } from "@/lib/auth";
+import ConfirmButton from "@/components/ConfirmButton";
+import CopyField from "@/components/CopyField";
+import { disableCalendarLink, resetCalendarLink } from "@/lib/actions/calendar";
+import { googleSubscribeLink } from "@/lib/ics";
 import { changeOwnPassword, updateOwnProfile, updateNotificationPrefs } from "@/lib/actions/auth";
 import { removeAvatar } from "@/lib/actions/profile";
 import PasswordField from "@/components/PasswordField";
@@ -23,6 +27,8 @@ export default async function SettingsPage({
   searchParams: { ok?: string; error?: string; first?: string };
 }) {
   const user = await requireUser();
+  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+  const feedUrl = user.calendarToken ? `${appUrl}/api/calendar/${user.calendarToken}.ics` : null;
   const msg = searchParams.ok
     ? MESSAGES.ok
     : searchParams.error
@@ -125,6 +131,56 @@ export default async function SettingsPage({
             Save preferences
           </button>
         </form>
+      </div>
+
+      <div id="calendar" className="card scroll-mt-20 p-6">
+        <h2 className="mb-1 font-semibold">📅 Calendar sync</h2>
+        <p className="mb-4 text-sm text-slate-500">
+          See your task due dates, leave and office holidays in Google Calendar (or Outlook / Apple Calendar).
+          It updates by itself — Google refreshes subscribed calendars every few hours.
+        </p>
+        {feedUrl ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <a href={googleSubscribeLink(feedUrl)} target="_blank" rel="noopener" className="btn-primary">
+                ＋ Add to Google Calendar
+              </a>
+              <a href={feedUrl.replace(/^https?:/, "webcal:")} className="btn-secondary">
+                Open in Outlook / Apple Calendar
+              </a>
+            </div>
+            <div>
+              <label className="label">Your private calendar link</label>
+              <CopyField value={feedUrl} label="Calendar feed link" />
+              <p className="mt-1 text-xs text-slate-500">
+                If the button doesn&apos;t work: in Google Calendar click <b>＋</b> next to <b>Other calendars</b> →{" "}
+                <b>From URL</b> → paste this link. Keep it private — anyone with it can see your tasks&apos; titles and dates.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3 border-t border-slate-100 pt-3 dark:border-slate-700">
+              <form action={resetCalendarLink}>
+                <ConfirmButton
+                  className="text-xs text-slate-500 hover:underline"
+                  confirmLabel="Reset link"
+                  message="Make a new link? Calendars using the old one stop updating until you add the new link."
+                >
+                  Reset link
+                </ConfirmButton>
+              </form>
+              <form action={disableCalendarLink}>
+                <button type="submit" className="text-xs text-red-600 hover:underline">
+                  Turn off calendar sync
+                </button>
+              </form>
+            </div>
+          </div>
+        ) : (
+          <form action={resetCalendarLink}>
+            <button type="submit" className="btn-primary">
+              Create my calendar link
+            </button>
+          </form>
+        )}
       </div>
 
       <div className="card p-6">

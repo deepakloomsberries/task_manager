@@ -13,6 +13,9 @@ const MONTHS = [
 ];
 const pad = (n: number) => String(n).padStart(2, "0");
 
+/** A holiday or someone's leave, shown as a small label on a day. */
+export type CalMark = { day: number; label: string; kind: "holiday" | "leave"; title?: string };
+
 export type CalTask = {
   id: number;
   title: string;
@@ -34,7 +37,9 @@ export default function CalendarGrid({
   todayDay,
   tasks,
   back,
+  marks = [],
 }: {
+  marks?: CalMark[];
   /** The calendar URL (with its filters) that task links return to. */
   back?: string;
   year: number;
@@ -125,6 +130,22 @@ export default function CalendarGrid({
                 >
                   {day}
                 </div>
+                {marks
+                  .filter((m) => m.day === day)
+                  .slice(0, 3)
+                  .map((m, k) => (
+                    <div
+                      key={k}
+                      title={m.title ?? m.label}
+                      className={`mb-1 truncate rounded px-1.5 py-0.5 text-[10px] ${
+                        m.kind === "holiday"
+                          ? "bg-amber-50 font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+                          : "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                      }`}
+                    >
+                      {m.kind === "holiday" ? "🎉" : "🌴"} {m.label}
+                    </div>
+                  ))}
                 <div className="space-y-1">
                   {(byDay.get(day) ?? []).slice(0, 4).map((t) => (
                     <Link

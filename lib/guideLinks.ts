@@ -11,6 +11,20 @@ type Entry = { prefix: string; main: GuideLink; related?: GuideLink[] };
 // Longest prefix first — "/timesheet/team" must win over "/timesheet".
 const ENTRIES: Entry[] = [
   {
+    prefix: "/leave/team",
+    main: { id: "approve-leave", title: "Approve leave & see who's off" },
+    related: [{ id: "holidays", title: "Holidays & weekends" }],
+  },
+  { prefix: "/leave/holidays", main: { id: "holidays", title: "Holidays & weekends" } },
+  {
+    prefix: "/leave",
+    main: { id: "leave", title: "Request leave" },
+    related: [
+      { id: "holidays", title: "Holidays & weekends" },
+      { id: "calendar-sync", title: "See it all in Google Calendar" },
+    ],
+  },
+  {
     prefix: "/timesheet/team",
     main: { id: "approve-timesheets", title: "Approve timesheets" },
     related: [{ id: "person-hours", title: "Check one person's hours" }],
@@ -71,7 +85,10 @@ const ENTRIES: Entry[] = [
   {
     prefix: "/settings",
     main: { id: "profile", title: "Set your photo, language and notifications" },
-    related: [{ id: "notification-settings", title: "Choose your notifications" }],
+    related: [
+      { id: "notification-settings", title: "Choose your notifications" },
+      { id: "calendar-sync", title: "Sync with Google Calendar" },
+    ],
   },
   { prefix: "/users", main: { id: "users", title: "Add and manage users" } },
   { prefix: "/departments", main: { id: "departments", title: "Departments" } },

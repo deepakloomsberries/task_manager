@@ -1,5 +1,6 @@
 import Link from "next/link";
 import GettingStarted from "@/components/GettingStarted";
+import WhosOff from "@/components/WhosOff";
 import ReviewTasksBanner from "@/components/ReviewTasksBanner";
 import { db } from "@/lib/db";
 import UserAvatar from "@/components/UserAvatar";
@@ -31,6 +32,7 @@ type AdminUser = {
   createdAt: Date;
   avatarPath: string | null;
   preferredLanguage: string | null;
+  companyId: number;
   company: { code: string };
 };
 
@@ -306,6 +308,7 @@ export default async function AdminDashboard({ user }: { user: AdminUser }) {
 
         {/* Right */}
         <div className="space-y-6">
+          <WhosOff user={user} />
           {/* This week — team */}
           <div className="card p-5">
             <div className="flex items-baseline justify-between">

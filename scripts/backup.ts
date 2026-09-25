@@ -1,19 +1,20 @@
 /**
  * Nightly backup.
  *
- * Takes a consistent snapshot of the SQLite database with `VACUUM INTO` (safe
- * while the app is running — unlike copying dev.db, which can capture a
- * half-written file or miss data still in the WAL), copies the uploads folder,
- * verifies the snapshot, and prunes backups older than BACKUP_KEEP_DAYS.
+ * Dumps the Postgres database with pg_dump (a consistent snapshot, safe while
+ * the app is running), checks the dump is readable with pg_restore --list,
+ * copies the uploads folder, and prunes backups older than BACKUP_KEEP_DAYS.
  *
  *   0 2 * * * cd /home/kapil/task_manager && /usr/bin/npx tsx scripts/backup.ts >> /var/log/task-backup.log 2>&1
+ *
+ * Restore: pg_restore --clean --if-exists --no-owner -d "$DATABASE_URL" /home/kapil/backups/<day>/db.dump
  *
  * Env: BACKUP_DIR (default ../backups), BACKUP_KEEP_DAYS (default 14),
  * UPLOAD_DIR (default ./uploads). Exits non-zero on failure so cron mails it.
  */
 import fs from "fs";
 import path from "path";
-import { PrismaClient } from "@prisma/client";
+import { execFileSync } from "child_process";
 
 // Minimal .env loader so the script works standalone under cron.
 const envPath = path.join(process.cwd(), ".env");
@@ -33,24 +34,24 @@ async function main() {
   const dir = path.join(BACKUP_DIR, stamp);
   fs.mkdirSync(dir, { recursive: true });
 
-  // 1. Database — VACUUM INTO refuses to overwrite, so clear a same-day rerun.
-  const dbFile = path.join(dir, "dev.db");
-  fs.rmSync(dbFile, { force: true });
-  const db = new PrismaClient();
-  try {
-    await db.$executeRawUnsafe(`VACUUM INTO '${dbFile.replace(/'/g, "''")}'`);
-  } finally {
-    await db.$disconnect();
-  }
+  // 1. Database. Connection details go in PG* env vars rather than the
+  // command line, so the password never shows up in `ps`.
+  const url = new URL(process.env.DATABASE_URL ?? "");
+  if (!/^postgres(ql)?:$/.test(url.protocol)) throw new Error("DATABASE_URL must be a postgresql:// URL");
+  const pgEnv = {
+    ...process.env,
+    PGHOST: url.hostname,
+    PGPORT: url.port || "5432",
+    PGUSER: decodeURIComponent(url.username),
+    PGPASSWORD: decodeURIComponent(url.password),
+    PGDATABASE: url.pathname.replace(/^\//, ""),
+  };
+  const dumpFile = path.join(dir, "db.dump");
+  execFileSync("pg_dump", ["--format=custom", "--no-owner", "--file", dumpFile], { env: pgEnv, stdio: ["ignore", "ignore", "inherit"] });
 
-  // 2. Verify the snapshot opens and passes an integrity check.
-  const check = new PrismaClient({ datasources: { db: { url: `file:${dbFile}` } } });
-  try {
-    const rows = await check.$queryRawUnsafe<{ integrity_check: string }[]>("PRAGMA integrity_check");
-    if (rows[0]?.integrity_check !== "ok") throw new Error(`integrity_check: ${JSON.stringify(rows)}`);
-  } finally {
-    await check.$disconnect();
-  }
+  // 2. Verify the dump can be read back and actually contains table data.
+  const listing = execFileSync("pg_restore", ["--list", dumpFile], { encoding: "utf8" });
+  if (!/TABLE DATA/.test(listing)) throw new Error("pg_dump produced a dump with no table data");
 
   // 3. Uploaded files.
   if (fs.existsSync(UPLOAD_DIR)) {
@@ -66,7 +67,7 @@ async function main() {
     }
   }
 
-  const mb = (fs.statSync(dbFile).size / 1_048_576).toFixed(1);
+  const mb = (fs.statSync(dumpFile).size / 1_048_576).toFixed(1);
   console.log(`[${new Date().toISOString()}] backup ok → ${dir} (db ${mb} MB)`);
 }
 

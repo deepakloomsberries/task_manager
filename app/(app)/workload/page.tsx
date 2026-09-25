@@ -8,6 +8,8 @@ import { weekStartOf } from "@/lib/timerange";
 import SearchSelect from "@/components/SearchSelect";
 import { ActiveTimersProvider, WorkingCell } from "@/components/ActiveTimers";
 import AutoRefresh from "@/components/AutoRefresh";
+import { daysOffMap } from "@/lib/leaveData";
+import { leaveType, weekendSet, ymdLocal } from "@/lib/leave";
 
 export const dynamic = "force-dynamic";
 
@@ -114,6 +116,11 @@ export default async function WorkloadPage({
       startedAt: t.startedAt.toISOString(),
     }));
 
+  // Leave and office holidays this week, so capacity reflects who's actually in.
+  const weekDays = Array.from({ length: 7 }, (_, i) => ymdLocal(new Date(weekStart.getTime() + i * DAY)));
+  const daysOff = await daysOffMap(users, weekDays[0], weekDays[6]);
+  const weekendByCompany = new Map(companies.map((c) => [c.id, weekendSet(c.weekendDays)]));
+
   const hoursByUser = new Map<number, number>();
   for (const e of entries) hoursByUser.set(e.userId, (hoursByUser.get(e.userId) ?? 0) + e.hours);
 
@@ -136,12 +143,20 @@ export default async function WorkloadPage({
       }
     }
     const weekEstimate = perDayHours.reduce((a, b) => a + b, 0);
+    // Each working day off (leave/holiday) takes a day out of the week's capacity.
+    const weekend = weekendByCompany.get(u.companyId) ?? new Set<number>();
+    const perDayOff = weekDays.map((d) => daysOff.get(`${u.id}:${d}`) ?? null);
+    const offDays = perDayOff.reduce(
+      (n, o, i) => n + (o && !weekend.has(new Date(weekStart.getTime() + i * DAY).getDay()) ? (o.halfDay ? 0.5 : 1) : 0),
+      0
+    );
+    const capacity = Math.max(0, WEEKLY_CAPACITY - DAILY_CAPACITY * offDays);
     const weekCount = perDayCount.reduce((a, b) => a + b, 0);
     const maxDay = Math.max(...perDayHours);
     const load =
-      weekEstimate > WEEKLY_CAPACITY || maxDay > DAILY_CAPACITY
+      weekEstimate > capacity || maxDay > DAILY_CAPACITY
         ? "heavy"
-        : weekEstimate > WEEKLY_CAPACITY * 0.6
+        : weekEstimate > capacity * 0.6
           ? "busy"
           : weekCount > 0
             ? "ok"
@@ -155,6 +170,9 @@ export default async function WorkloadPage({
       overdue,
       logged: hoursByUser.get(u.id) ?? 0,
       load,
+      perDayOff,
+      offDays,
+      capacity,
     };
   });
 
@@ -295,20 +313,41 @@ export default async function WorkloadPage({
                   </Link>
                   <WorkingCell userId={r.user.id} />
                 </td>
-                {r.perDayHours.map((h, i) => (
-                  <td key={i} className="td text-center">
-                    <span
-                      className={`inline-flex h-9 w-11 flex-col items-center justify-center rounded-md text-xs font-semibold leading-tight ${loadClass(h)}`}
-                      title={`${r.perDayCount[i]} task(s), ${fmtHours(h)} estimated`}
-                    >
-                      {h > 0 ? hCompact(h) : r.perDayCount[i] > 0 ? "·" : ""}
-                      {r.perDayCount[i] > 0 && (
-                        <span className="text-[9px] font-normal opacity-70">{r.perDayCount[i]}t</span>
-                      )}
-                    </span>
-                  </td>
-                ))}
-                <td className="td text-center font-medium">{r.weekEstimate > 0 ? fmtHours(r.weekEstimate) : "—"}</td>
+                {r.perDayHours.map((h, i) => {
+                  const off = r.perDayOff[i];
+                  if (off) {
+                    const icon = off.kind === "holiday" ? "🎉" : off.halfDay ? "½" : leaveType(off.type ?? "OTHER").emoji;
+                    const clash = r.perDayCount[i] > 0;
+                    return (
+                      <td key={i} className="td text-center">
+                        <span
+                          className={`inline-flex h-9 w-11 flex-col items-center justify-center rounded-md bg-slate-100 text-sm leading-tight dark:bg-slate-700 ${clash ? "ring-2 ring-red-400" : ""}`}
+                          title={`${off.kind === "holiday" ? `Holiday: ${off.label}` : off.halfDay ? "Half day off" : leaveType(off.type ?? "OTHER").label}${clash ? ` — but ${r.perDayCount[i]} task(s) due (${fmtHours(h)})` : ""}`}
+                        >
+                          {icon}
+                          {clash && <span className="text-[9px] font-semibold text-red-600">{h > 0 ? hCompact(h) : `${r.perDayCount[i]}t`}</span>}
+                        </span>
+                      </td>
+                    );
+                  }
+                  return (
+                    <td key={i} className="td text-center">
+                      <span
+                        className={`inline-flex h-9 w-11 flex-col items-center justify-center rounded-md text-xs font-semibold leading-tight ${loadClass(h)}`}
+                        title={`${r.perDayCount[i]} task(s), ${fmtHours(h)} estimated`}
+                      >
+                        {h > 0 ? hCompact(h) : r.perDayCount[i] > 0 ? "·" : ""}
+                        {r.perDayCount[i] > 0 && (
+                          <span className="text-[9px] font-normal opacity-70">{r.perDayCount[i]}t</span>
+                        )}
+                      </span>
+                    </td>
+                  );
+                })}
+                <td className="td text-center font-medium" title={`Capacity this week: ${fmtHours(r.capacity)}`}>
+                  {r.weekEstimate > 0 ? fmtHours(r.weekEstimate) : "—"}
+                  {r.offDays > 0 && <span className="block text-[10px] font-normal text-slate-400">of {fmtHours(r.capacity)}</span>}
+                </td>
                 <td className={`td text-center ${r.overdue > 0 ? "font-semibold text-red-600" : "text-slate-400"}`}>
                   {r.overdue || "—"}
                 </td>
@@ -326,6 +365,7 @@ export default async function WorkloadPage({
         <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-amber-100" /> ≤{DAILY_CAPACITY}h</span>
         <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-red-100" /> &gt;{DAILY_CAPACITY}h</span>
         <span className="text-slate-400">· “·” = tasks with no estimate</span>
+        <span>· 🌴 leave · 🎉 holiday (a red ring = work due while they&apos;re away)</span>
       </div>
     </div>
   );
