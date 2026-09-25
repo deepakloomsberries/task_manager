@@ -97,6 +97,12 @@ model User {
   /// Last heartbeat from any open tab, even a hidden one — "app open but not
   /// looked at" shows as Away. lastSeenAt only moves while a tab is visible.
   lastPingAt            DateTime?
+  /// Two-step sign-in (authenticator app). totpSecret is set during setup and
+  /// only counts once totpEnabled is true.
+  totpSecret            String?
+  totpEnabled           Boolean                @default(false)
+  totpLastStep          Int? // last code's time step — a code can't be used twice
+  totpRecovery          String? // sha256 hashes of unused backup codes, comma-separated
   clientComments        ClientComment[]
 }
 
@@ -153,6 +159,9 @@ model Task {
   dueDate        DateTime?
   recurrence     String? // null | DAILY | WEEKLY | MONTHLY — one instance per period
   seriesId       String? // groups all daily/weekly/monthly occurrences of one recurring job
+  /// Monthly series: the day of the month they're due (e.g. 31). Months
+  /// without it use their last day, and the next month goes back to it.
+  recurrenceDay  Int?
   missedAt       DateTime? // set when a recurring occurrence rolled over without being done
   estimateHours  Float? // effort estimate in hours, powers the workload view
   project        Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)

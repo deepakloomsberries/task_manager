@@ -275,7 +275,9 @@ export async function updateTask(formData: FormData) {
   const data = parseTaskForm(formData);
   if (!data.title || !PRIORITIES.includes(data.priority)) redirect(`/tasks/${id}?error=invalid`);
 
-  const updated = await db.task.update({ where: { id }, data });
+  // A new due date resets a monthly series' day-of-month to the new one.
+  const dueMoved = String(data.dueDate ?? null) !== String(task.dueDate ?? null);
+  const updated = await db.task.update({ where: { id }, data: dueMoved ? { ...data, recurrenceDay: null } : data });
 
   if (updated.assigneeId !== task.assigneeId) {
     // New owner hasn't seen it yet — reset the acknowledgement.
@@ -737,7 +739,7 @@ export async function rescheduleTask(taskId: number, dueISO: string | null) {
   if (!task || task.deletedAt || !canChangeStatus(user, task)) return;
 
   const due = dueISO ? new Date(dueISO) : null;
-  await db.task.update({ where: { id: taskId }, data: { dueDate: due } });
+  await db.task.update({ where: { id: taskId }, data: { dueDate: due, recurrenceDay: null } });
   await logActivity(
     taskId,
     user.id,

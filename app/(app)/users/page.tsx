@@ -12,6 +12,8 @@ import { PRESENCE, presenceLabel, resolvePresence } from "@/lib/presence";
 import PasswordField from "@/components/PasswordField";
 import BulkUserImport from "@/components/BulkUserImport";
 import DeleteUserButton from "@/components/DeleteUserButton";
+import ConfirmButton from "@/components/ConfirmButton";
+import { adminResetTwoStep } from "@/lib/actions/twoStep";
 import SearchSelect from "@/components/SearchSelect";
 import { PASSWORD_RULES } from "@/lib/password";
 import { USER_DATA_COUNT_SELECT, userHasData } from "@/lib/userData";
@@ -27,6 +29,8 @@ const MESSAGES: Record<string, { text: string; error?: boolean }> = {
   exists: { text: "A user with that email already exists.", error: true },
   weak: { text: `Password is too weak. ${PASSWORD_RULES}`, error: true },
   self: { text: "You cannot deactivate, delete or demote your own admin account.", error: true },
+  twostep: { text: "Two-step sign-in turned off. They can sign in with just their password and set it up again in Settings." },
+  own2fa: { text: "Turn off your own two-step sign-in from Settings.", error: true },
   notempty: { text: "That account can't be deleted — it has logged in or already has data. Deactivate it instead.", error: true },
 };
 
@@ -46,7 +50,7 @@ export default async function UsersPage({
     db.department.findMany({ include: { company: true }, orderBy: { name: "asc" } }),
   ]);
 
-  const msgKey = ["created", "updated", "reset", "deleted", "error"].find((k) => searchParams[k]);
+  const msgKey = ["created", "updated", "reset", "deleted", "twostep", "error"].find((k) => searchParams[k]);
   const msg = searchParams.error
     ? MESSAGES[searchParams.error]
     : msgKey
@@ -235,6 +239,19 @@ export default async function UsersPage({
                           Reset password
                         </button>
                       </form>
+                      {u.totpEnabled && u.id !== admin.id && (
+                        <form action={adminResetTwoStep} className="mt-3 flex items-center gap-3 border-t border-slate-100 pt-3 text-sm">
+                          <input type="hidden" name="id" value={u.id} />
+                          <span className="text-slate-600">🔐 Two-step sign-in is on.</span>
+                          <ConfirmButton
+                            className="text-xs text-red-600 hover:underline"
+                            confirmLabel="Turn off"
+                            message={`Turn off two-step sign-in for ${u.name}? Only do this if they lost their phone and backup codes.`}
+                          >
+                            Turn off (lost phone)
+                          </ConfirmButton>
+                        </form>
+                      )}
                     </td>
                   ) : (
                     <>
@@ -243,6 +260,11 @@ export default async function UsersPage({
                           <Link href={`/people/${u.id}`} className="hover:text-sky-600 hover:underline">
                             {u.name}
                           </Link>
+                          {u.totpEnabled && (
+                            <span title="Two-step sign-in is on" className="text-xs">
+                              🔐
+                            </span>
+                          )}
                           {u.requiresApproval && (
                             <span
                               title="Requires completion approval"

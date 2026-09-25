@@ -60,6 +60,20 @@ export const CATEGORIES: Category[] = [
         ],
       },
       {
+        id: "two-step",
+        title: "Two-step sign-in (authenticator app)",
+        audience: "Everyone",
+        summary:
+          "After your password you also type a 6-digit code from your phone, so a stolen password alone can't get in. Required for admins; anyone can turn it on in Settings.",
+        tips: [
+          "Settings → Two-step sign-in → Set up. Install Google Authenticator, Microsoft Authenticator or Authy, scan the QR code and type the code it shows.",
+          "Save the 10 backup codes (Download or Copy). Each one lets you in once if your phone is lost or broken.",
+          "Signing in: password first, then the current 6-digit code. Codes change every 30 seconds — if one is refused, check your phone's clock is set automatically.",
+          "New phone? Turn two-step off and on again in Settings and scan the new QR code. Lost everything? Another admin can turn it off for you on the Users page.",
+          "5 wrong codes pause sign-in for 15 minutes.",
+        ],
+      },
+      {
         id: "welcome",
         title: "Your first-week checklist",
         audience: "Everyone",
@@ -932,6 +946,7 @@ export const FAQS: { q: string; a: string }[] = [
 
 /** Newest first. `link` is an article id. */
 export const WHATS_NEW: { date: string; title: string; body: string; link?: string }[] = [
+  { date: "Sep 2026", title: "Two-step sign-in", body: "A code from your phone after your password. Required for admins, available to everyone.", link: "two-step" },
   { date: "Sep 2026", title: "Client portal", body: "Clients get their own login to follow shared tasks, download files and approve work.", link: "clients-setup" },
   { date: "Sep 2026", title: "Set your status", body: "Available, Busy, In a meeting, Do not disturb, Away or Appear offline — with a message, like Teams.", link: "status" },
   { date: "Sep 2026", title: "Morning summary email", body: "Your day in one email, including who's off today and this week.", link: "notification-settings" },
