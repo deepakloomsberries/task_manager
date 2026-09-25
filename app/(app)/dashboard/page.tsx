@@ -1,3 +1,4 @@
+import { PRESENCE, PRESENCE_SELECT, resolvePresence } from "@/lib/presence";
 import Link from "next/link";
 import { taskHref } from "@/lib/backLink";
 import { db } from "@/lib/db";
@@ -88,13 +89,20 @@ export default async function DashboardPage() {
         include: { company: true, _count: { select: { tasks: true } } },
       }),
       db.user.findMany({
-        where: { active: true, id: { not: user.id }, lastSeenAt: { gte: onlineSince } },
+        where: {
+          active: true,
+          id: { not: user.id },
+          OR: [{ lastSeenAt: { gte: onlineSince } }, { lastPingAt: { gte: onlineSince } }],
+        },
         orderBy: { lastSeenAt: "desc" },
         take: 12,
-        select: { id: true, name: true, jobTitle: true, avatarPath: true, lastSeenAt: true },
+        select: { id: true, name: true, jobTitle: true, avatarPath: true, ...PRESENCE_SELECT },
       }),
       db.notification.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 5 }),
     ]);
+
+  // Appear-offline people stay hidden; Away / Busy / In a meeting show with their status.
+  const around = activeUsers.filter((u) => resolvePresence(u).key !== "OFFLINE");
 
   const overdue = openTasks.filter((t) => t.dueDate && new Date(t.dueDate) < todayStart);
   const dueToday = openTasks.filter((t) => t.dueDate && new Date(t.dueDate) >= todayStart && new Date(t.dueDate) < tomorrow);
@@ -294,24 +302,25 @@ export default async function DashboardPage() {
               <h2 className="flex items-center gap-2 font-semibold">
                 <span className="h-2 w-2 rounded-full bg-green-500" />
                 Active now
-                <span className="text-sm font-normal text-slate-400">({activeUsers.length})</span>
+                <span className="text-sm font-normal text-slate-400">({around.length})</span>
               </h2>
               <Link href="/messages" className="text-sm text-sky-600 hover:underline">Message</Link>
             </div>
             <div className="p-4">
-              {activeUsers.length === 0 ? (
+              {around.length === 0 ? (
                 <p className="py-3 text-center text-sm text-slate-400">No one else is online right now.</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  {activeUsers.map((u) => (
+                  {around.map((u) => (
                     <Link
                       key={u.id}
                       href={`/messages/${u.id}`}
                       title={`Message ${u.name}${u.jobTitle ? ` · ${u.jobTitle}` : ""}`}
                       className="flex items-center gap-2 rounded-full border border-slate-200 py-1 pl-1 pr-3 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-700/50"
                     >
-                      <UserAvatar user={u} size={28} presence={u.lastSeenAt} />
+                      <UserAvatar user={u} size={28} presence={u} />
                       <span className="text-sm">{u.name.split(" ")[0]}</span>
+                      <StatusNote user={u} />
                     </Link>
                   ))}
                 </div>
@@ -441,4 +450,11 @@ function AgendaGroup({
       </div>
     </div>
   );
+}
+
+/** "· In a meeting" after a name, unless they're simply Available. */
+function StatusNote({ user }: { user: Parameters<typeof resolvePresence>[0] }) {
+  const r = resolvePresence(user);
+  if (r.key === "AVAILABLE") return null;
+  return <span className={`text-xs ${PRESENCE[r.key].text}`}>· {PRESENCE[r.key].label}</span>;
 }

@@ -123,7 +123,22 @@ export default async function SettingsPage({
             <span className="text-sm">
               <span className="font-medium">Email notifications</span>
               <span className="block text-xs text-slate-500">
-                Task assignments, comments, reminders and the daily digest.
+                Task assignments, comments, reminders and team leave announcements.
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              name="dailyDigest"
+              defaultChecked={user.dailyDigest}
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+            />
+            <span className="text-sm">
+              <span className="font-medium">Morning summary email</span>
+              <span className="block text-xs text-slate-500">
+                Each working day: your overdue and due-today tasks, what&apos;s waiting for your approval, and who&apos;s
+                off today and this week. Needs email notifications on.
               </span>
             </span>
           </label>

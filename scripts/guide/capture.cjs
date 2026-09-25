@@ -518,6 +518,62 @@ const SHOTS = [
     },
   },
   {
+    id: "status-menu", path: "/dashboard",
+    before: async (p) => {
+      await p.locator("header button[title^='Set your status']").click();
+      await p.waitForTimeout(300);
+    },
+    spots: {
+      button: (p) => p.locator("header button[title^='Set your status']"),
+      choices: (p) => p.locator("[role=menu] button[role=menuitemradio]").nth(2),
+      dnd: (p) => p.locator("[role=menu] button[role=menuitemradio]").nth(3),
+      message: (p) => p.locator("#status-text"),
+      clear: (p) => p.getByLabel("Clear status after"),
+    },
+  },
+  {
+    id: "clients", path: "/clients",
+    spots: {
+      add: (p) => p.locator("form[aria-label='Add a client']"),
+      link: (p) => p.getByLabel("Client portal link").locator("xpath=ancestor::div[1]"),
+      projects: (p) => p.getByText("Projects", { exact: true }).locator(".."),
+      people: (p) => p.getByText("People with portal access").locator(".."),
+    },
+  },
+  {
+    id: "client-panel", path: "/tasks/1",
+    before: async (p) => {
+      await p.locator("#client").scrollIntoViewIfNeeded();
+      await p.evaluate(() => document.querySelector("#client")?.scrollIntoView({ block: "center" }));
+      await p.waitForTimeout(300);
+    },
+    spots: {
+      share: (p) => p.locator("#client button[type=submit]").first(),
+      convo: (p) => p.locator("#client .space-y-3").first(),
+      reply: (p) => p.locator("#client textarea"),
+    },
+  },
+  {
+    id: "portal", path: "/portal", as: "lena",
+    spots: {
+      waiting: (p) => p.locator("section[aria-label='Waiting for your approval']"),
+      project: (p) => p.locator("a[href^='/portal/projects/']").first(),
+    },
+  },
+  {
+    id: "portal-task", path: "/portal", as: "lena",
+    before: async (p) => {
+      await p.locator("section[aria-label='Waiting for your approval'] a").first().click();
+      await p.waitForURL(/portal\/tasks/);
+      await p.waitForTimeout(300);
+    },
+    spots: {
+      stage: (p) => p.locator("main .badge").first(),
+      signoff: (p) => p.locator("#signoff"),
+      files: (p) => p.locator("section[aria-label='Files']"),
+    },
+  },
+  {
     id: "mobile", path: "/my-tasks", mobile: true,
     spots: {
       menu: (p) => p.locator("button:visible").first(),
@@ -546,6 +602,16 @@ async function box(page, loc, clipY) {
   const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
   const karan = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 2 });
   const fatima = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 2 });
+  const lena = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 2 });
+  {
+    // The client-portal contact signs in on the portal's own login page.
+    const p = await lena.newPage();
+    await p.goto(`${BASE}/portal/login`);
+    await p.fill("input[name=email]", "lena@demo.local");
+    await p.fill("input[name=password]", "Demo@12345");
+    await Promise.all([p.waitForURL(/\/portal$/), p.click("button[type=submit]")]);
+    await p.close();
+  }
 
   for (const [c, email] of [[ctx, "priya@demo.local"], [phone, "priya@demo.local"], [karan, "karan@demo.local"], [fatima, "fatima@demo.local"]]) {
     const p = await c.newPage();
@@ -558,7 +624,7 @@ async function box(page, loc, clipY) {
 
   for (const shot of SHOTS) {
     if (ONLY && !ONLY.includes(shot.id)) continue;
-    const c = shot.auth === false ? anon : shot.mobile ? phone : shot.as === "karan" ? karan : shot.as === "fatima" ? fatima : ctx;
+    const c = shot.auth === false ? anon : shot.mobile ? phone : shot.as === "karan" ? karan : shot.as === "fatima" ? fatima : shot.as === "lena" ? lena : ctx;
     const p = await c.newPage();
     await p.goto(BASE + shot.path, { waitUntil: "networkidle" });
     await p.addStyleTag({ content: "*{caret-color:transparent!important} nextjs-portal{display:none!important}" });

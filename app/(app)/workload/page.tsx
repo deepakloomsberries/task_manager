@@ -300,7 +300,7 @@ export default async function WorkloadPage({
               <tr key={r.user.id} className="hover:bg-slate-50">
                 <td className="td">
                   <Link href={`/people/${r.user.id}`} className="flex items-center gap-2 hover:text-sky-700" title="View profile">
-                    <UserAvatar user={r.user} size={28} presence={r.user.lastSeenAt} />
+                    <UserAvatar user={r.user} size={28} presence={r.user} />
                     <span>
                       <span className="font-medium">{r.user.name}</span>
                       {r.load === "heavy" && (

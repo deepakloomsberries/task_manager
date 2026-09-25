@@ -45,6 +45,7 @@ const ENTRIES: Entry[] = [
       { id: "subtasks", title: "Subtasks, dependencies & tags" },
       { id: "comments", title: "Comment, mention and attach files" },
       { id: "review-approve", title: "Review and approve work" },
+      { id: "client-share", title: "Share with a client" },
     ],
   },
   {
@@ -74,12 +75,23 @@ const ENTRIES: Entry[] = [
   {
     prefix: "/messages",
     main: { id: "messages", title: "Direct messages" },
-    related: [{ id: "video-calls", title: "Video calls" }],
+    related: [
+      { id: "video-calls", title: "Video calls" },
+      { id: "status", title: "Set your status" },
+    ],
   },
   { prefix: "/call", main: { id: "video-calls", title: "Video calls" } },
   { prefix: "/documents", main: { id: "documents", title: "Documents" } },
   { prefix: "/notes", main: { id: "notes", title: "Notes and checklists" } },
   { prefix: "/reports", main: { id: "reports", title: "Reports" } },
+  {
+    prefix: "/clients",
+    main: { id: "clients-setup", title: "Give a client portal access" },
+    related: [
+      { id: "client-share", title: "Share tasks with a client" },
+      { id: "client-portal", title: "What the client sees" },
+    ],
+  },
   { prefix: "/workload", main: { id: "workload", title: "Balance the workload" } },
   { prefix: "/templates", main: { id: "templates", title: "Project templates" } },
   {
@@ -99,7 +111,10 @@ const ENTRIES: Entry[] = [
   {
     prefix: "/dashboard",
     main: { id: "dashboard", title: "Find your way around the Dashboard" },
-    related: [{ id: "search", title: "Search everything with Ctrl/⌘ + K" }],
+    related: [
+      { id: "search", title: "Search everything with Ctrl/⌘ + K" },
+      { id: "status", title: "Set your status" },
+    ],
   },
 ];
 

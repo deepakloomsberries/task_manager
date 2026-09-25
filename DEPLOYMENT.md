@@ -465,8 +465,10 @@ entry, recurring tasks never roll over or get deduplicated:
 (crontab -l 2>/dev/null; echo '5 0 * * * cd /home/kapil/task_manager && /usr/bin/npx tsx scripts/recurring.ts >> /var/log/task-recurring.log 2>&1') | crontab -
 ```
 
-Optional — daily reminder emails at 08:00 (each employee receives a digest of their
-overdue and due-today tasks; requires SMTP to be configured in `.env`):
+Recommended — morning summary email at 08:00 (each person gets their overdue and
+due-today tasks, what's waiting for their approval, and who's off today and this
+week; skipped on their own weekend, holiday or leave; people can turn it off in
+Settings; requires SMTP to be configured in `.env`):
 
 ```bash
 (crontab -l 2>/dev/null; echo '0 8 * * * cd /home/kapil/task_manager && /usr/bin/npx tsx scripts/reminders.ts >> /var/log/task-reminders.log 2>&1') | crontab -

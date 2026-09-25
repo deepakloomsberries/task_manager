@@ -21,29 +21,53 @@ function getTransporter() {
  * break the action that triggered it. When SMTP is not configured the mail
  * is logged and skipped, so the app works fine without email.
  */
-export function sendMail(to: string, subject: string, html: string) {
+export function sendMail(to: string, subject: string, html: string): Promise<void> {
   const transporter = getTransporter();
   if (!transporter) {
     console.log(`[mail skipped — SMTP not configured] to=${to} subject="${subject}"`);
-    return;
+    return Promise.resolve();
   }
-  transporter
+  return transporter
     .sendMail({
       from: process.env.SMTP_FROM ?? `"${APP_NAME}" <${process.env.SMTP_USER}>`,
       to,
       subject,
       html,
     })
-    .then(() => console.log(`[mail sent] to=${to} subject="${subject}"`))
+    .then(() => void console.log(`[mail sent] to=${to} subject="${subject}"`))
     .catch((e) => console.error(`[mail failed] to=${to}:`, e?.message ?? e));
 }
 
-function emailShell(title: string, lines: string[], link: string, linkLabel: string) {
+/**
+ * Sends one email to many people at once, recipients in Bcc (so nobody sees
+ * everyone's address), in chunks to stay well inside SMTP limits. Never throws.
+ */
+export function sendBulkMail(recipients: string[], subject: string, html: string) {
+  const list = Array.from(new Set(recipients.filter(Boolean)));
+  if (!list.length) return;
+  const transporter = getTransporter();
+  if (!transporter) {
+    console.log(`[mail skipped — SMTP not configured] bcc=${list.length} people subject="${subject}"`);
+    return;
+  }
+  const from = process.env.SMTP_FROM ?? `"${APP_NAME}" <${process.env.SMTP_USER}>`;
+  for (let i = 0; i < list.length; i += 50) {
+    const bcc = list.slice(i, i + 50);
+    transporter
+      .sendMail({ from, to: from, bcc, subject, html })
+      .then(() => console.log(`[mail sent] bcc=${bcc.length} people subject="${subject}"`))
+      .catch((e) => console.error(`[mail failed] bcc=${bcc.length} people:`, e?.message ?? e));
+  }
+}
+
+/** The shared email layout. `extraHtml` goes under the lines as-is (lists, sections). */
+export function emailShell(title: string, lines: string[], link: string, linkLabel: string, extraHtml = "") {
   return `
   <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;padding:24px;border:1px solid #e2e8f0;border-radius:12px">
     <h2 style="margin:0 0 4px;color:#0f172a">${APP_NAME}</h2>
     <h3 style="margin:16px 0 8px;color:#0369a1">${title}</h3>
     ${lines.map((l) => `<p style="margin:4px 0;color:#334155;font-size:14px">${l}</p>`).join("")}
+    ${extraHtml}
     <p style="margin:20px 0 0">
       <a href="${link}" style="background:#0284c7;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-size:14px">${linkLabel}</a>
     </p>
@@ -293,5 +317,74 @@ export function notifyTaskReopened(opts: {
       `${APP_URL}/tasks/${opts.taskId}`,
       "Open task"
     )
+  );
+}
+
+/**
+ * Tells the whole team someone will be away (or that their leave was
+ * cancelled). The leave type and reason stay private — only the dates go out.
+ */
+export function notifyLeaveAnnouncement(opts: {
+  to: string[];
+  person: string;
+  office: string;
+  range: string;
+  days: string;
+  cancelled?: boolean;
+}) {
+  const lines = opts.cancelled
+    ? [`<b>${esc(opts.person)}</b> (${esc(opts.office)}) is <b>no longer on leave</b> on ${esc(opts.range)} — they'll be working as normal.`]
+    : [
+        `<b>${esc(opts.person)}</b> (${esc(opts.office)}) will be <b>on leave</b>: <b>${esc(opts.range)}</b> (${esc(opts.days)}).`,
+        `Please plan hand-overs and don't expect replies from them on those days.`,
+      ];
+  sendBulkMail(
+    opts.to,
+    opts.cancelled ? `Leave cancelled: ${opts.person} (${opts.range})` : `🌴 ${opts.person} is on leave ${opts.range}`,
+    emailShell(opts.cancelled ? "Leave cancelled" : "Team leave", lines, `${APP_URL}/calendar`, "Open calendar")
+  );
+}
+
+/** Portal welcome for a client contact, with their temporary password. */
+export function notifyClientWelcome(opts: { to: string; name: string; client: string; password: string; reset?: boolean }) {
+  const lines = [
+    `Hi ${esc(opts.name)},`,
+    opts.reset
+      ? `Your password for the <b>${esc(opts.client)}</b> client portal has been reset.`
+      : `You now have access to the <b>Looms &amp; Berries client portal</b> for <b>${esc(opts.client)}</b>. Follow your projects' progress, download files and approve work in one place.`,
+    `Sign in with <b>${esc(opts.to)}</b> and this temporary password:`,
+    `<b style="font-size:16px;letter-spacing:1px">${esc(opts.password)}</b>`,
+    `You'll be asked to choose your own password when you sign in.`,
+  ];
+  sendMail(
+    opts.to,
+    opts.reset ? "Your client portal password was reset" : "Your Looms & Berries client portal access",
+    emailShell(opts.reset ? "Password reset" : "Welcome to the client portal", lines, `${APP_URL}/portal/login`, "Open the portal")
+  );
+}
+
+/** To a client's contacts when the team replies on a shared task. */
+export function notifyClientReply(opts: { to: string[]; from: string; taskId: number; taskTitle: string; body: string }) {
+  const lines = [
+    `<b>${esc(opts.from)}</b> from Looms &amp; Berries replied on <b>${esc(opts.taskTitle)}</b>:`,
+    `<i>"${esc(opts.body.length > 400 ? opts.body.slice(0, 400) + "…" : opts.body)}"</i>`,
+  ];
+  sendBulkMail(
+    opts.to,
+    `Reply on: ${opts.taskTitle}`,
+    emailShell("New reply from the team", lines, `${APP_URL}/portal/tasks/${opts.taskId}#conversation`, "View in the portal")
+  );
+}
+
+/** To a client's contacts when a step shared with them is finished. */
+export function notifyClientStepDone(opts: { to: string[]; taskId: number; taskTitle: string; project: string }) {
+  const lines = [
+    `The step <b>${esc(opts.taskTitle)}</b> in <b>${esc(opts.project)}</b> is done.`,
+    `Please take a look and approve it — or tell us what to change — in the portal.`,
+  ];
+  sendBulkMail(
+    opts.to,
+    `✅ Ready for your approval: ${opts.taskTitle}`,
+    emailShell("Ready for your approval", lines, `${APP_URL}/portal/tasks/${opts.taskId}#signoff`, "Review and approve")
   );
 }

@@ -1,8 +1,10 @@
 /**
- * Daily reminder digest.
+ * Daily morning digest.
  *
- * Emails every active user a summary of their overdue and due-today tasks.
- * Intended to be run once each morning via cron, e.g.:
+ * Emails every active person (with email and the digest turned on) what needs
+ * them today: overdue and due-today tasks, work waiting for their approval,
+ * and who's off today and this week. Skipped on their own weekend, office
+ * holiday or leave, and when there's nothing to say. Run once each morning:
  *
  *   0 8 * * * cd /home/kapil/task_manager && /usr/bin/npx tsx scripts/reminders.ts >> /var/log/task-reminders.log 2>&1
  *
@@ -11,10 +13,9 @@
  */
 import fs from "fs";
 import path from "path";
-import { PrismaClient } from "@prisma/client";
-import nodemailer from "nodemailer";
 
-// Minimal .env loader so the script works standalone under cron.
+// Minimal .env loader so the script works standalone under cron. Must run
+// before the app modules below are imported, since they read env at load.
 const envPath = path.join(process.cwd(), ".env");
 if (fs.existsSync(envPath)) {
   for (const line of fs.readFileSync(envPath, "utf8").split("\n")) {
@@ -23,106 +24,18 @@ if (fs.existsSync(envPath)) {
   }
 }
 
-const db = new PrismaClient();
-const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
-
-function esc(s: string) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
 async function main() {
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const { db } = await import("@/lib/db");
+  const { sendMail } = await import("@/lib/mail");
+  const { gatherDigests } = await import("@/lib/dailyDigest");
 
-  const users = await db.user.findMany({
-    where: { active: true, emailNotifications: true },
-    include: {
-      tasksAssigned: {
-        // deletedAt:null so trashed tasks don't show; seriesId:null so the daily
-        // recurring occurrences never flood the reminder digest.
-        where: { status: { not: "DONE" }, deletedAt: null, seriesId: null, dueDate: { lt: todayEnd } },
-        orderBy: { dueDate: "asc" },
-        include: { project: true },
-      },
-    },
-  });
-
-  const configured = !!(process.env.SMTP_USER && process.env.SMTP_PASS);
-  const transporter = configured
-    ? nodemailer.createTransport({
-        host: process.env.SMTP_HOST ?? "smtp.gmail.com",
-        port: Number(process.env.SMTP_PORT ?? 465),
-        secure: (process.env.SMTP_PORT ?? "465") === "465",
-        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-      })
-    : null;
-
-  // Nobody on approved leave today gets the digest.
-  const todayDay = new Date(`${todayStart.getFullYear()}-${String(todayStart.getMonth() + 1).padStart(2, "0")}-${String(todayStart.getDate()).padStart(2, "0")}T00:00:00Z`);
-  const away = new Set(
-    (
-      await db.leave.findMany({
-        where: { status: "APPROVED", startDate: { lte: todayDay }, endDate: { gte: todayDay } },
-        select: { userId: true },
-      })
-    ).map((l) => l.userId)
-  );
-
-  let sent = 0;
-  for (const user of users) {
-    if (away.has(user.id)) continue;
-    const overdue = user.tasksAssigned.filter((t) => t.dueDate! < todayStart);
-    const dueToday = user.tasksAssigned.filter((t) => t.dueDate! >= todayStart);
-    if (overdue.length === 0 && dueToday.length === 0) continue;
-
-    const row = (t: (typeof user.tasksAssigned)[number]) =>
-      `<li style="margin:4px 0"><a href="${APP_URL}/tasks/${t.id}" style="color:#0369a1;text-decoration:none">${esc(
-        t.title
-      )}</a>${t.project ? ` <span style="color:#94a3b8">· ${esc(t.project.name)}</span>` : ""} <span style="color:#94a3b8">· due ${t.dueDate!.toLocaleDateString("en-GB")}</span></li>`;
-
-    const html = `
-    <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;padding:24px;border:1px solid #e2e8f0;border-radius:12px">
-      <h2 style="margin:0 0 4px;color:#0f172a">Looms &amp; Berries Tasks</h2>
-      <p style="color:#334155;font-size:14px">Good morning ${esc(user.name)}, here is your task summary:</p>
-      ${
-        overdue.length
-          ? `<h3 style="margin:16px 0 4px;color:#dc2626">Overdue (${overdue.length})</h3><ul style="margin:0;padding-left:18px;font-size:14px">${overdue.map(row).join("")}</ul>`
-          : ""
-      }
-      ${
-        dueToday.length
-          ? `<h3 style="margin:16px 0 4px;color:#d97706">Due today (${dueToday.length})</h3><ul style="margin:0;padding-left:18px;font-size:14px">${dueToday.map(row).join("")}</ul>`
-          : ""
-      }
-      <p style="margin:20px 0 0"><a href="${APP_URL}/my-tasks" style="background:#0284c7;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-size:14px">Open My Tasks</a></p>
-    </div>`;
-
-    const subject = `Task reminder: ${overdue.length} overdue, ${dueToday.length} due today`;
-
-    if (!transporter) {
-      console.log(`[reminder skipped — SMTP not configured] to=${user.email} subject="${subject}"`);
-      continue;
-    }
-    try {
-      await transporter.sendMail({
-        from: process.env.SMTP_FROM ?? `"Looms & Berries Tasks" <${process.env.SMTP_USER}>`,
-        to: user.email,
-        subject,
-        html,
-      });
-      sent++;
-      console.log(`[reminder sent] to=${user.email} (${overdue.length} overdue, ${dueToday.length} today)`);
-    } catch (e) {
-      console.error(`[reminder failed] to=${user.email}:`, (e as Error).message);
-    }
-  }
-  console.log(`Done. ${sent} reminder(s) sent at ${now.toISOString()}.`);
+  const digests = await gatherDigests(new Date());
+  for (const d of digests) await sendMail(d.email, d.subject, d.html);
+  console.log(`[${new Date().toISOString()}] daily digest: ${digests.length} email(s)`);
+  await db.$disconnect();
 }
 
-main()
-  .then(() => db.$disconnect())
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  });
+main().catch((err) => {
+  console.error(`[${new Date().toISOString()}] daily digest FAILED`, err);
+  process.exitCode = 1;
+});

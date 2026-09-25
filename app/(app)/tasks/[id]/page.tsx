@@ -1,3 +1,4 @@
+import ClientPanel from "./ClientPanel";
 import Link from "next/link";
 import { googleCalendarLink } from "@/lib/ics";
 import { companyTimezone } from "@/lib/tz";
@@ -112,7 +113,7 @@ export default async function TaskDetailPage({
     db.task.findUnique({
       where: { id },
       include: {
-        project: true,
+        project: { include: { client: { select: { name: true } } } },
         assignee: true,
         createdBy: true,
         comments: { include: { author: true }, orderBy: { createdAt: "asc" } },
@@ -276,7 +277,15 @@ export default async function TaskDetailPage({
                       ? { text: "This task can't be marked Done yet — finish all of its subtasks first.", error: true }
                       : searchParams.error === "badlink"
                         ? { text: "That doesn't look like a valid link — it should start with http:// or https://.", error: true }
-                        : null;
+                        : searchParams.ok === "client-shared"
+                          ? { text: "Shared with the client — it now shows in their portal.", error: false }
+                          : searchParams.ok === "client-hidden"
+                            ? { text: "Hidden from the client.", error: false }
+                            : searchParams.ok === "client-reply"
+                              ? { text: "Sent — the client has been emailed.", error: false }
+                              : searchParams.error === "client"
+                                ? { text: "Share the task with the client before messaging them.", error: true }
+                                : null;
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
@@ -549,7 +558,7 @@ export default async function TaskDetailPage({
                 {task.assignee && (
                   <span className="flex items-center gap-1.5 rounded-full bg-slate-100 px-2 py-1 text-xs">
                     <Link href={`/people/${task.assignee.id}`} className="flex items-center gap-1.5 hover:underline">
-                      <UserAvatar user={task.assignee} size={20} presence={task.assignee.lastSeenAt} />
+                      <UserAvatar user={task.assignee} size={20} presence={task.assignee} />
                       {task.assignee.name}
                     </Link>
                     <span className="text-slate-400">· assignee</span>
@@ -558,7 +567,7 @@ export default async function TaskDetailPage({
                 {task.collaborators.map((c) => (
                   <span key={c.userId} className="flex items-center gap-1.5 rounded-full bg-sky-50 px-2 py-1 text-xs ring-1 ring-sky-100">
                     <Link href={`/people/${c.userId}`} className="flex items-center gap-1.5 hover:underline">
-                      <UserAvatar user={c.user} size={20} presence={c.user.lastSeenAt} />
+                      <UserAvatar user={c.user} size={20} presence={c.user} />
                       {c.user.name}
                     </Link>
                     {(canManageCollab || c.userId === user.id) && (
@@ -1123,6 +1132,10 @@ export default async function TaskDetailPage({
           <PasteAttachment taskId={task.id} />
         </div>
       </div>
+
+      {task.project?.client && (
+        <ClientPanel task={task} client={task.project.client} canShare={canEdit} backTo={backTo} />
+      )}
 
       <div className="card p-6">
         <h2 className="mb-4 font-semibold">

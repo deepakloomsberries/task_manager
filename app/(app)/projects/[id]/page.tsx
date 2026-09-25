@@ -11,6 +11,8 @@ import {
   linkTaskToProject,
 } from "@/lib/actions/projects";
 import { createTask } from "@/lib/actions/tasks";
+import { setProjectClient, shareProjectTasks } from "@/lib/actions/clients";
+import FlashToast from "@/components/FlashToast";
 import { saveProjectAsTemplate } from "@/lib/actions/templates";
 import UserAvatar from "@/components/UserAvatar";
 import { ActiveTimersProvider, WorkingCell } from "@/components/ActiveTimers";
@@ -32,24 +34,31 @@ import {
 
 export const dynamic = "force-dynamic";
 
+const PROJECT_OK: Record<string, string> = {
+  client: "Client saved.",
+  shared: "All tasks are now visible to the client.",
+  unshared: "All tasks are hidden from the client.",
+};
+
 export default async function ProjectDetailPage({
   params,
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { edit?: string; addTask?: string; error?: string };
+  searchParams: { edit?: string; addTask?: string; error?: string; ok?: string };
 }) {
   const user = await requireUser();
   const id = Number(params.id);
   if (!id) notFound();
 
   const addingTask = searchParams.addTask === "1";
-  const [project, allUsers, openTasks] = await Promise.all([
+  const [project, allUsers, openTasks, clients] = await Promise.all([
     db.project.findUnique({
       where: { id },
       include: {
         company: true,
         createdBy: true,
+        client: true,
         members: { include: { user: true } },
         tasks: {
           where: { deletedAt: null },
@@ -69,6 +78,7 @@ export default async function ProjectDetailPage({
           take: 200,
         })
       : Promise.resolve([]),
+    isManagerOrAdmin(user.role) ? db.client.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }) : Promise.resolve([]),
   ]);
   if (!project) notFound();
 
@@ -162,11 +172,13 @@ export default async function ProjectDetailPage({
   const memberIds = new Set(project.members.map((m) => m.userId));
   const nonMembers = allUsers.filter((u) => !memberIds.has(u.id));
   const done = project.tasks.filter((t) => t.status === "DONE").length;
+  const sharedCount = project.tasks.filter((t) => t.clientVisible).length;
   const pct = project.tasks.length ? Math.round((done / project.tasks.length) * 100) : 0;
 
   return (
     <div className="space-y-4">
       <AutoRefresh />
+      {searchParams.ok && PROJECT_OK[searchParams.ok] && <FlashToast message={PROJECT_OK[searchParams.ok]} />}
       <Link href="/projects" className="text-sm text-slate-500 hover:underline">
         ← Back to projects
       </Link>
@@ -251,6 +263,61 @@ export default async function ProjectDetailPage({
             <div className="h-full rounded-full bg-sky-500" style={{ width: `${pct}%` }} />
           </div>
         </div>
+
+        {(canManage || project.client) && (
+          <div id="client" className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-violet-200 bg-violet-50/60 px-4 py-3 text-sm dark:border-violet-900 dark:bg-violet-950/20">
+            <span className="font-medium text-violet-800 dark:text-violet-300">👁 Client portal</span>
+            {canManage ? (
+              <form action={setProjectClient} className="flex items-center gap-2">
+                <input type="hidden" name="projectId" value={project.id} />
+                <input type="hidden" name="returnTo" value="project" />
+                <select name="clientId" defaultValue={project.clientId ?? ""} className="input !w-auto !py-1 text-sm" aria-label="Client">
+                  <option value="">No client</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <button type="submit" className="btn-secondary !px-2.5 !py-1 text-xs">
+                  Save
+                </button>
+              </form>
+            ) : (
+              <span>{project.client!.name}</span>
+            )}
+            {project.client && (
+              <>
+                <span className="text-slate-600 dark:text-slate-300">
+                  {sharedCount} of {project.tasks.length} tasks shared
+                </span>
+                {canManage && (
+                  <span className="flex gap-2">
+                    <form action={shareProjectTasks}>
+                      <input type="hidden" name="projectId" value={project.id} />
+                      <input type="hidden" name="visible" value="1" />
+                      <button type="submit" className="text-xs text-violet-700 hover:underline dark:text-violet-300">
+                        Share all
+                      </button>
+                    </form>
+                    <form action={shareProjectTasks}>
+                      <input type="hidden" name="projectId" value={project.id} />
+                      <input type="hidden" name="visible" value="0" />
+                      <button type="submit" className="text-xs text-slate-500 hover:underline">
+                        Hide all
+                      </button>
+                    </form>
+                  </span>
+                )}
+              </>
+            )}
+            {canManage && clients.length === 0 && (
+              <Link href="/clients" className="text-xs text-violet-700 hover:underline dark:text-violet-300">
+                Add a client first →
+              </Link>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid min-w-0 gap-4 lg:grid-cols-3">
@@ -358,7 +425,14 @@ export default async function ProjectDetailPage({
                   className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-5 py-3 hover:bg-slate-50"
                 >
                   <div className="min-w-0 flex-1 basis-full sm:basis-auto">
-                    <div className="truncate text-sm font-medium">{t.title}</div>
+                    <div className="truncate text-sm font-medium">
+                      {project.client && t.clientVisible && (
+                        <span className="mr-1" title={`Visible to ${project.client.name}`}>
+                          👁
+                        </span>
+                      )}
+                      {t.title}
+                    </div>
                     <div className="text-xs text-slate-500">{t.assignee?.name ?? "Unassigned"}</div>
                   </div>
                   <span className={`badge shrink-0 ${tp.badge}`}>{tp.label}</span>
@@ -453,7 +527,7 @@ export default async function ProjectDetailPage({
                           className="flex items-center gap-2 hover:text-sky-700"
                           title="View profile"
                         >
-                          <UserAvatar user={r.user} size={28} presence={r.user.lastSeenAt} />
+                          <UserAvatar user={r.user} size={28} presence={r.user} />
                           <span className="font-medium">{r.user.name}</span>
                         </Link>
                         <WorkingCell userId={r.user.id} />

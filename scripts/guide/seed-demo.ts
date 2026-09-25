@@ -310,6 +310,29 @@ async function main() {
   await leave(fatima.id, -50, -49, "UNPAID", "REJECTED", 2, { reviewNote: "Clashes with the stock audit" });
   await db.user.update({ where: { id: priya.id }, data: { calendarToken: "demo-calendar-link-3f9a0c7b2e41d8a6" } });
 
+  // Presence: a couple of people with a status set.
+  await db.user.update({ where: { id: arjun.id }, data: { presence: "MEETING", presenceText: "Buyer call till 4pm" } });
+  await db.user.update({ where: { id: karan.id }, data: { presence: "BUSY", presenceText: "At the studio" } });
+
+  // Client portal: a fictional buyer following the festive project.
+  const client = await db.client.create({ data: { name: "Aurora Home Retail" } });
+  await db.clientContact.create({
+    data: { clientId: client.id, name: "Lena Brooks", email: "lena@demo.local", passwordHash: hash, mustChangePassword: false, lastSeenAt: at(0, 10) },
+  });
+  await db.project.update({ where: { id: festive.id }, data: { clientId: client.id } });
+  await db.task.updateMany({ where: { projectId: festive.id, parentId: null }, data: { clientVisible: true } });
+  const doneShared = await db.task.findMany({ where: { projectId: festive.id, status: "DONE", parentId: null }, orderBy: { id: "asc" } });
+  if (doneShared[0]) {
+    await db.task.update({ where: { id: doneShared[0].id }, data: { clientStatus: "APPROVED", clientStatusAt: at(-1, 15), clientStatusBy: "Lena Brooks" } });
+  }
+  const lena = await db.clientContact.findUniqueOrThrow({ where: { email: "lena@demo.local" } });
+  await db.clientComment.createMany({
+    data: [
+      { taskId: t1.id, contactId: lena.id, body: "Could we see a few of the white-background shots before the full set?", createdAt: at(-1, 11) },
+      { taskId: t1.id, userId: priya.id, body: "Of course — 28 of 40 are attached above. The rest follow tomorrow.", createdAt: at(-1, 12) },
+    ],
+  });
+
   console.log(`Demo data ready. Sign in as priya@demo.local / Demo@12345 (${people.length} people).`);
 }
 

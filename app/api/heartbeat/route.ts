@@ -20,7 +20,7 @@ export async function POST(req: Request) {
 
   const now = new Date();
   await Promise.all([
-    visible ? db.user.update({ where: { id: session.userId }, data: { lastSeenAt: now } }) : null,
+    db.user.update({ where: { id: session.userId }, data: visible ? { lastSeenAt: now, lastPingAt: now } : { lastPingAt: now } }),
     db.taskTimer.updateMany({ where: { userId: session.userId }, data: { lastPingAt: now } }),
   ]);
 

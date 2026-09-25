@@ -213,7 +213,7 @@ export default async function TeamTimesheetPage({
                 <tr key={r.user.id} className={`hover:bg-slate-50 ${r.hours === 0 ? "opacity-60" : ""}`}>
                   <td className="td">
                     <div className="flex items-center gap-2">
-                      <UserAvatar user={r.user} size={28} presence={r.user.lastSeenAt} />
+                      <UserAvatar user={r.user} size={28} presence={r.user} />
                       <span className="font-medium">{r.user.name}</span>
                     </div>
                   </td>
@@ -253,7 +253,7 @@ export default async function TeamTimesheetPage({
         <div className="card p-6">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <UserAvatar user={selected} size={36} presence={selected.lastSeenAt} />
+              <UserAvatar user={selected} size={36} presence={selected} />
               <div>
                 <h2 className="font-semibold leading-tight">{selected.name}</h2>
                 <p className="text-xs text-slate-500">

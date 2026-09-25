@@ -537,6 +537,26 @@ export const CATEGORIES: Category[] = [
     blurb: "Direct messages, group chats and your inbox.",
     articles: [
       {
+        id: "status",
+        title: "Set your status (Available, Busy, In a meeting…)",
+        audience: "Everyone",
+        summary:
+          "Like Microsoft Teams: the dot on your photo tells colleagues whether you're around. It's automatic, or you can pick a status and add a message.",
+        shot: "status-menu",
+        callouts: [
+          { spot: "button", title: "Your photo, top right", body: "Click it to open the status menu. Your current status shows under your name.", side: "left" },
+          { spot: "choices", title: "Pick a status", body: "Available (automatic), Busy, In a meeting, Do not disturb, Away or Appear offline.", side: "left" },
+          { spot: "dnd", title: "Do not disturb", body: "Notifications still land in your Inbox, but there are no pop-ups.", side: "left" },
+          { spot: "message", title: "Status message", body: "e.g. “Back at 3pm” or “At the factory” — shown next to your status everywhere.", side: "left" },
+          { spot: "clear", title: "Clear after", body: "30 minutes, 1 or 2 hours, today or this week — then it goes back to automatic.", side: "left" },
+        ],
+        tips: [
+          "Automatic: green when you're using the app, yellow (Away) when it's open in the background, grey when you're signed out.",
+          "Approved leave shows a purple “On leave” dot — no need to set anything.",
+          "Colleagues see your status on your photo in chats, task pages, the Dashboard and your profile.",
+        ],
+      },
+      {
         id: "messages",
         title: "Direct messages with auto-translation",
         audience: "Everyone",
@@ -595,11 +615,13 @@ export const CATEGORIES: Category[] = [
         summary: "In-app notifications are always on. You choose whether you also get emails.",
         shot: "notification-settings",
         callouts: [
-          { spot: "email", title: "Email notifications", body: "Assignments, comments, reminders and the daily digest. Untick to stop emails.", side: "right" },
+          { spot: "email", title: "Email notifications", body: "Assignments, comments, reminders and team leave announcements. Untick to stop emails.", side: "right" },
           { spot: "save", title: "Save preferences", body: "Takes effect straight away.", side: "right" },
         ],
         tips: [
           "Browser pop-ups: allow notifications when the app asks, so you're alerted even when the tab is in the background.",
+          "Morning summary email: each working day at 8am — your overdue and due-today tasks, what's waiting for your approval, and who's off today and this week. Turn it off with its own tick box.",
+          "When someone's leave is approved, everyone gets a short email with the dates (never the reason or the leave type).",
           "On Friday afternoon you'll get a reminder if this week's timesheet hasn't been submitted yet.",
           "Further down Settings: Calendar sync (Google Calendar) and Change password.",
         ],
@@ -634,6 +656,65 @@ export const CATEGORIES: Category[] = [
           { spot: "attach", title: "Attach file", body: "Upload up to 50 MB, or drop / paste a file anywhere on the page.", side: "bottom" },
           { spot: "link", title: "Add link", body: "For big files, add a Google Drive / OneDrive link instead.", side: "bottom" },
           { spot: "table", title: "File list", body: "See which task a file belongs to, who uploaded it and when.", side: "inside" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "clients",
+    title: "Client portal",
+    icon: "🤝",
+    blurb: "Let buyers follow their projects, download files and approve work — without seeing anything internal.",
+    articles: [
+      {
+        id: "clients-setup",
+        title: "Give a client portal access",
+        audience: "Managers",
+        summary:
+          "Add the client, give their people a login, and link their projects. Clients have their own sign-in and never appear in your team's lists.",
+        shot: "clients",
+        callouts: [
+          { spot: "add", title: "1. Add the client", body: "Type the company name and click ＋ Add client.", side: "bottom" },
+          { spot: "projects", title: "2. Link their projects", body: "Pick a project from “Link a project…”. You can also set the client on the project page.", side: "right" },
+          { spot: "people", title: "3. Add their people", body: "Name, email and a temporary password (use Generate). They get an email with the portal link.", side: "left" },
+          { spot: "link", title: "Portal link", body: "Clients sign in at /portal — copy it to send along.", side: "bottom" },
+        ],
+        tips: [
+          "Linking a project shows nothing on its own — share the tasks next (see the next article).",
+          "“Turn off access” blocks a person straight away; “Reset password” emails them a new temporary one.",
+        ],
+      },
+      {
+        id: "client-share",
+        title: "Share tasks with a client and reply to them",
+        audience: "Managers",
+        summary:
+          "Only tasks you share are visible to the client. They see the title, description, status, due date and files — never the internal discussion, time or subtasks.",
+        shot: "client-panel",
+        callouts: [
+          { spot: "share", title: "Share / Hide", body: "Shows or hides this task in the portal. On the project page, “Share all” does every task at once.", side: "left" },
+          { spot: "convo", title: "Client conversation", body: "Separate from the internal Discussion. Client messages are on the right.", side: "top" },
+          { spot: "reply", title: "Reply", body: "Your reply is emailed to the client's people.", side: "top" },
+        ],
+        tips: [
+          "When a shared task is marked Done, the client is emailed to approve it.",
+          "The client's sign-off (✅ Approved or ✏️ Changes requested) shows on the task, and the task owner and assignee are notified.",
+          "Shared tasks have a 👁 next to their title on the project page.",
+        ],
+      },
+      {
+        id: "client-portal",
+        title: "What the client sees",
+        audience: "Everyone",
+        summary: "A simple, separate site: their projects with progress, the shared steps, files to download, and approve / request changes.",
+        shot: "portal",
+        callouts: [
+          { spot: "waiting", title: "Waiting for your approval", body: "Finished steps they haven't signed off yet.", side: "bottom" },
+          { spot: "project", title: "Their projects", body: "Progress bar and the next step that's due.", side: "right" },
+        ],
+        tips: [
+          "In Review shows to clients as “Final checks” — they're asked to approve only once the task is Done.",
+          "Asking for changes needs a comment, so the team knows what to fix.",
         ],
       },
     ],
@@ -851,6 +932,10 @@ export const FAQS: { q: string; a: string }[] = [
 
 /** Newest first. `link` is an article id. */
 export const WHATS_NEW: { date: string; title: string; body: string; link?: string }[] = [
+  { date: "Sep 2026", title: "Client portal", body: "Clients get their own login to follow shared tasks, download files and approve work.", link: "clients-setup" },
+  { date: "Sep 2026", title: "Set your status", body: "Available, Busy, In a meeting, Do not disturb, Away or Appear offline — with a message, like Teams.", link: "status" },
+  { date: "Sep 2026", title: "Morning summary email", body: "Your day in one email, including who's off today and this week.", link: "notification-settings" },
+  { date: "Sep 2026", title: "Team leave emails", body: "Everyone is emailed when someone's leave is approved (dates only).", link: "leave" },
   { date: "Sep 2026", title: "Leave & holidays", body: "Request leave, approve it, and set each office's holidays and weekends. Workload, calendars and reminders all know who's away.", link: "leave" },
   { date: "Sep 2026", title: "Google Calendar sync", body: "Your due dates, leave and holidays in Google, Outlook or Apple Calendar.", link: "calendar-sync" },
   { date: "Sep 2026", title: "Back to where you were", body: "Open a task from a project (or the calendar, My Tasks…) and “Back” returns you there after any change.", link: "task-detail" },
@@ -866,6 +951,8 @@ export const WHATS_NEW: { date: string; title: string; body: string; link?: stri
 ];
 
 export const GLOSSARY: { term: string; meaning: string }[] = [
+  { term: "Status (presence)", meaning: "The coloured dot on a photo: green Available, red Busy / In a meeting / Do not disturb, yellow Away, purple On leave, grey Offline." },
+  { term: "Client portal", meaning: "The separate site (/portal) where clients see only the tasks you share with them." },
   { term: "Working day", meaning: "Not your office's weekend and not a holiday. Leave is counted in working days." },
   { term: "To Do → In Progress → In Review → Done", meaning: "A task's status. Starting a timer moves To Do to In Progress automatically." },
   { term: "Low · Medium · High · Urgent", meaning: "Priority. Urgent tasks are shown in red everywhere." },

@@ -9,10 +9,14 @@ import {
   notifyTaskReopened,
 } from "./mail";
 import { sendPushToUser } from "./push";
+import { chosenPresence } from "./presence";
 
 /** Creates an in-app notification and fires a matching Web Push (if enabled). */
 export async function pushNotification(userId: number, message: string, link?: string) {
   await db.notification.create({ data: { userId, message, link } });
+  // "Do not disturb" keeps it in the Inbox but skips the pop-up.
+  const who = await db.user.findUnique({ where: { id: userId }, select: { presence: true, presenceUntil: true } });
+  if (who && chosenPresence(who) === "DND") return;
   // Fire-and-forget browser push — a no-op unless VAPID keys are configured.
   void sendPushToUser(userId, {
     title: "Looms & Berries Tasks",

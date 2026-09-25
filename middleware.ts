@@ -5,6 +5,11 @@ const secret = new TextEncoder().encode(
   process.env.AUTH_SECRET ?? "dev-secret-do-not-use-in-production"
 );
 
+// Client-portal tokens use their own key (see lib/clientAuth.ts) — keep in sync.
+const clientSecret = new TextEncoder().encode(
+  `${process.env.AUTH_SECRET ?? "dev-secret-do-not-use-in-production"}:client-portal`
+);
+
 const PUBLIC_PATHS = ["/login", "/forgot"];
 // Public regardless of auth state, in either direction — unlike /login and
 // /forgot, an already-signed-in visitor should still be able to see this
@@ -16,6 +21,9 @@ const matchesPath = (pathname: string, p: string) => pathname === p || pathname.
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (ALWAYS_PUBLIC_PATHS.some((p) => matchesPath(pathname, p))) return NextResponse.next();
+
+  // The client portal has its own sign-in and never touches staff sessions.
+  if (matchesPath(pathname, "/portal")) return portal(req, pathname);
 
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
   const token = req.cookies.get("tm_session")?.value;
@@ -30,6 +38,20 @@ export async function middleware(req: NextRequest) {
     }
   }
 
+  const redirectTo = redirector(req);
+
+  if (!isPublic && !authenticated) return redirectTo("/login");
+  if (isPublic && authenticated) return redirectTo("/dashboard");
+  if (pathname === "/") return redirectTo(authenticated ? "/dashboard" : "/login");
+
+  // Expose the path to server components (used to force the password change).
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-pathname", pathname);
+  return NextResponse.next({ request: { headers: requestHeaders } });
+}
+
+/** Redirect helper that keeps the browser on the host it came in on. */
+function redirector(req: NextRequest) {
   // Build redirects from the request's Host header, not the interface the
   // server is bound to — otherwise a server started with -H 127.0.0.1 behind
   // a reverse proxy redirects browsers to localhost.
@@ -40,13 +62,25 @@ export async function middleware(req: NextRequest) {
   // reverse proxy does not need to inject X-Forwarded-Proto.
   const isLocal = /^(localhost|127\.)/.test(host) || host.endsWith(":3000");
   const proto = isLocal ? (req.headers.get("x-forwarded-proto") ?? "http") : "https";
-  const redirectTo = (path: string) => NextResponse.redirect(`${proto}://${host}${path}`);
+  return (path: string) => NextResponse.redirect(`${proto}://${host}${path}`);
+}
 
-  if (!isPublic && !authenticated) return redirectTo("/login");
-  if (isPublic && authenticated) return redirectTo("/dashboard");
-  if (pathname === "/") return redirectTo(authenticated ? "/dashboard" : "/login");
-
-  // Expose the path to server components (used to force the password change).
+async function portal(req: NextRequest, pathname: string) {
+  const token = req.cookies.get("tm_client")?.value;
+  let signedIn = false;
+  if (token) {
+    try {
+      const { payload } = await jwtVerify(token, clientSecret);
+      signedIn = payload.kind === "client";
+    } catch {
+      signedIn = false;
+    }
+  }
+  const isLogin = matchesPath(pathname, "/portal/login");
+  const redirectTo = redirector(req);
+  // A signed-in visitor may still see the login page — their contact could
+  // have been deactivated since (the page itself sends valid ones onwards).
+  if (!signedIn && !isLogin) return redirectTo("/portal/login");
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set("x-pathname", pathname);
   return NextResponse.next({ request: { headers: requestHeaders } });

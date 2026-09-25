@@ -187,9 +187,10 @@ export async function updateOwnProfile(formData: FormData) {
 export async function updateNotificationPrefs(formData: FormData) {
   const user = await requireUser();
   const emailNotifications = formData.get("emailNotifications") === "on";
+  const dailyDigest = formData.get("dailyDigest") === "on";
   await db.user.update({
     where: { id: user.id },
-    data: { emailNotifications },
+    data: { emailNotifications, dailyDigest },
   });
   redirect("/settings?ok=1");
 }

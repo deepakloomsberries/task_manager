@@ -1,3 +1,6 @@
+import { usersOnLeave } from "@/lib/leaveData";
+import { todayIn } from "@/lib/leave";
+import { companyTimezone } from "@/lib/tz";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
@@ -10,7 +13,7 @@ export default async function ConversationPage({ params }: { params: { userId: s
   const otherId = Number(params.userId);
   if (!otherId || otherId === user.id) notFound();
 
-  const other = await db.user.findUnique({ where: { id: otherId } });
+  const other = await db.user.findUnique({ where: { id: otherId }, include: { company: true } });
   if (!other) notFound();
 
   // Mark the messages this person sent us as read now that we're viewing them.
@@ -114,7 +117,14 @@ export default async function ConversationPage({ params }: { params: { userId: s
         starred: myStarredIds.has(m.id),
       }))}
       initialLastReadMyId={lastRead?.id ?? 0}
-      initialPartnerLastSeenAt={other.lastSeenAt ? other.lastSeenAt.toISOString() : null}
+      initialPartnerPresence={{
+        lastSeenAt: other.lastSeenAt?.toISOString() ?? null,
+        lastPingAt: other.lastPingAt?.toISOString() ?? null,
+        presence: other.presence,
+        presenceText: other.presenceText,
+        presenceUntil: other.presenceUntil?.toISOString() ?? null,
+        onLeave: (await usersOnLeave(todayIn(companyTimezone(other.company)))).has(other.id),
+      }}
     />
   );
 }

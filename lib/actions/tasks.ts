@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import { notifyAssignment, notifyComment, notifyReminder, notifyReviewNeeded, notifyCompletion, notifyApproval, notifyReopened, pushNotification, logActivity } from "@/lib/notify";
-import { notifyCollaboratorAdded } from "@/lib/mail";
+import { notifyClientStepDone, notifyCollaboratorAdded } from "@/lib/mail";
 import { seriesKeyFor } from "@/lib/recurrence";
 import { findMentionedIds } from "@/lib/mentions";
 import { companyTimezone, zonedStartOfToday } from "@/lib/tz";
@@ -393,6 +393,17 @@ async function changeStatus(
     // Stop any running timers on this task and bank their time — a completed
     // task shouldn't keep accruing time for anyone.
     await commitTimersForTask(taskId);
+
+    // Shared with a client? Ask them to review and approve it in the portal.
+    if (task.clientVisible && task.projectId) {
+      const project = await db.project.findUnique({
+        where: { id: task.projectId },
+        select: { name: true, client: { select: { contacts: { where: { active: true }, select: { email: true } } } } },
+      });
+      if (project?.client?.contacts.length) {
+        notifyClientStepDone({ to: project.client.contacts.map((c) => c.email), taskId, taskTitle: task.title, project: project.name });
+      }
+    }
 
     // Tell the task owner (in-app + email) when someone else completes their task.
     if (task.createdById !== user.id) {

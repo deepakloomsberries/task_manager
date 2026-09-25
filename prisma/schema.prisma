@@ -52,41 +52,52 @@ model User {
   departmentId       Int?
   createdAt          DateTime    @default(now())
 
-  tasksAssigned        Task[]                @relation("assignee")
-  tasksCreated         Task[]                @relation("creator")
-  taskCollaborations   TaskCollaborator[]
-  comments             TaskComment[]
-  notes                Note[]
-  timeEntries          TimeEntry[]
-  projectMembers       ProjectMember[]
-  projectsCreated      Project[]
-  attachments          Attachment[]
-  discussionMessages   DiscussionMessage[]
-  notifications        Notification[]
-  taskActivities       TaskActivity[]
-  noteShares           NoteShare[]
-  messagesSent         DirectMessage[]       @relation("dmSender")
-  messagesReceived     DirectMessage[]       @relation("dmRecipient")
-  activeTimer          TaskTimer?
-  pushSubscriptions    PushSubscription[]
-  timesheetSubmissions TimesheetSubmission[] @relation("tsSubmitter")
-  timesheetReviews     TimesheetSubmission[] @relation("tsReviewer")
-  passwordReset        PasswordReset?
-  savedViews           SavedView[]
-  taskWatches          TaskWatcher[]
-  billingSnapshots     BillingSnapshot[]
-  messageReactions     MessageReaction[]
-  messageStars         MessageStar[]
-  groupsCreated        Group[]               @relation("groupCreator")
-  groupMemberships     GroupMember[]
-  groupMessagesSent    GroupMessage[]        @relation("groupMessageSender")
+  tasksAssigned         Task[]                 @relation("assignee")
+  tasksCreated          Task[]                 @relation("creator")
+  taskCollaborations    TaskCollaborator[]
+  comments              TaskComment[]
+  notes                 Note[]
+  timeEntries           TimeEntry[]
+  projectMembers        ProjectMember[]
+  projectsCreated       Project[]
+  attachments           Attachment[]
+  discussionMessages    DiscussionMessage[]
+  notifications         Notification[]
+  taskActivities        TaskActivity[]
+  noteShares            NoteShare[]
+  messagesSent          DirectMessage[]        @relation("dmSender")
+  messagesReceived      DirectMessage[]        @relation("dmRecipient")
+  activeTimer           TaskTimer?
+  pushSubscriptions     PushSubscription[]
+  timesheetSubmissions  TimesheetSubmission[]  @relation("tsSubmitter")
+  timesheetReviews      TimesheetSubmission[]  @relation("tsReviewer")
+  passwordReset         PasswordReset?
+  savedViews            SavedView[]
+  taskWatches           TaskWatcher[]
+  billingSnapshots      BillingSnapshot[]
+  messageReactions      MessageReaction[]
+  messageStars          MessageStar[]
+  groupsCreated         Group[]                @relation("groupCreator")
+  groupMemberships      GroupMember[]
+  groupMessagesSent     GroupMessage[]         @relation("groupMessageSender")
   groupMessageReactions GroupMessageReaction[]
-  groupMessageStars    GroupMessageStar[]
-  leaves               Leave[]               @relation("leaveUser")
-  leaveReviews         Leave[]               @relation("leaveReviewer")
+  groupMessageStars     GroupMessageStar[]
+  leaves                Leave[]                @relation("leaveUser")
+  leaveReviews          Leave[]                @relation("leaveReviewer")
   /// Secret for the personal calendar feed (/api/calendar/<token>). Rotating it
   /// cuts off every calendar that subscribed with the old link.
-  calendarToken        String?               @unique
+  calendarToken         String?                @unique
+  /// Morning summary email (due today, overdue, waiting on you, who's off).
+  dailyDigest           Boolean                @default(true)
+  /// Status the person picked, Teams-style: BUSY | MEETING | AWAY | DND |
+  /// OFFLINE ("appear offline"). Null = automatic (Available when active).
+  presence              String?
+  presenceText          String? // optional custom message, e.g. "Back at 3pm"
+  presenceUntil         DateTime? // status resets to automatic after this
+  /// Last heartbeat from any open tab, even a hidden one — "app open but not
+  /// looked at" shows as Away. lastSeenAt only moves while a tab is visible.
+  lastPingAt            DateTime?
+  clientComments        ClientComment[]
 }
 
 /**
@@ -118,6 +129,9 @@ model Project {
   tasks       Task[]
   members     ProjectMember[]
   timeEntries TimeEntry[]
+  /// The client who can follow this project in the client portal.
+  client      Client?         @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientId    Int?
 }
 
 model ProjectMember {
@@ -130,29 +144,35 @@ model ProjectMember {
 }
 
 model Task {
-  id             Int           @id @default(autoincrement())
+  id             Int             @id @default(autoincrement())
   title          String
   description    String?
-  status         String        @default("TODO") // TODO | IN_PROGRESS | REVIEW | DONE
-  priority       String        @default("MEDIUM") // LOW | MEDIUM | HIGH | URGENT
+  status         String          @default("TODO") // TODO | IN_PROGRESS | REVIEW | DONE
+  priority       String          @default("MEDIUM") // LOW | MEDIUM | HIGH | URGENT
   startDate      DateTime?
   dueDate        DateTime?
   recurrence     String? // null | DAILY | WEEKLY | MONTHLY — one instance per period
   seriesId       String? // groups all daily/weekly/monthly occurrences of one recurring job
   missedAt       DateTime? // set when a recurring occurrence rolled over without being done
   estimateHours  Float? // effort estimate in hours, powers the workload view
-  project        Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  project        Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
   projectId      Int?
-  assignee       User?         @relation("assignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  assignee       User?           @relation("assignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   assigneeId     Int?
-  createdBy      User          @relation("creator", fields: [createdById], references: [id])
+  createdBy      User            @relation("creator", fields: [createdById], references: [id])
   createdById    Int
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
   completedAt    DateTime?
   deletedAt      DateTime?
   acknowledgedAt DateTime? // when the assignee first opened/viewed the task
-  reviewRequired Boolean       @default(false) // assignee must send to Review, not self-complete
+  reviewRequired Boolean         @default(false) // assignee must send to Review, not self-complete
+  /// Shown to the project's client in the client portal (with its files).
+  clientVisible  Boolean         @default(false)
+  clientStatus   String? // APPROVED | CHANGES — the client's sign-off on this task
+  clientStatusAt DateTime?
+  clientStatusBy String? // name of the client contact who signed off
+  clientComments ClientComment[]
   comments       TaskComment[]
   timeEntries    TimeEntry[]
   attachments    Attachment[]
@@ -219,7 +239,9 @@ model Tag {
   tasks TaskTag[]
 }
 
-/** A named, saved combination of Tasks filters — a personal quick view. */
+/**
+ * A named, saved combination of Tasks filters — a personal quick view.
+ */
 model SavedView {
   id        Int      @id @default(autoincrement())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -240,8 +262,10 @@ model TaskTag {
   @@id([taskId, tagId])
 }
 
-/** People following a task who aren't its assignee — they get notified of
- *  status changes and new comments without owning the work. */
+/**
+ * People following a task who aren't its assignee — they get notified of
+ * status changes and new comments without owning the work.
+ */
 model TaskWatcher {
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
   taskId    Int
@@ -309,18 +333,18 @@ model TaskComment {
 }
 
 model Note {
-  id        Int         @id @default(autoincrement())
-  title     String
-  body      String      @default("")
-  color     String      @default("default")
-  type      String      @default("text") // text | checklist
-  pinned    Boolean     @default(false)
-  sortOrder Int         @default(0) // manual drag order (lower = earlier)
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    Int
-  updatedAt DateTime    @updatedAt
-  createdAt DateTime    @default(now())
-  deletedAt DateTime?
+  id          Int          @id @default(autoincrement())
+  title       String
+  body        String       @default("")
+  color       String       @default("default")
+  type        String       @default("text") // text | checklist
+  pinned      Boolean      @default(false)
+  sortOrder   Int          @default(0) // manual drag order (lower = earlier)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      Int
+  updatedAt   DateTime     @updatedAt
+  createdAt   DateTime     @default(now())
+  deletedAt   DateTime?
   shares      NoteShare[]
   attachments Attachment[]
 
@@ -337,43 +361,43 @@ model NoteShare {
 }
 
 model DirectMessage {
-  id          Int               @id @default(autoincrement())
-  body        String
-  sender      User              @relation("dmSender", fields: [senderId], references: [id], onDelete: Cascade)
-  senderId    Int
-  recipient   User              @relation("dmRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
-  recipientId Int
-  read        Boolean           @default(false)
+  id                Int               @id @default(autoincrement())
+  body              String
+  sender            User              @relation("dmSender", fields: [senderId], references: [id], onDelete: Cascade)
+  senderId          Int
+  recipient         User              @relation("dmRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  recipientId       Int
+  read              Boolean           @default(false)
   // Set once an "unread message" email has gone out for this message, so the
   // background job (scripts/unread-messages.ts) never emails the same unread
   // message twice — null means "not yet notified".
-  notifiedAt  DateTime?
+  notifiedAt        DateTime?
   // Auto-translation into the recipient's preferred language, computed once
   // at send time. Null when no translation was needed/available — the chat
   // UI then just shows `body`. translatedLang is the language it's in, so a
   // "Show original" toggle knows what it's toggling away from.
-  translatedBody String?
-  translatedLang String?
+  translatedBody    String?
+  translatedLang    String?
   // Set when a translation attempt used up its retries without succeeding
   // (Gemini quota/rate-limit/config error) — lets the chat UI show a small
   // "couldn't translate" notice instead of silently showing the original
   // with no explanation. Left false for the "AI not configured" case, which
   // is an intentional off-state, not a failure worth surfacing.
-  translationFailed Boolean @default(false)
+  translationFailed Boolean           @default(false)
   // When the translation above landed — translation now runs in the
   // background after the message is created (so sending stays instant), and
   // the chat's poll endpoint uses this to find recently-completed
   // translations for messages it already sent the client, similar to how
   // deletedIds/reactions are patched onto already-loaded messages.
-  translatedAt DateTime?
-  createdAt   DateTime          @default(now())
-  deletedAt   DateTime?
-  attachments Attachment[]
-  replyTo     DirectMessage?    @relation("dmReplyTo", fields: [replyToId], references: [id], onDelete: SetNull)
-  replyToId   Int?
-  replies     DirectMessage[]   @relation("dmReplyTo")
-  reactions   MessageReaction[]
-  stars       MessageStar[]
+  translatedAt      DateTime?
+  createdAt         DateTime          @default(now())
+  deletedAt         DateTime?
+  attachments       Attachment[]
+  replyTo           DirectMessage?    @relation("dmReplyTo", fields: [replyToId], references: [id], onDelete: SetNull)
+  replyToId         Int?
+  replies           DirectMessage[]   @relation("dmReplyTo")
+  reactions         MessageReaction[]
+  stars             MessageStar[]
 
   @@index([senderId, recipientId])
   @@index([recipientId, senderId])
@@ -620,13 +644,13 @@ model TimeEntryAudit {
  * the way tools like Toggl or Asana track "what am I working on right now".
  */
 model TaskTimer {
-  id        Int      @id @default(autoincrement())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    Int      @unique
-  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  taskId    Int
-  note      String?
-  startedAt DateTime @default(now())
+  id         Int       @id @default(autoincrement())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     Int       @unique
+  task       Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId     Int
+  note       String?
+  startedAt  DateTime  @default(now())
   /// Last ping from any open tab; a stale value means the browser was closed
   /// or the laptop shut down, and the timer is stopped automatically.
   lastPingAt DateTime?
@@ -702,4 +726,51 @@ model Leave {
   @@index([userId, startDate])
   @@index([status])
   @@index([startDate, endDate])
+}
+
+/**
+ * A customer company that follows its projects in the client portal (/portal).
+ * Clients and their contacts are kept apart from staff Users on purpose, so
+ * they never show up in assignee pickers, chat, workload or timesheets.
+ */
+model Client {
+  id        Int             @id @default(autoincrement())
+  name      String          @unique
+  createdAt DateTime        @default(now())
+  contacts  ClientContact[]
+  projects  Project[]
+}
+
+/**
+ * A person at a client who signs in to the portal.
+ */
+model ClientContact {
+  id                 Int             @id @default(autoincrement())
+  client             Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId           Int
+  name               String
+  email              String          @unique
+  passwordHash       String
+  mustChangePassword Boolean         @default(true)
+  active             Boolean         @default(true)
+  lastSeenAt         DateTime?
+  createdAt          DateTime        @default(now())
+  comments           ClientComment[]
+}
+
+/**
+ * The client conversation on a shared task — from a client contact or a staff reply.
+ */
+model ClientComment {
+  id        Int            @id @default(autoincrement())
+  task      Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId    Int
+  contact   ClientContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  contactId Int?
+  user      User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId    Int?
+  body      String
+  createdAt DateTime       @default(now())
+
+  @@index([taskId, createdAt])
 }

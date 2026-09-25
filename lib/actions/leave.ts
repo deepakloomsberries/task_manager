@@ -7,6 +7,7 @@ import { requireUser, requireAdmin, isManagerOrAdmin } from "@/lib/auth";
 import { pushNotification } from "@/lib/notify";
 import { LEAVE_TYPES, MAX_LEAVE_SPAN_DAYS, eachDay, fmtDays, fmtRange, parseYmd, todayIn, ymd } from "@/lib/leave";
 import { workingDaysFor } from "@/lib/leaveData";
+import { announceLeave } from "@/lib/leaveAnnounce";
 import { companyTimezone } from "@/lib/tz";
 
 function refresh() {
@@ -57,7 +58,8 @@ export async function requestLeave(formData: FormData) {
     },
   });
 
-  if (!autoApprove) {
+  if (autoApprove) await announceLeave(leave.id);
+  else {
     const approvers = await db.user.findMany({
       where: { active: true, role: { in: ["ADMIN", "MANAGER"] }, id: { not: user.id } },
       select: { id: true },
@@ -84,6 +86,7 @@ export async function cancelLeave(formData: FormData) {
   if (!cancellable) redirect("/leave?error=cannot-cancel");
 
   await db.leave.update({ where: { id }, data: { status: "CANCELLED" } });
+  if (leave.status === "APPROVED") await announceLeave(id, true);
   if (leave.status === "APPROVED" && leave.reviewedById && leave.reviewedById !== user.id) {
     await pushNotification(leave.reviewedById, `${user.name} cancelled their leave (${fmtRange(leave.startDate, leave.endDate)})`, "/leave/team");
   }
@@ -107,6 +110,7 @@ export async function reviewLeave(formData: FormData) {
     where: { id },
     data: { status: approve ? "APPROVED" : "REJECTED", reviewedById: user.id, reviewedAt: new Date(), reviewNote: note },
   });
+  if (approve) await announceLeave(id);
   await pushNotification(
     leave.userId,
     `${user.name} ${approve ? "approved" : "declined"} your leave (${fmtRange(leave.startDate, leave.endDate)})${note ? ` — “${note}”` : ""}`,

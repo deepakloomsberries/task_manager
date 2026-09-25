@@ -8,7 +8,8 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import DatePicker from "@/components/DatePicker";
 import ChatInfoPanel, { type PanelItem, type PanelLink, type PanelStarred } from "@/components/ChatInfoPanel";
 import { sendMessage, deleteMessage, toggleReaction, toggleStar } from "@/lib/actions/messages";
-import { isOnline, lastSeenLabel } from "@/lib/ui";
+import { lastSeenLabel } from "@/lib/ui";
+import { PRESENCE, presenceLabel, resolvePresence, type PresenceInput } from "@/lib/presence";
 
 type Att = { id: number; name: string; mimeType: string; size: number };
 type ReplyRef = { id: number; body: string; senderId: number; hasAttachment: boolean };
@@ -243,18 +244,18 @@ export default function ChatThread({
   other,
   initialMessages,
   initialLastReadMyId,
-  initialPartnerLastSeenAt,
+  initialPartnerPresence,
 }: {
   meId: number;
   other: Person;
   initialMessages: Msg[];
   initialLastReadMyId: number;
-  initialPartnerLastSeenAt: string | null;
+  initialPartnerPresence: PresenceInput;
 }) {
   const router = useRouter();
   const [messages, setMessages] = useState<Msg[]>(initialMessages);
   const [lastReadMyId, setLastReadMyId] = useState(initialLastReadMyId);
-  const [partnerLastSeen, setPartnerLastSeen] = useState<string | null>(initialPartnerLastSeenAt);
+  const [partnerPresence, setPartnerPresence] = useState<PresenceInput>(initialPartnerPresence);
   const [text, setText] = useState("");
   const [atts, setAtts] = useState<Att[]>([]);
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
@@ -427,7 +428,7 @@ export default function ChatThread({
           );
         }
         setLastReadMyId((cur) => Math.max(cur, data.lastReadMyId ?? 0));
-        setPartnerLastSeen(data.partnerLastSeenAt ?? null);
+        if (data.partnerPresence) setPartnerPresence((p) => ({ ...data.partnerPresence, onLeave: p.onLeave }));
         setPartnerTyping(!!data.partnerTyping);
       } catch {
         /* offline / transient — try again next tick */
@@ -643,7 +644,7 @@ export default function ChatThread({
     }
   }
 
-  const online = isOnline(partnerLastSeen);
+  const partnerStatus = resolvePresence(partnerPresence);
   let lastMineKey: number | null = null;
   for (const m of messages) if (m.senderId === meId && !m.deleted) lastMineKey = m.id;
 
@@ -741,7 +742,7 @@ export default function ChatThread({
         >
           ←
         </Link>
-        <UserAvatar user={other} size={40} presence={partnerLastSeen} />
+        <UserAvatar user={other} size={40} presence={partnerPresence} />
         <div className="min-w-0">
           <h1 className="truncate font-semibold leading-tight">{other.name}</h1>
           {partnerTyping ? (
@@ -754,9 +755,9 @@ export default function ChatThread({
               typing…
             </p>
           ) : (
-            <p className={`flex items-center gap-1.5 text-xs ${online ? "text-green-600 dark:text-green-400" : "text-slate-500"}`}>
-              <span className={`h-1.5 w-1.5 rounded-full ${online ? "bg-green-500" : "bg-slate-300 dark:bg-slate-600"}`} />
-              {lastSeenLabel(partnerLastSeen)}
+            <p className={`flex items-center gap-1.5 truncate text-xs ${partnerStatus.key === "OFFLINE" ? "text-slate-500" : PRESENCE[partnerStatus.key].text}`}>
+              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${PRESENCE[partnerStatus.key].dot}`} />
+              {partnerStatus.key === "OFFLINE" ? lastSeenLabel(partnerPresence.presence === "OFFLINE" ? null : partnerPresence.lastSeenAt) : presenceLabel(partnerPresence)}
             </p>
           )}
         </div>

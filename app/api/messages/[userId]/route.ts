@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { isTyping } from "@/lib/typing";
+import { PRESENCE_SELECT } from "@/lib/presence";
 
 /**
  * Polling endpoint that powers the live chat thread. Returns any messages newer
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
       orderBy: { id: "desc" },
       select: { id: true },
     }),
-    db.user.findUnique({ where: { id: otherId }, select: { lastSeenAt: true } }),
+    db.user.findUnique({ where: { id: otherId }, select: PRESENCE_SELECT }),
     // Messages deleted recently, so already-loaded bubbles can flip to tombstones live.
     db.directMessage.findMany({
       where: { deletedAt: { gte: recentlyDeletedSince }, ...conversationWhere },
@@ -134,7 +135,7 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
     myStarredIds: Array.from(myStarredIds),
     translationUpdates: translated,
     lastReadMyId: lastRead?.id ?? 0,
-    partnerLastSeenAt: partner?.lastSeenAt ? partner.lastSeenAt.toISOString() : null,
+    partnerPresence: partner ?? null,
     partnerTyping: isTyping(otherId, meId),
     deletedIds: deleted.map((d) => d.id),
   });
