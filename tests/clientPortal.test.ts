@@ -53,3 +53,28 @@ describe("client portal access", () => {
     await expect(jwtVerify(token, clientSecret())).resolves.toBeTruthy();
   });
 });
+
+describe("client files", () => {
+  it("only serves browser-safe types inline", async () => {
+    const { canShowInline } = await import("@/lib/fileResponse");
+    for (const t of ["image/png", "image/jpeg", "application/pdf", "video/mp4", "text/plain"]) expect(canShowInline(t)).toBe(true);
+    for (const t of ["text/html", "image/svg+xml", "application/javascript", "application/xhtml+xml", "application/octet-stream", ""]) {
+      expect(canShowInline(t)).toBe(false);
+    }
+  });
+
+  it("keeps a client upload apart from staff uploads", async () => {
+    const { mine, task } = await setup();
+    const t = await task({ clientVisible: true });
+    const contact = await db.clientContact.create({
+      data: { clientId: mine.id, name: "Ana", email: `ana-files-${Date.now()}@buyer.test`, passwordHash: "x" },
+    });
+    await db.attachment.create({ data: { taskId: t.id, originalName: "internal.xlsx", mimeType: "x", size: 1, storedName: `i-${Date.now()}`, uploadedById: t.createdById } });
+    await db.attachment.create({ data: { taskId: t.id, originalName: "techpack.pdf", mimeType: "application/pdf", size: 1, storedName: `c-${Date.now()}`, clientContactId: contact.id, clientVisible: true } });
+    const seen = await db.attachment.findMany({ where: { taskId: t.id, clientVisible: true } });
+    expect(seen.map((a) => a.originalName)).toEqual(["techpack.pdf"]);
+    // Removing the contact keeps the file (the team may still need it).
+    await db.clientContact.delete({ where: { id: contact.id } });
+    expect(await db.attachment.count({ where: { taskId: t.id } })).toBe(2);
+  });
+});

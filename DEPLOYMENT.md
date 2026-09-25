@@ -440,8 +440,10 @@ crontab -l 2>/dev/null | grep -v 'cp /home/kapil/task_manager/prisma/dev.db' | c
 ```
 
 Backups land in `/home/kapil/backups/YYYY-MM-DD/` as `db.dump` (a `pg_dump`
-archive, checked with `pg_restore --list` after every run) plus `uploads/`
-(override with `BACKUP_DIR`, retention with `BACKUP_KEEP_DAYS`). Run once by hand to
+archive, checked with `pg_restore --list` after every run), `uploads/`, and
+`env.backup` — a copy of `.env` with every password and key (readable by the owner
+only; backup folders are `700`). Override the folder with `BACKUP_DIR`, retention
+with `BACKUP_KEEP_DAYS`. Run once by hand to
 check: `npm run backup`.
 
 Restore a day's backup:
@@ -451,6 +453,8 @@ systemctl stop task-manager
 cd /home/kapil/task_manager && set -a && . ./.env && set +a
 pg_restore --clean --if-exists --no-owner -d "$DATABASE_URL" /home/kapil/backups/2026-10-01/db.dump
 cp -r /home/kapil/backups/2026-10-01/uploads/. uploads/
+# only if .env itself was lost or damaged:
+# cp /home/kapil/backups/2026-10-01/env.backup .env && chmod 600 .env
 systemctl start task-manager
 ``` Keep a copy off the server too (e.g. a
 weekly `rclone`/`scp` of the backups folder to Google Drive or another machine).
@@ -573,6 +577,26 @@ db.user.update({
 
 Log in with the temporary password; the application will require setting a new one
 immediately.
+
+**Lost the phone for two-step sign-in (and the backup codes)?** Another admin can
+turn it off on the Users page (edit the person → “Turn off (lost phone)”). If you
+are the only admin, run this on the server, then sign in with just your password
+and set two-step sign-in up again on the new phone:
+
+```bash
+cd /home/kapil/task_manager
+node -e "
+const { PrismaClient } = require('@prisma/client');
+const db = new PrismaClient();
+db.user.update({
+  where: { email: 'sales@loomsberries.com' },
+  data: { totpEnabled: false, totpSecret: null, totpLastStep: null, totpRecovery: null }
+}).then(() => { console.log('two-step sign-in turned off'); process.exit(0); });
+"
+```
+
+Administrators must use two-step sign-in (they're sent to Settings until it's on).
+To make it optional, add `ADMIN_TWO_STEP=optional` to `.env` and restart.
 
 ---
 

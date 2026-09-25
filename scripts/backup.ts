@@ -3,11 +3,13 @@
  *
  * Dumps the Postgres database with pg_dump (a consistent snapshot, safe while
  * the app is running), checks the dump is readable with pg_restore --list,
- * copies the uploads folder, and prunes backups older than BACKUP_KEEP_DAYS.
+ * copies the uploads folder and the .env file (passwords and keys — readable
+ * by the owner only), and prunes backups older than BACKUP_KEEP_DAYS.
  *
  *   0 2 * * * cd /home/kapil/task_manager && /usr/bin/npx tsx scripts/backup.ts >> /var/log/task-backup.log 2>&1
  *
  * Restore: pg_restore --clean --if-exists --no-owner -d "$DATABASE_URL" /home/kapil/backups/<day>/db.dump
+ *          cp /home/kapil/backups/<day>/env.backup /home/kapil/task_manager/.env   (only if .env was lost)
  *
  * Env: BACKUP_DIR (default ../backups), BACKUP_KEEP_DAYS (default 14),
  * UPLOAD_DIR (default ./uploads). Exits non-zero on failure so cron mails it.
@@ -32,7 +34,10 @@ const UPLOAD_DIR = process.env.UPLOAD_DIR ?? path.join(process.cwd(), "uploads")
 async function main() {
   const stamp = new Date().toISOString().slice(0, 10);
   const dir = path.join(BACKUP_DIR, stamp);
-  fs.mkdirSync(dir, { recursive: true });
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  // Backups hold the whole database and the app's secrets: owner-only.
+  fs.chmodSync(BACKUP_DIR, 0o700);
+  fs.chmodSync(dir, 0o700);
 
   // 1. Database. Connection details go in PG* env vars rather than the
   // command line, so the password never shows up in `ps`.
@@ -58,7 +63,17 @@ async function main() {
     fs.cpSync(UPLOAD_DIR, path.join(dir, "uploads"), { recursive: true });
   }
 
-  // 4. Retention.
+  // 4. The .env file — database password, sign-in secret, SMTP and API keys.
+  // Without it a restored database can't be opened by the app.
+  if (fs.existsSync(envPath)) {
+    const envCopy = path.join(dir, "env.backup");
+    fs.copyFileSync(envPath, envCopy);
+    fs.chmodSync(envCopy, 0o600);
+  } else {
+    console.warn("  ! no .env found next to the app — not backed up");
+  }
+
+  // 5. Retention.
   const cutoff = Date.now() - KEEP_DAYS * 86_400_000;
   for (const name of fs.readdirSync(BACKUP_DIR)) {
     const t = Date.parse(name);

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { clientTask, requireClient } from "@/lib/clientAuth";
-import { clientComment, clientSignOff } from "@/lib/actions/portal";
+import { clientComment, clientSignOff, clientUpload } from "@/lib/actions/portal";
 import { fmtRelative } from "@/lib/ui";
 import FlashToast from "@/components/FlashToast";
 import { awaitingClient, fmtDay, stage } from "../../status";
@@ -10,9 +10,16 @@ import { awaitingClient, fmtDay, stage } from "../../status";
 export const dynamic = "force-dynamic";
 
 const OK: Record<string, string> = {
+  uploaded: "Added — the team has been notified.",
   comment: "Message sent to the team.",
   approved: "Approved — thank you! The team has been notified.",
   changes: "Your change request was sent to the team.",
+};
+
+const ERR: Record<string, string> = {
+  "too-big": "That file is over 50 MB — share a WeTransfer or Google Drive link instead.",
+  link: "That doesn't look like a web link (it should start with https://).",
+  nofile: "Choose a file or paste a link first.",
 };
 
 const fmtSize = (b: number) => (b > 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
@@ -23,7 +30,11 @@ export default async function PortalTask({ params, searchParams }: { params: { i
   if (!task) notFound();
 
   const [attachments, comments] = await Promise.all([
-    db.attachment.findMany({ where: { taskId: task.id }, orderBy: { createdAt: "desc" } }),
+    db.attachment.findMany({
+      where: { taskId: task.id, clientVisible: true },
+      include: { clientContact: { select: { name: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
     db.clientComment.findMany({
       where: { taskId: task.id },
       include: { contact: { select: { name: true } }, user: { select: { name: true } } },
@@ -83,10 +94,13 @@ export default async function PortalTask({ params, searchParams }: { params: { i
         )}
       </section>
 
-      <section className="card p-6" aria-label="Files">
+      <section id="files" className="card scroll-mt-20 p-6" aria-label="Files">
         <h2 className="mb-3 font-semibold">
           Files <span className="text-sm font-normal text-slate-400">({attachments.length})</span>
         </h2>
+        {searchParams.error && ERR[searchParams.error] && (
+          <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{ERR[searchParams.error]}</p>
+        )}
         {attachments.length === 0 ? (
           <p className="text-sm text-slate-400">No files yet.</p>
         ) : (
@@ -94,26 +108,56 @@ export default async function PortalTask({ params, searchParams }: { params: { i
             {attachments.map((a) => (
               <li key={a.id} className="flex items-center gap-3 py-2 text-sm">
                 <span>{a.storedName ? (a.mimeType.startsWith("image/") ? "🖼" : "📄") : "🔗"}</span>
-                <a
-                  href={a.storedName ? `/api/portal/files/${a.id}` : a.externalUrl!}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex-1 truncate text-sky-700 hover:underline dark:text-sky-400"
-                >
-                  {a.originalName}
-                </a>
+                <div className="min-w-0 flex-1">
+                  <a
+                    href={a.storedName ? `/api/portal/files/${a.id}` : a.externalUrl!}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block truncate text-sky-700 hover:underline dark:text-sky-400"
+                  >
+                    {a.originalName}
+                  </a>
+                  <span className="text-xs text-slate-400">
+                    {a.clientContactId ? `From you${a.clientContact ? ` (${a.clientContact.name})` : ""}` : "From Looms & Berries"} ·{" "}
+                    {fmtRelative(a.createdAt)}
+                    {a.storedName && ` · ${fmtSize(a.size)}`}
+                  </span>
+                </div>
                 {a.storedName && (
-                  <>
-                    <span className="text-xs text-slate-400">{fmtSize(a.size)}</span>
-                    <a href={`/api/portal/files/${a.id}?download=1`} className="text-xs text-slate-500 hover:underline">
-                      Download
-                    </a>
-                  </>
+                  <a href={`/api/portal/files/${a.id}?download=1`} className="text-xs text-slate-500 hover:underline">
+                    Download
+                  </a>
                 )}
               </li>
             ))}
           </ul>
         )}
+
+        <details key={attachments.length} className="mt-4 rounded-lg border border-dashed border-slate-300 p-3 dark:border-slate-600" open={searchParams.error !== undefined && searchParams.error in ERR}>
+          <summary className="cursor-pointer text-sm font-medium text-violet-700 dark:text-violet-300">＋ Add a file for the team</summary>
+          <form key={attachments.length} action={clientUpload} className="mt-3 space-y-3">
+            <input type="hidden" name="taskId" value={task.id} />
+            <div>
+              <label className="label">File (up to 50 MB)</label>
+              <input
+                type="file"
+                name="file"
+                className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-violet-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-violet-700 hover:file:bg-violet-100 dark:text-slate-300"
+              />
+            </div>
+            <div>
+              <label className="label">…or a link to a bigger file</label>
+              <input name="link" type="url" placeholder="https://wetransfer.com/… or a Google Drive link" className="input" />
+            </div>
+            <div>
+              <label className="label">Note (optional)</label>
+              <input name="note" maxLength={1000} placeholder="e.g. Updated tech pack v3 — see page 4" className="input" />
+            </div>
+            <button type="submit" className="btn-primary">
+              Upload
+            </button>
+          </form>
+        </details>
       </section>
 
       <section id="conversation" className="card scroll-mt-20 p-6" aria-label="Conversation">

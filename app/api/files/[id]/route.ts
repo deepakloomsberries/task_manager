@@ -1,9 +1,7 @@
-import path from "path";
-import fs from "fs/promises";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { UPLOAD_DIR } from "@/lib/storage";
+import { sendAttachment } from "@/lib/fileResponse";
 
 export const dynamic = "force-dynamic";
 
@@ -40,30 +38,5 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     return new NextResponse("Forbidden", { status: 403 });
   }
 
-  // A link attachment has nothing stored here — send the browser straight to
-  // the external URL. The UI links directly to it and shouldn't normally hit
-  // this route at all, but handle it in case of a stale bookmark or a direct
-  // navigation to this URL.
-  if (!attachment.storedName) {
-    if (!attachment.externalUrl) return new NextResponse("Not found", { status: 404 });
-    return NextResponse.redirect(attachment.externalUrl);
-  }
-
-  let data: Buffer;
-  try {
-    data = await fs.readFile(path.join(UPLOAD_DIR, attachment.storedName));
-  } catch {
-    return new NextResponse("File missing on disk", { status: 404 });
-  }
-
-  const download = req.nextUrl.searchParams.get("download") === "1";
-  const safeName = attachment.originalName.replace(/[^\w.\- ()]/g, "_");
-  return new NextResponse(new Uint8Array(data), {
-    headers: {
-      "Content-Type": attachment.mimeType,
-      "Content-Length": String(attachment.size),
-      "Content-Disposition": `${download ? "attachment" : "inline"}; filename="${safeName}"`,
-      "X-Content-Type-Options": "nosniff",
-    },
-  });
+  return sendAttachment(attachment, req.nextUrl.searchParams.get("download") === "1");
 }

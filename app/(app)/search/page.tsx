@@ -50,7 +50,7 @@ export default async function SearchPage({
     }),
     db.attachment.findMany({
       where: { originalName: { contains: q, mode: "insensitive" as const } },
-      include: { uploadedBy: true },
+      include: { uploadedBy: true, clientContact: { select: { name: true } } },
       take: 10,
       orderBy: { createdAt: "desc" },
     }),
@@ -126,7 +126,7 @@ export default async function SearchPage({
             {documents.map((d) => (
               <a key={d.id} href={`/api/files/${d.id}`} target="_blank" className="block px-5 py-3 hover:bg-slate-50">
                 <div className="text-sm font-medium text-sky-700">{d.originalName}</div>
-                <div className="text-xs text-slate-500">Uploaded by {d.uploadedBy.name}</div>
+                <div className="text-xs text-slate-500">Uploaded by {d.uploadedBy?.name ?? `${d.clientContact?.name ?? "Client"} (client)`}</div>
               </a>
             ))}
           </div>

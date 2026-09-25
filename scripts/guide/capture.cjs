@@ -2,7 +2,8 @@
  * Captures the screenshots for the public /use guide and records where each
  * highlighted element sits, so the guide can draw numbered arrows onto them.
  *
- * Run against a server backed by the FICTIONAL demo database (seed-demo.ts):
+ * Run against a server backed by the FICTIONAL demo database (seed-demo.ts),
+ * started with ADMIN_TWO_STEP=optional (the demo admin has no authenticator):
  *   GUIDE_URL=http://localhost:3457 node scripts/guide/capture.cjs
  * (Playwright must be resolvable, e.g. NODE_PATH=$(npm root -g).)
  *

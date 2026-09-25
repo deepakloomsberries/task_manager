@@ -20,7 +20,7 @@ export default async function PortalProject({ params }: { params: { id: string }
           dueDate: true,
           completedAt: true,
           clientStatus: true,
-          _count: { select: { attachments: true, clientComments: true } },
+          _count: { select: { attachments: { where: { clientVisible: true } }, clientComments: true } },
         },
         orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
       },

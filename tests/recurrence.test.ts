@@ -21,6 +21,17 @@ describe("advanceDate", () => {
     expect(ymd(advanceDate(d(2026, 3, 31), "MONTHLY"))).toEqual([2026, 4, 30]);
   });
 
+  it("returns to the series' day after a short month (no drift)", () => {
+    const feb = advanceDate(d(2026, 1, 31), "MONTHLY", 31);
+    expect(ymd(feb)).toEqual([2026, 2, 28]);
+    expect(ymd(advanceDate(feb, "MONTHLY", 31))).toEqual([2026, 3, 31]);
+    expect(ymd(advanceDate(d(2026, 3, 30), "MONTHLY", 30))).toEqual([2026, 4, 30]);
+    // Without an anchor the old behaviour (from the date itself) stands.
+    expect(ymd(advanceDate(feb, "MONTHLY"))).toEqual([2026, 3, 28]);
+    // A bad anchor is ignored.
+    expect(ymd(advanceDate(d(2026, 5, 10), "MONTHLY", 99))).toEqual([2026, 6, 10]);
+  });
+
   it("keeps the time of day and doesn't mutate the input", () => {
     const src = d(2026, 5, 10);
     const out = advanceDate(src, "DAILY");

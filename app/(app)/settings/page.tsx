@@ -6,6 +6,9 @@ import { googleSubscribeLink } from "@/lib/ics";
 import { changeOwnPassword, updateOwnProfile, updateNotificationPrefs } from "@/lib/actions/auth";
 import { removeAvatar } from "@/lib/actions/profile";
 import PasswordField from "@/components/PasswordField";
+import TwoStepCard from "@/components/TwoStepCard";
+import { recoveryCodesLeft } from "@/lib/totp";
+import { adminTwoStepRequired } from "@/lib/twoFactor";
 import AvatarUpload from "@/components/AvatarUpload";
 import FlashToast from "@/components/FlashToast";
 import SearchSelect from "@/components/SearchSelect";
@@ -24,7 +27,7 @@ const MESSAGES: Record<string, { text: string; error?: boolean }> = {
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: { ok?: string; error?: string; first?: string };
+  searchParams: { ok?: string; error?: string; first?: string; twostep?: string; recovery?: string };
 }) {
   const user = await requireUser();
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
@@ -42,6 +45,18 @@ export default async function SettingsPage({
       {searchParams.first && user.mustChangePassword && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           For security, please change the password provided by your administrator before continuing.
+        </div>
+      )}
+
+      {searchParams.recovery !== undefined && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          You signed in with a backup code — {Number(searchParams.recovery) || 0} left. If your phone is gone, turn two-step
+          sign-in off and on again below to link your new phone.
+        </div>
+      )}
+      {searchParams.twostep && user.role === "ADMIN" && !user.totpEnabled && !user.mustChangePassword && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          🔐 Administrator accounts need two-step sign-in. Set it up below — it takes a minute with your phone.
         </div>
       )}
 
@@ -147,6 +162,12 @@ export default async function SettingsPage({
           </button>
         </form>
       </div>
+
+      <TwoStepCard
+        enabled={user.totpEnabled}
+        codesLeft={recoveryCodesLeft(user.totpRecovery)}
+        required={user.role === "ADMIN" && adminTwoStepRequired()}
+      />
 
       <div id="calendar" className="card scroll-mt-20 p-6">
         <h2 className="mb-1 font-semibold">📅 Calendar sync</h2>

@@ -21,6 +21,7 @@
 import fs from "fs";
 import path from "path";
 import { PrismaClient } from "@prisma/client";
+import { advanceDate } from "../lib/recurrence";
 
 // Minimal .env loader so the script works standalone under cron.
 const envPath = path.join(process.cwd(), ".env");
@@ -37,13 +38,14 @@ const db = new PrismaClient();
 function dayStart(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
-/** The day AFTER an instance's period — when its window closes. */
-function periodEnd(due: Date, recurrence: string) {
-  const d = dayStart(due);
-  if (recurrence === "WEEKLY") d.setDate(d.getDate() + 7);
-  else if (recurrence === "MONTHLY") d.setMonth(d.getMonth() + 1);
-  else d.setDate(d.getDate() + 1); // DAILY (default)
-  return d;
+/**
+ * The day AFTER an instance's period — when its window closes. Monthly keeps
+ * the series' day of the month (31 Jan → 28 Feb → 31 Mar), never overflowing
+ * into the month after.
+ */
+function periodEnd(due: Date, recurrence: string, anchorDay?: number | null) {
+  const rec = recurrence === "WEEKLY" || recurrence === "MONTHLY" ? recurrence : "DAILY";
+  return advanceDate(dayStart(due), rec, anchorDay);
 }
 /** Same key the app uses so legacy rows without a seriesId can be backfilled. */
 function seriesKeyFor(t: { recurrence: string | null; assigneeId: number | null; title: string }) {
@@ -119,7 +121,9 @@ async function main() {
     // Guard against a runaway loop from bad data.
     for (let guard = 0; guard < 400; guard++) {
       const due = cur.dueDate ?? dayStart(now);
-      const end = periodEnd(due, cur.recurrence!);
+      // Monthly series remember their day (set on the first roll-over).
+      const anchor = cur.recurrence === "MONTHLY" ? (cur.recurrenceDay ?? due.getDate()) : null;
+      const end = periodEnd(due, cur.recurrence!, anchor);
       if (now < end) break; // current period is still open — leave it live.
 
       await close(cur);
@@ -135,6 +139,7 @@ async function main() {
           createdById: cur.createdById,
           recurrence: cur.recurrence,
           seriesId: cur.seriesId,
+          recurrenceDay: anchor,
           estimateHours: cur.estimateHours,
           reviewRequired: cur.reviewRequired,
           startDate: end,

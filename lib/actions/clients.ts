@@ -149,3 +149,23 @@ export async function replyToClient(formData: FormData) {
   revalidatePath(`/tasks/${taskId}`);
   redirect(url("ok=client-reply"));
 }
+
+/** Shows or hides one task file in the client portal. */
+export async function setAttachmentClientVisible(formData: FormData) {
+  const user = await requireUser();
+  const id = Number(formData.get("id"));
+  const visible = formData.get("visible") === "1";
+  const a = await db.attachment.findUnique({ where: { id }, include: { task: true } });
+  if (!a?.task) redirect("/tasks");
+  const task = a.task;
+  const back = String(formData.get("back") ?? "");
+  const url = (q: string) => `/tasks/${task.id}?${q}${back ? `&back=${encodeURIComponent(back)}` : ""}#files`;
+  const allowed = isManagerOrAdmin(user.role) || task.createdById === user.id || task.assigneeId === user.id || a.uploadedById === user.id;
+  if (!allowed) redirect(url("error=forbidden"));
+  // A client's own upload always stays visible to them.
+  if (a.clientContactId) redirect(url(""));
+  await db.attachment.update({ where: { id }, data: { clientVisible: visible } });
+  await logActivity(task.id, user.id, "client", `${visible ? "shared" : "hid"} file "${a.originalName}" ${visible ? "with" : "from"} the client`);
+  revalidatePath(`/tasks/${task.id}`);
+  redirect(url(visible ? "ok=file-shared" : "ok=file-hidden"));
+}

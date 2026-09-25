@@ -49,7 +49,7 @@ export default async function ClientPanel({
       </div>
       <p className="mb-4 text-xs text-slate-500">
         {task.clientVisible
-          ? "The client can see this task's title, description, status, due date and attachments — not the internal discussion, time or subtasks."
+          ? "The client can see this task's title, description, status and due date, and only the files you mark “Client sees” below — never the internal discussion, time or subtasks. They can add files too."
           : "Only your team can see this task. Share it to show its progress and files to the client in their portal."}
       </p>
 

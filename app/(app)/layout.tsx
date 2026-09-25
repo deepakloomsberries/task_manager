@@ -15,6 +15,7 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { logout } from "@/lib/actions/auth";
 import { reapStaleTimers } from "@/lib/timers";
+import { adminTwoStepRequired } from "@/lib/twoFactor";
 import { todayIn } from "@/lib/leave";
 import { companyTimezone } from "@/lib/tz";
 
@@ -26,6 +27,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const pathname = headers().get("x-pathname") ?? "";
   if (user.mustChangePassword && pathname && !pathname.startsWith("/settings")) {
     redirect("/settings?first=1");
+  }
+  // Admins must turn on two-step sign-in before using the app (ADMIN_TWO_STEP=optional turns this off).
+  if (user.role === "ADMIN" && !user.totpEnabled && adminTwoStepRequired() && pathname && !pathname.startsWith("/settings")) {
+    redirect("/settings?twostep=1#two-step");
   }
 
   // Tasks assigned to me that need attention now — overdue or due by end of today.

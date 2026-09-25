@@ -100,6 +100,7 @@ const ENTRIES: Entry[] = [
     related: [
       { id: "notification-settings", title: "Choose your notifications" },
       { id: "calendar-sync", title: "Sync with Google Calendar" },
+      { id: "two-step", title: "Two-step sign-in" },
     ],
   },
   { prefix: "/users", main: { id: "users", title: "Add and manage users" } },

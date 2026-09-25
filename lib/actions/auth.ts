@@ -9,6 +9,8 @@ import { isStrongPassword } from "@/lib/password";
 import { notifyPasswordOtp } from "@/lib/mail";
 import { CHAT_LANGUAGES } from "@/lib/ui";
 import { LIMITS, clientIp, hit, isLimited, reset as clearLimit } from "@/lib/rateLimit";
+import { endTwoStep, pendingTwoStep, startTwoStep } from "@/lib/twoFactor";
+import { recoveryCodesLeft, consumeRecoveryCode, verifyTotp } from "@/lib/totp";
 
 const OTP_TTL_MIN = 15;
 const OTP_MAX_ATTEMPTS = 5; // wrong-code guesses before the code is invalidated
@@ -39,8 +41,49 @@ export async function login(formData: FormData) {
   }
 
   clearLimit(emailKey);
+  // Two-step sign-in: the password was right, now ask for the app's code.
+  if (user.totpEnabled && user.totpSecret) {
+    await startTwoStep(user.id);
+    redirect("/login/verify");
+  }
   await createSession(user.id, user.role);
   redirect(user.mustChangePassword ? "/settings?first=1" : "/dashboard");
+}
+
+/** Step 2 of sign-in for two-step accounts: the authenticator code or a backup code. */
+export async function verifyTwoStep(formData: FormData) {
+  const userId = await pendingTwoStep();
+  if (!userId) redirect("/login?error=expired");
+  const code = String(formData.get("code") ?? "").trim();
+
+  const key = `2fa:user:${userId}`;
+  const ipKey = `2fa:ip:${clientIp(headers())}`;
+  if (isLimited(key, LIMITS.twoStepPerUser) || isLimited(ipKey, LIMITS.loginPerIp)) redirect("/login/verify?error=locked");
+
+  const user = await db.user.findUnique({ where: { id: userId } });
+  if (!user || !user.active || !user.totpEnabled || !user.totpSecret) {
+    endTwoStep();
+    redirect("/login");
+  }
+
+  const step = verifyTotp(user.totpSecret, code, { lastStep: user.totpLastStep });
+  const remaining = step === null ? consumeRecoveryCode(user.totpRecovery, code) : null;
+  if (step === null && remaining === null) {
+    hit(key, LIMITS.twoStepPerUser);
+    hit(ipKey, LIMITS.loginPerIp);
+    redirect("/login/verify?error=1");
+  }
+
+  await db.user.update({
+    where: { id: user.id },
+    data: step !== null ? { totpLastStep: step } : { totpRecovery: remaining },
+  });
+  clearLimit(key);
+  endTwoStep();
+  await createSession(user.id, user.role);
+  if (user.mustChangePassword) redirect("/settings?first=1");
+  // Signed in with a backup code — show how many are left.
+  redirect(step === null ? `/settings?recovery=${recoveryCodesLeft(remaining)}#two-step` : "/dashboard");
 }
 
 export async function logout() {
