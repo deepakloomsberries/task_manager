@@ -1,4 +1,9 @@
+import { PRESENCE, presenceLabel, resolvePresence } from "@/lib/presence";
+import { usersOnLeave } from "@/lib/leaveData";
+import { todayIn } from "@/lib/leave";
+import { companyTimezone } from "@/lib/tz";
 import Link from "next/link";
+import { taskHref } from "@/lib/backLink";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
@@ -75,6 +80,8 @@ export default async function PersonProfilePage({
         db.department.findMany({ include: { company: true }, orderBy: { name: "asc" } }),
       ])
     : [[], []];
+  const onLeave = (await usersOnLeave(todayIn(companyTimezone(person.company)))).has(person.id);
+  const status = resolvePresence({ ...person, onLeave });
   const deletable = isAdmin && person.id !== viewer.id && !person.lastSeenAt && !userHasData(person._count);
   const msgKey = searchParams.error ?? ["updated", "reset"].find((k) => searchParams[k]);
   const profileMsg = msgKey ? PROFILE_MESSAGES[msgKey] : null;
@@ -181,7 +188,7 @@ export default async function PersonProfilePage({
       {/* Header */}
       <div className="card p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-          <UserAvatar user={person} size={72} presence={person.lastSeenAt} />
+          <UserAvatar user={person} size={72} presence={{ ...person, onLeave }} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-bold">{person.name}</h1>
@@ -195,7 +202,12 @@ export default async function PersonProfilePage({
               {person.company.name}
               {person.department ? ` · ${person.department.name}` : ""}
             </div>
-            <div className="mt-1 text-xs text-slate-400">{lastSeenLabel(person.lastSeenAt)}</div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs">
+              {status.key !== "OFFLINE" && (
+                <span className={`font-medium ${PRESENCE[status.key].text}`}>{presenceLabel({ ...person, onLeave })}</span>
+              )}
+              <span className="text-slate-400">{lastSeenLabel(person.presence === "OFFLINE" && status.key === "OFFLINE" ? null : person.lastSeenAt)}</span>
+            </div>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
             <a href={`mailto:${person.email}`} className="btn-secondary text-sm">
@@ -417,7 +429,7 @@ export default async function PersonProfilePage({
               return (
                 <Link
                   key={t.id}
-                  href={`/tasks/${t.id}`}
+                  href={taskHref(t.id, `/people/${person.id}`)}
                   className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/50"
                 >
                   <div className="min-w-0 flex-1">
@@ -458,7 +470,7 @@ export default async function PersonProfilePage({
             {doneRecent.map((t) => (
               <Link
                 key={t.id}
-                href={`/tasks/${t.id}`}
+                href={taskHref(t.id, `/people/${person.id}`)}
                 className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/50"
               >
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-500 text-xs text-white">

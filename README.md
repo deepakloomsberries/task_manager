@@ -51,13 +51,13 @@ companies (India, UAE, Saudi Arabia). Fully self-hosted.
 
 ## Tech stack
 
-Next.js 14 (App Router, server actions) · TypeScript · Tailwind CSS · Prisma · SQLite · JWT cookie auth (bcrypt-hashed passwords). No external services required.
+Next.js 14 (App Router, server actions) · TypeScript · Tailwind CSS · Prisma · PostgreSQL · JWT cookie auth (bcrypt-hashed passwords). No external services required.
 
 ## Getting started
 
 ```bash
 npm install
-npm run setup     # generates Prisma client, creates the SQLite DB, seeds data
+npm run setup     # generates Prisma client, creates the tables in Postgres, seeds data
 npm run dev       # development — http://localhost:3000
 ```
 
@@ -66,6 +66,14 @@ For production:
 ```bash
 npm run build
 npm start
+```
+
+Tests (Vitest) need a separate Postgres database whose name contains "test" —
+they add and delete rows in it:
+
+```bash
+createdb task_manager_test
+TEST_DATABASE_URL="postgresql://postgres@localhost:5432/task_manager_test" npm test
 ```
 
 ### Seeded data
@@ -80,7 +88,7 @@ Override the seed admin with `ADMIN_EMAIL` / `ADMIN_PASSWORD` env vars before ru
 
 | Variable       | Purpose                                              |
 | -------------- | ---------------------------------------------------- |
-| `DATABASE_URL` | SQLite file location, e.g. `file:./dev.db`           |
+| `DATABASE_URL` | Postgres connection, e.g. `postgresql://taskapp:pw@localhost:5432/task_manager` |
 | `AUTH_SECRET`  | Secret for signing session cookies — **set a long random value in production** |
 | `APP_URL`      | Public URL used in email links, e.g. `https://task.donetella.com` |
 | `UPLOAD_DIR`   | Folder on the server where attachments are stored (default `./uploads`) |
@@ -105,7 +113,7 @@ Apache reverse proxy with HTTPS. In outline:
 3. `npm install && npm run setup && npm run build`.
 4. Run as a systemd service; proxy through an Apache virtual host with
    `ProxyPreserveHost On` and obtain a certificate with `certbot --apache`.
-5. Back up the SQLite database file and the `UPLOAD_DIR` folder — together they hold
+5. Back up the Postgres database (`npm run backup`) and the `UPLOAD_DIR` folder — together they hold
    all application data.
 
 **[DEPLOYMENT.md](./DEPLOYMENT.md) contains the complete runbook** with the exact

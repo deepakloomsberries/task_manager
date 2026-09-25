@@ -17,6 +17,7 @@ const MAIN_NAV: NavItem[] = [
   { href: "/messages", label: "Messages", icon: "✉" },
   { href: "/documents", label: "Documents", icon: "▣" },
   { href: "/timesheet", label: "Time sheet", icon: "◷" },
+  { href: "/leave", label: "Leave", icon: "✈" },
   { href: "/notes", label: "Notes", icon: "✎" },
   { href: "/reports", label: "Reports", icon: "▙" },
 ];
@@ -97,6 +98,11 @@ export default function SidebarNav({
             active={isActive("/templates")}
             onNavigate={onNavigate}
           />
+          <NavLink
+            item={{ href: "/clients", label: "Clients", icon: "✧" }}
+            active={isActive("/clients")}
+            onNavigate={onNavigate}
+          />
         </>
       )}
       {isAdmin && (
@@ -122,6 +128,18 @@ export default function SidebarNav({
         active={isActive("/settings")}
         onNavigate={onNavigate}
       />
+      {/* The guide lives outside the app shell, so open it in a new tab and keep the user's place. */}
+      <a
+        href="/use"
+        target="_blank"
+        rel="noopener"
+        onClick={onNavigate}
+        className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-700"
+      >
+        <span className="w-5 text-center text-base leading-none">?</span>
+        <span className="flex-1">Help &amp; guide</span>
+        <span aria-hidden className="text-xs text-slate-400">↗</span>
+      </a>
     </nav>
   );
 }

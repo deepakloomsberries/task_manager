@@ -52,6 +52,20 @@ function seriesKeyFor(t: { recurrence: string | null; assigneeId: number | null;
   return `${t.recurrence}:${t.assigneeId ?? 0}:${norm}`;
 }
 
+/** The assignee had the day off (office holiday or approved leave). */
+async function excused(assigneeId: number | null, due: Date | null): Promise<boolean> {
+  if (!assigneeId || !due) return false;
+  const day = new Date(
+    `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, "0")}-${String(due.getDate()).padStart(2, "0")}T00:00:00Z`
+  );
+  const user = await db.user.findUnique({ where: { id: assigneeId }, select: { companyId: true } });
+  const [leave, holiday] = await Promise.all([
+    db.leave.count({ where: { userId: assigneeId, status: "APPROVED", startDate: { lte: day }, endDate: { gte: day } } }),
+    db.holiday.count({ where: { date: day, OR: [{ companyId: null }, { companyId: user?.companyId ?? -1 }] } }),
+  ]);
+  return leave + holiday > 0;
+}
+
 async function main() {
   const now = new Date();
 
@@ -85,8 +99,10 @@ async function main() {
     group.sort((a, b) => (b.dueDate?.getTime() ?? 0) - (a.dueDate?.getTime() ?? 0));
     const [head, ...dups] = group;
 
-    const close = async (t: { id: number; completedAt: Date | null; dueDate: Date | null }) => {
-      const wasMissed = !t.completedAt;
+    const close = async (t: { id: number; completedAt: Date | null; dueDate: Date | null; assigneeId: number | null }) => {
+      // Not done — but not "missed" either if that day was a holiday for the
+      // assignee's office or they were on approved leave.
+      const wasMissed = !t.completedAt && !(await excused(t.assigneeId, t.dueDate));
       await db.task.update({
         where: { id: t.id },
         data: { deletedAt: now, missedAt: wasMissed ? (t.dueDate ?? now) : null },

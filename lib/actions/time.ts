@@ -7,15 +7,9 @@ import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import { pushNotification, logActivity } from "@/lib/notify";
 import { parseHours } from "@/lib/ui";
 import { weekStartOf } from "@/lib/timerange";
-
-/** Whether a user's week has been submitted/approved and is therefore locked. */
-async function weekLocked(userId: number, date: Date | string) {
-  const weekStart = weekStartOf(date);
-  const sub = await db.timesheetSubmission.findUnique({
-    where: { userId_weekStart: { userId, weekStart } },
-  });
-  return !!sub && (sub.status === "SUBMITTED" || sub.status === "APPROVED");
-}
+import { backdatedStart, commitTimer } from "@/lib/timers";
+import { auditTimeEntry } from "@/lib/timeAudit";
+import { weekLocked } from "@/lib/timesheetLock";
 
 /**
  * Resolves the hours and optional precise window from the form. A person can
@@ -55,9 +49,10 @@ export async function createTimeEntry(formData: FormData) {
     redirect(`${backFrom(formData)}${backFrom(formData).includes("?") ? "&" : "?"}error=locked`);
   }
 
-  await db.timeEntry.create({
+  const created = await db.timeEntry.create({
     data: { userId: user.id, date: new Date(date), hours, startedAt, endedAt, taskId, projectId, note },
   });
+  await auditTimeEntry("create", user.id, null, created);
   revalidatePath("/timesheet");
   redirect(backFrom(formData));
 }
@@ -91,10 +86,11 @@ export async function updateTimeEntry(formData: FormData) {
     redirect(`${back}${sep}error=locked`);
   }
 
-  await db.timeEntry.update({
+  const updated = await db.timeEntry.update({
     where: { id },
     data: { date: new Date(date), hours, startedAt, endedAt, taskId, projectId, note },
   });
+  await auditTimeEntry("update", user.id, existing, updated);
   revalidatePath("/timesheet");
   redirect(back);
 }
@@ -107,35 +103,10 @@ export async function deleteTimeEntry(formData: FormData) {
   if (entry && (await weekLocked(user.id, entry.date))) {
     redirect(`${back}${back.includes("?") ? "&" : "?"}error=locked`);
   }
-  await db.timeEntry.deleteMany({ where: { id, userId: user.id } });
+  const { count } = await db.timeEntry.deleteMany({ where: { id, userId: user.id } });
+  if (entry && count > 0) await auditTimeEntry("delete", user.id, entry, null);
   revalidatePath("/timesheet");
   redirect(back);
-}
-
-/** Converts a running timer into a logged time entry. Returns the hours logged. */
-async function commitTimer(timer: { id: number; userId: number; taskId: number; note: string | null; startedAt: Date }) {
-  const elapsedHours = (Date.now() - new Date(timer.startedAt).getTime()) / 3600000;
-  // Round to the nearest minute (1/60h) and never log a zero-length entry.
-  const hours = Math.max(0.02, Math.round(elapsedHours * 60) / 60);
-  const task = await db.task.findUnique({ where: { id: timer.taskId }, select: { projectId: true } });
-
-  await db.$transaction([
-    db.timeEntry.create({
-      data: {
-        userId: timer.userId,
-        taskId: timer.taskId,
-        projectId: task?.projectId ?? null,
-        date: new Date(timer.startedAt),
-        hours,
-        startedAt: new Date(timer.startedAt),
-        endedAt: new Date(),
-        note: timer.note,
-        source: "timer",
-      },
-    }),
-    db.taskTimer.delete({ where: { id: timer.id } }),
-  ]);
-  return hours;
 }
 
 /**
@@ -156,13 +127,14 @@ export async function commitTimersForTask(taskId: number): Promise<number> {
  * Harvest. No-ops if they're already timing this task. Shared by the Start-timer
  * button and the auto-start when a task is moved to In Progress.
  */
-export async function startTimerFor(userId: number, taskId: number) {
+export async function startTimerFor(userId: number, taskId: number, minutesAgo = 0) {
   const existing = await db.taskTimer.findUnique({ where: { userId } });
-  if (existing) {
-    if (existing.taskId === taskId) return; // already timing this task
-    await commitTimer(existing);
-  }
-  await db.taskTimer.create({ data: { userId, taskId } });
+  if (existing?.taskId === taskId) return; // already timing this task
+  // "I forgot to start it" — count from when they really began. Whatever they
+  // were timing before is banked up to that same moment.
+  const startedAt = backdatedStart(minutesAgo, new Date(), existing?.startedAt);
+  if (existing) await commitTimer(existing, startedAt);
+  await db.taskTimer.create({ data: { userId, taskId, startedAt, lastPingAt: new Date() } });
 }
 
 /**
@@ -181,7 +153,7 @@ export async function startTaskTimer(formData: FormData) {
 
   const existing = await db.taskTimer.findUnique({ where: { userId: user.id } });
   if (existing && existing.taskId === taskId) redirect(back); // already timing this task
-  await startTimerFor(user.id, taskId);
+  await startTimerFor(user.id, taskId, Number(formData.get("minutesAgo") ?? 0));
 
   // Starting the clock means work has begun, so nudge a fresh task out of the
   // backlog into "In Progress" automatically (only from To-Do — never override

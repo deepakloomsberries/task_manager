@@ -4,14 +4,19 @@ import { redirect } from "next/navigation";
 import { SidebarProvider, DesktopSidebar, SidebarToggle } from "@/components/SidebarState";
 import MobileSidebar from "@/components/MobileSidebar";
 import ThemeToggle from "@/components/ThemeToggle";
-import UserAvatar from "@/components/UserAvatar";
+import StatusMenu from "@/components/StatusMenu";
 import Heartbeat from "@/components/Heartbeat";
+import HelpMenu from "@/components/HelpMenu";
+import LongTimerPrompt from "@/components/LongTimerPrompt";
 import RunningTimerPill from "@/components/RunningTimerPill";
 import PushSetup from "@/components/PushSetup";
 import CommandPalette, { CommandButton } from "@/components/CommandPalette";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { logout } from "@/lib/actions/auth";
+import { reapStaleTimers } from "@/lib/timers";
+import { todayIn } from "@/lib/leave";
+import { companyTimezone } from "@/lib/tz";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
@@ -27,7 +32,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const endOfToday = new Date();
   endOfToday.setHours(23, 59, 59, 999);
 
-  const [unread, unreadMessages, activeTimer, myTasksDue, paletteUsers, paletteProjects] =
+  // Stop timers left running on a closed browser / shut-down laptop.
+  await reapStaleTimers();
+
+  const todayDate = new Date(`${todayIn(companyTimezone(user.company))}T00:00:00Z`);
+  const isApprover = user.role === "ADMIN" || user.role === "MANAGER";
+  const [unread, unreadMessages, activeTimer, myTasksDue, pendingLeave, onLeaveToday] =
     await Promise.all([
       db.notification.count({ where: { userId: user.id, read: false } }),
       db.directMessage.count({ where: { recipientId: user.id, read: false } }),
@@ -43,18 +53,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           OR: [{ assigneeId: user.id }, { collaborators: { some: { userId: user.id } } }],
         },
       }),
-      db.user.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-      db.project.findMany({
-        where: { status: { in: ["ACTIVE", "ON_HOLD"] } },
-        orderBy: { name: "asc" },
-        select: { id: true, name: true },
-      }),
+      isApprover ? db.leave.count({ where: { status: "PENDING", userId: { not: user.id } } }) : Promise.resolve(0),
+      db.leave
+        .count({ where: { userId: user.id, status: "APPROVED", startDate: { lte: todayDate }, endDate: { gte: todayDate } } })
+        .then((n) => n > 0),
     ]);
 
   const navBadges: Record<string, number> = {
     "/messages": unreadMessages,
     "/my-tasks": myTasksDue,
     "/notifications": unread,
+    "/leave": pendingLeave,
   };
 
   const isAdmin = user.role === "ADMIN";
@@ -66,7 +75,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="flex h-screen">
       <Heartbeat />
       <PushSetup />
-      <CommandPalette users={paletteUsers} projects={paletteProjects} />
+      <CommandPalette />
       <DesktopSidebar isAdmin={isAdmin} isManager={isManager} badges={navBadges} />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 print:hidden sm:gap-4 sm:px-6 dark:border-slate-700 dark:bg-slate-800">
@@ -82,6 +91,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             />
           )}
           <ThemeToggle />
+          <HelpMenu />
           <Link
             href="/notifications"
             className="relative rounded-lg p-2 text-xl leading-none text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
@@ -106,15 +116,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </span>
             )}
           </Link>
-          <Link href="/settings" className="flex items-center gap-3" title="Profile settings">
-            <UserAvatar user={user} size={36} />
-            <div className="hidden leading-tight sm:block">
-              <div className="text-sm font-medium">{user.name}</div>
-              <div className="text-xs text-slate-500 dark:text-slate-400">
-                {user.company.code} · {user.role.toLowerCase()}
-              </div>
-            </div>
-          </Link>
+          <StatusMenu
+            user={{ id: user.id, name: user.name, avatarPath: user.avatarPath }}
+            subtitle={`${user.company.code} · ${user.role.toLowerCase()}`}
+            presence={{
+              presence: user.presence,
+              presenceText: user.presenceText,
+              presenceUntil: user.presenceUntil?.toISOString() ?? null,
+              onLeave: onLeaveToday,
+            }}
+          />
           <form action={logout}>
             <button type="submit" className="btn-secondary !px-2.5 !py-1.5 text-xs sm:!px-3">
               <span className="hidden sm:inline">Sign out</span>
@@ -123,6 +134,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </form>
         </header>
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
+        {activeTimer && (
+          <LongTimerPrompt
+            taskId={activeTimer.task.id}
+            title={activeTimer.task.title}
+            startedAt={activeTimer.startedAt.toISOString()}
+          />
+        )}
       </div>
     </div>
     </SidebarProvider>

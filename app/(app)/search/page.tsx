@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { taskHref } from "@/lib/backLink";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { TASK_STATUSES, lookup, fmtDate } from "@/lib/ui";
+import { parseChecklist } from "@/lib/checklist";
 
 export const dynamic = "force-dynamic";
 
@@ -32,8 +34,8 @@ export default async function SearchPage({
       where: {
         deletedAt: null,
         OR: [
-          { title: { contains: q } },
-          { description: { contains: q } },
+          { title: { contains: q, mode: "insensitive" as const } },
+          { description: { contains: q, mode: "insensitive" as const } },
           ...(idMatch ? [{ id: Number(idMatch[1]) }] : []),
         ],
       },
@@ -42,12 +44,12 @@ export default async function SearchPage({
       orderBy: { updatedAt: "desc" },
     }),
     db.project.findMany({
-      where: { OR: [{ name: { contains: q } }, { description: { contains: q } }] },
+      where: { OR: [{ name: { contains: q, mode: "insensitive" as const } }, { description: { contains: q, mode: "insensitive" as const } }] },
       include: { company: true },
       take: 10,
     }),
     db.attachment.findMany({
-      where: { originalName: { contains: q } },
+      where: { originalName: { contains: q, mode: "insensitive" as const } },
       include: { uploadedBy: true },
       take: 10,
       orderBy: { createdAt: "desc" },
@@ -56,12 +58,12 @@ export default async function SearchPage({
       where: {
         userId: user.id,
         deletedAt: null,
-        OR: [{ title: { contains: q } }, { body: { contains: q } }],
+        OR: [{ title: { contains: q, mode: "insensitive" as const } }, { body: { contains: q, mode: "insensitive" as const } }],
       },
       take: 10,
     }),
     db.user.findMany({
-      where: { active: true, OR: [{ name: { contains: q } }, { email: { contains: q } }] },
+      where: { active: true, OR: [{ name: { contains: q, mode: "insensitive" as const } }, { email: { contains: q, mode: "insensitive" as const } }] },
       include: { company: true, department: true },
       take: 10,
     }),
@@ -85,7 +87,7 @@ export default async function SearchPage({
             {tasks.map((t) => {
               const status = lookup(TASK_STATUSES, t.status);
               return (
-                <Link key={t.id} href={`/tasks/${t.id}`} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50">
+                <Link key={t.id} href={taskHref(t.id, `/search?q=${encodeURIComponent(q)}`)} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50">
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium">
                       <span className="mr-1.5 font-mono text-[10px] text-slate-400">TM-{t.id}</span>
@@ -138,7 +140,13 @@ export default async function SearchPage({
             {notes.map((n) => (
               <Link key={n.id} href="/notes" className="block px-5 py-3 hover:bg-slate-50">
                 <div className="text-sm font-medium">{n.title}</div>
-                <div className="truncate text-xs text-slate-500">{n.body}</div>
+                <div className="truncate text-xs text-slate-500">
+                  {n.type === "checklist"
+                    ? parseChecklist(n.body)
+                        .map((it) => `${it.done ? "✓" : "☐"} ${it.text}`)
+                        .join("  ·  ")
+                    : n.body}
+                </div>
               </Link>
             ))}
           </div>

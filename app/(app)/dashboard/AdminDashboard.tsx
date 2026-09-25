@@ -1,4 +1,7 @@
+import { PRESENCE, PRESENCE_SELECT, resolvePresence } from "@/lib/presence";
 import Link from "next/link";
+import GettingStarted from "@/components/GettingStarted";
+import WhosOff from "@/components/WhosOff";
 import ReviewTasksBanner from "@/components/ReviewTasksBanner";
 import { db } from "@/lib/db";
 import UserAvatar from "@/components/UserAvatar";
@@ -6,7 +9,7 @@ import LiveClock from "@/components/LiveClock";
 import { LiveWorkingCard } from "@/components/ActiveTimers";
 import OfficeClocks from "@/components/OfficeClocks";
 import { companyTimezone, zonedStartOfToday, zonedHour, zonedDateLine } from "@/lib/tz";
-import { fmtHours, fmtRelative, ONLINE_WINDOW_MS } from "@/lib/ui";
+import { fmtHours, fmtRelative } from "@/lib/ui";
 
 const DAY = 86400000;
 const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
@@ -27,6 +30,10 @@ type AdminUser = {
   id: number;
   name: string;
   role: string;
+  createdAt: Date;
+  avatarPath: string | null;
+  preferredLanguage: string | null;
+  companyId: number;
   company: { code: string };
 };
 
@@ -49,7 +56,6 @@ export default async function AdminDashboard({ user }: { user: AdminUser }) {
   ).getUTCDay();
   const weekStart = new Date(todayStart.getTime() - dow * DAY);
   const weekEnd = new Date(weekStart.getTime() + 7 * DAY);
-  const onlineSince = new Date(Date.now() - ONLINE_WINDOW_MS);
 
   const [
     teamOpen,
@@ -83,7 +89,7 @@ export default async function AdminDashboard({ user }: { user: AdminUser }) {
     db.user.findMany({
       where: { active: true },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, jobTitle: true, avatarPath: true, lastSeenAt: true },
+      select: { id: true, name: true, jobTitle: true, avatarPath: true, ...PRESENCE_SELECT },
     }),
     db.project.findMany({ where: { status: "ACTIVE" }, orderBy: { createdAt: "desc" }, take: 5, include: { company: true } }),
     db.timeEntry.findMany({ where: { date: { gte: weekStart, lt: weekEnd } }, select: { date: true, hours: true } }),
@@ -132,9 +138,9 @@ export default async function AdminDashboard({ user }: { user: AdminUser }) {
     .slice(0, 4);
 
   const onlineUsers = people
-    .filter((p) => p.lastSeenAt && new Date(p.lastSeenAt) >= onlineSince)
-    .sort((a, b) => new Date(b.lastSeenAt as Date).getTime() - new Date(a.lastSeenAt as Date).getTime())
-    .slice(0, 12);
+    .filter((p) => resolvePresence(p).key !== "OFFLINE")
+    .sort((a, b) => new Date(b.lastSeenAt ?? 0).getTime() - new Date(a.lastSeenAt ?? 0).getTime())
+.slice(0, 12);
 
   // Project progress.
   const projTasks = activeProjects.length
@@ -214,6 +220,8 @@ export default async function AdminDashboard({ user }: { user: AdminUser }) {
           ))}
         </div>
       </div>
+
+      <GettingStarted user={user} />
 
       <div className="grid min-w-0 gap-6 lg:grid-cols-3">
         {/* Left */}
@@ -300,6 +308,7 @@ export default async function AdminDashboard({ user }: { user: AdminUser }) {
 
         {/* Right */}
         <div className="space-y-6">
+          <WhosOff user={user} />
           {/* This week — team */}
           <div className="card p-5">
             <div className="flex items-baseline justify-between">
@@ -337,7 +346,7 @@ export default async function AdminDashboard({ user }: { user: AdminUser }) {
               {watch.length === 0 && <p className="px-5 py-6 text-center text-sm text-slate-400">No one has overdue work. 👏</p>}
               {watch.map((r) => (
                 <Link key={r.user.id} href={`/tasks?assignee=${r.user.id}&open=1`} className="flex items-center gap-3 px-5 py-2.5 hover:bg-slate-50">
-                  <UserAvatar user={r.user} size={30} presence={r.user.lastSeenAt} />
+                  <UserAvatar user={r.user} size={30} presence={r.user} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium">{r.user.name}</div>
                     <div className="text-xs text-slate-500">{r.open} open{(load.get(r.user.id)?.estimate ?? 0) > WEEKLY_CAPACITY ? " · over capacity" : ""}</div>
@@ -368,8 +377,11 @@ export default async function AdminDashboard({ user }: { user: AdminUser }) {
                 <div className="flex flex-wrap gap-2">
                   {onlineUsers.map((u) => (
                     <Link key={u.id} href={`/messages/${u.id}`} title={`Message ${u.name}`} className="flex items-center gap-2 rounded-full border border-slate-200 py-1 pl-1 pr-3 hover:bg-slate-50">
-                      <UserAvatar user={u} size={28} presence={u.lastSeenAt} />
+                      <UserAvatar user={u} size={28} presence={u} />
                       <span className="text-sm">{u.name.split(" ")[0]}</span>
+                      {resolvePresence(u).key !== "AVAILABLE" && (
+                        <span className={`text-xs ${PRESENCE[resolvePresence(u).key].text}`}>· {PRESENCE[resolvePresence(u).key].label}</span>
+                      )}
                     </Link>
                   ))}
                 </div>

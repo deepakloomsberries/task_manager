@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { taskHref } from "@/lib/backLink";
 import { useEffect, useState, useTransition } from "react";
 import { rescheduleTask } from "@/lib/actions/tasks";
 import DatePicker from "@/components/DatePicker";
@@ -11,6 +12,9 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 const pad = (n: number) => String(n).padStart(2, "0");
+
+/** A holiday or someone's leave, shown as a small label on a day. */
+export type CalMark = { day: number; label: string; kind: "holiday" | "leave"; title?: string };
 
 export type CalTask = {
   id: number;
@@ -32,7 +36,12 @@ export default function CalendarGrid({
   month,
   todayDay,
   tasks,
+  back,
+  marks = [],
 }: {
+  marks?: CalMark[];
+  /** The calendar URL (with its filters) that task links return to. */
+  back?: string;
   year: number;
   month: number; // 0-based
   todayDay: number | null;
@@ -84,7 +93,11 @@ export default function CalendarGrid({
   };
 
   return (
-    <div className={`card overflow-x-auto ${isPending ? "opacity-90" : ""}`}>
+    <>
+      <p className="mb-2 text-xs text-slate-500 dark:text-slate-400 lg:hidden">
+        ← Swipe sideways to see the rest of the week →
+      </p>
+      <div className={`card overflow-x-auto ${isPending ? "opacity-90" : ""}`}>
       <div className="grid min-w-[840px] grid-cols-7 border-b border-slate-200 bg-slate-50">
         {WEEKDAYS.map((d) => (
           <div key={d} className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -117,11 +130,27 @@ export default function CalendarGrid({
                 >
                   {day}
                 </div>
+                {marks
+                  .filter((m) => m.day === day)
+                  .slice(0, 3)
+                  .map((m, k) => (
+                    <div
+                      key={k}
+                      title={m.title ?? m.label}
+                      className={`mb-1 truncate rounded px-1.5 py-0.5 text-[10px] ${
+                        m.kind === "holiday"
+                          ? "bg-amber-50 font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+                          : "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                      }`}
+                    >
+                      {m.kind === "holiday" ? "🎉" : "🌴"} {m.label}
+                    </div>
+                  ))}
                 <div className="space-y-1">
                   {(byDay.get(day) ?? []).slice(0, 4).map((t) => (
                     <Link
                       key={t.id}
-                      href={`/tasks/${t.id}`}
+                      href={back ? taskHref(t.id, back) : `/tasks/${t.id}`}
                       draggable={t.editable}
                       onDragStart={(e) => t.editable && e.dataTransfer.setData("text/task-id", String(t.id))}
                       title={`${t.title}${t.assigneeName ? ` — ${t.assigneeName}` : ""}${t.editable ? " · drag to reschedule" : ""}`}
@@ -188,7 +217,7 @@ export default function CalendarGrid({
                 >
                   <span className={`h-2 w-2 shrink-0 rounded-full ${t.badge}`} />
                   <Link
-                    href={`/tasks/${t.id}`}
+                    href={back ? taskHref(t.id, back) : `/tasks/${t.id}`}
                     onClick={() => setOpenDay(null)}
                     title={t.assigneeName ? `${t.title} — ${t.assigneeName}` : t.title}
                     className={`flex-1 truncate ${t.status === "DONE" ? "line-through" : ""}`}
@@ -212,6 +241,7 @@ export default function CalendarGrid({
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

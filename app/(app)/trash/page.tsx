@@ -21,13 +21,13 @@ export default async function TrashPage({
   const taskSearch = q
     ? {
         OR: [
-          { title: { contains: q } },
+          { title: { contains: q, mode: "insensitive" as const } },
           ...(idMatch ? [{ id: Number(idMatch[1]) }] : []),
         ],
       }
     : {};
   const noteSearch = q
-    ? { OR: [{ title: { contains: q } }, { body: { contains: q } }] }
+    ? { OR: [{ title: { contains: q, mode: "insensitive" as const } }, { body: { contains: q, mode: "insensitive" as const } }] }
     : {};
 
   const [tasks, notes] = await Promise.all([

@@ -117,7 +117,7 @@ export default function MessagesSidebar({ conversations, users }: { conversation
                     : "hover:bg-slate-50 dark:hover:bg-slate-700/40"
                 }`}
               >
-                <UserAvatar user={c.partner} size={44} presence={c.partner.lastSeenAt} />
+                <UserAvatar user={c.partner} size={44} presence={c.partner} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-sm font-medium">{c.partner.name}</span>

@@ -1,0 +1,659 @@
+// Frozen copy of the schema as it was on SQLite (before the move to Postgres).
+// Used ONLY by scripts/migrate-sqlite-to-postgres.ts to read the old dev.db —
+// never edit it to track new models; the live schema is ../schema.prisma.
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../node_modules/.prisma/legacy-sqlite"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("SQLITE_URL")
+}
+
+model Company {
+  id          Int          @id @default(autoincrement())
+  name        String       @unique
+  code        String       @unique // e.g. IND, UAE, KSA
+  users       User[]
+  departments Department[]
+  projects    Project[]
+}
+
+model Department {
+  id        Int     @id @default(autoincrement())
+  name      String
+  company   Company @relation(fields: [companyId], references: [id])
+  companyId Int
+  users     User[]
+
+  @@unique([name, companyId])
+}
+
+model User {
+  id                 Int         @id @default(autoincrement())
+  name               String
+  email              String      @unique
+  passwordHash       String
+  role               String      @default("EMPLOYEE") // ADMIN | MANAGER | EMPLOYEE
+  active             Boolean     @default(true)
+  mustChangePassword Boolean     @default(true)
+  emailNotifications Boolean     @default(true)
+  avatarPath         String?
+  jobTitle           String?
+  // ISO code (e.g. "en", "ar") — when set, messages sent TO this person are
+  // auto-translated into it in chat. Null means "don't translate for them".
+  preferredLanguage  String?
+  lastSeenAt         DateTime?
+  requiresApproval   Boolean     @default(false) // can't self-complete; owner approves from Review
+  company            Company     @relation(fields: [companyId], references: [id])
+  companyId          Int
+  department         Department? @relation(fields: [departmentId], references: [id])
+  departmentId       Int?
+  createdAt          DateTime    @default(now())
+
+  tasksAssigned        Task[]                @relation("assignee")
+  tasksCreated         Task[]                @relation("creator")
+  taskCollaborations   TaskCollaborator[]
+  comments             TaskComment[]
+  notes                Note[]
+  timeEntries          TimeEntry[]
+  projectMembers       ProjectMember[]
+  projectsCreated      Project[]
+  attachments          Attachment[]
+  discussionMessages   DiscussionMessage[]
+  notifications        Notification[]
+  taskActivities       TaskActivity[]
+  noteShares           NoteShare[]
+  messagesSent         DirectMessage[]       @relation("dmSender")
+  messagesReceived     DirectMessage[]       @relation("dmRecipient")
+  activeTimer          TaskTimer?
+  pushSubscriptions    PushSubscription[]
+  timesheetSubmissions TimesheetSubmission[] @relation("tsSubmitter")
+  timesheetReviews     TimesheetSubmission[] @relation("tsReviewer")
+  passwordReset        PasswordReset?
+  savedViews           SavedView[]
+  taskWatches          TaskWatcher[]
+  billingSnapshots     BillingSnapshot[]
+  messageReactions     MessageReaction[]
+  messageStars         MessageStar[]
+  groupsCreated        Group[]               @relation("groupCreator")
+  groupMemberships     GroupMember[]
+  groupMessagesSent    GroupMessage[]        @relation("groupMessageSender")
+  groupMessageReactions GroupMessageReaction[]
+  groupMessageStars    GroupMessageStar[]
+}
+
+/**
+ * A pending self-service password reset. Holds a hashed one-time code (OTP)
+ * that the user receives by email and enters to set a new password. One active
+ * reset per user; it's replaced on re-request and deleted once used/expired.
+ */
+model PasswordReset {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int      @unique
+  codeHash  String
+  expiresAt DateTime
+  attempts  Int      @default(0) // wrong-code guesses on the current code
+  sends     Int      @default(1) // codes emailed in the current window (resend cap)
+  createdAt DateTime @default(now())
+}
+
+model Project {
+  id          Int             @id @default(autoincrement())
+  name        String
+  description String?
+  status      String          @default("ACTIVE") // ACTIVE | ON_HOLD | COMPLETED | ARCHIVED
+  company     Company         @relation(fields: [companyId], references: [id])
+  companyId   Int
+  createdBy   User            @relation(fields: [createdById], references: [id])
+  createdById Int
+  createdAt   DateTime        @default(now())
+  tasks       Task[]
+  members     ProjectMember[]
+  timeEntries TimeEntry[]
+}
+
+model ProjectMember {
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId Int
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+
+  @@id([projectId, userId])
+}
+
+model Task {
+  id             Int           @id @default(autoincrement())
+  title          String
+  description    String?
+  status         String        @default("TODO") // TODO | IN_PROGRESS | REVIEW | DONE
+  priority       String        @default("MEDIUM") // LOW | MEDIUM | HIGH | URGENT
+  startDate      DateTime?
+  dueDate        DateTime?
+  recurrence     String? // null | DAILY | WEEKLY | MONTHLY — one instance per period
+  seriesId       String? // groups all daily/weekly/monthly occurrences of one recurring job
+  missedAt       DateTime? // set when a recurring occurrence rolled over without being done
+  estimateHours  Float? // effort estimate in hours, powers the workload view
+  project        Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId      Int?
+  assignee       User?         @relation("assignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  assigneeId     Int?
+  createdBy      User          @relation("creator", fields: [createdById], references: [id])
+  createdById    Int
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  completedAt    DateTime?
+  deletedAt      DateTime?
+  acknowledgedAt DateTime? // when the assignee first opened/viewed the task
+  reviewRequired Boolean       @default(false) // assignee must send to Review, not self-complete
+  comments       TaskComment[]
+  timeEntries    TimeEntry[]
+  attachments    Attachment[]
+  timers         TaskTimer[]
+
+  parent        Task?              @relation("subtasks", fields: [parentId], references: [id], onDelete: Cascade)
+  parentId      Int?
+  subtasks      Task[]             @relation("subtasks")
+  tags          TaskTag[]
+  activities    TaskActivity[]
+  collaborators TaskCollaborator[]
+
+  // Dependency edges: `blockedBy` are tasks that must finish before this one;
+  // `blocking` are tasks that are waiting on this one.
+  blockedBy TaskDependency[] @relation("blockedTask")
+  blocking  TaskDependency[] @relation("blockerTask")
+  watchers  TaskWatcher[]
+
+  @@index([deletedAt, status])
+  @@index([assigneeId])
+  @@index([projectId])
+  @@index([dueDate])
+  @@index([parentId])
+  @@index([createdById])
+  @@index([seriesId])
+}
+
+/**
+ * Extra people sharing a task alongside its primary assignee. Any collaborator
+ * can work on it, log their own time, and move it forward — so a task can be
+ * tackled together and completed by whoever finishes.
+ */
+model TaskCollaborator {
+  task    Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId  Int
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId  Int
+  addedAt DateTime @default(now())
+
+  @@id([taskId, userId])
+  @@index([userId])
+}
+
+/**
+ * A "this task is blocked by that task" edge, Asana-style. A task can be blocked
+ * by many others and can block many others.
+ */
+model TaskDependency {
+  id        Int      @id @default(autoincrement())
+  task      Task     @relation("blockedTask", fields: [taskId], references: [id], onDelete: Cascade)
+  taskId    Int // the task that is blocked
+  blocker   Task     @relation("blockerTask", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockerId Int // the task that must be completed first
+  createdAt DateTime @default(now())
+
+  @@unique([taskId, blockerId])
+  @@index([blockerId])
+}
+
+model Tag {
+  id    Int       @id @default(autoincrement())
+  name  String    @unique
+  color String    @default("slate")
+  tasks TaskTag[]
+}
+
+/** A named, saved combination of Tasks filters — a personal quick view. */
+model SavedView {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  name      String
+  query     String   @default("") // the tasks filter query string, e.g. "status=DONE&assignee=2"
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model TaskTag {
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId Int
+  tag    Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  tagId  Int
+
+  @@id([taskId, tagId])
+}
+
+/** People following a task who aren't its assignee — they get notified of
+ *  status changes and new comments without owning the work. */
+model TaskWatcher {
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  createdAt DateTime @default(now())
+
+  @@id([taskId, userId])
+  @@index([userId])
+}
+
+model TaskActivity {
+  id        Int      @id @default(autoincrement())
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId    Int
+  actor     User     @relation(fields: [actorId], references: [id])
+  actorId   Int
+  type      String // created | status | assignee | due | priority | details | attachment
+  detail    String?
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+}
+
+model ProjectTemplate {
+  id          Int                   @id @default(autoincrement())
+  name        String                @unique
+  description String?
+  createdAt   DateTime              @default(now())
+  items       ProjectTemplateItem[]
+}
+
+model ProjectTemplateItem {
+  id            Int             @id @default(autoincrement())
+  template      ProjectTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  templateId    Int
+  title         String
+  priority      String          @default("MEDIUM")
+  dueOffsetDays Int? // due date = project creation date + this many days
+  order         Int             @default(0)
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  message   String
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+}
+
+model TaskComment {
+  id        Int      @id @default(autoincrement())
+  body      String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId    Int
+  author    User     @relation(fields: [authorId], references: [id])
+  authorId  Int
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+}
+
+model Note {
+  id        Int         @id @default(autoincrement())
+  title     String
+  body      String      @default("")
+  color     String      @default("default")
+  type      String      @default("text") // text | checklist
+  pinned    Boolean     @default(false)
+  sortOrder Int         @default(0) // manual drag order (lower = earlier)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  updatedAt DateTime    @updatedAt
+  createdAt DateTime    @default(now())
+  deletedAt DateTime?
+  shares      NoteShare[]
+  attachments Attachment[]
+
+  @@index([userId, deletedAt])
+}
+
+model NoteShare {
+  note   Note @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  noteId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId Int
+
+  @@id([noteId, userId])
+}
+
+model DirectMessage {
+  id          Int               @id @default(autoincrement())
+  body        String
+  sender      User              @relation("dmSender", fields: [senderId], references: [id], onDelete: Cascade)
+  senderId    Int
+  recipient   User              @relation("dmRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  recipientId Int
+  read        Boolean           @default(false)
+  // Set once an "unread message" email has gone out for this message, so the
+  // background job (scripts/unread-messages.ts) never emails the same unread
+  // message twice — null means "not yet notified".
+  notifiedAt  DateTime?
+  // Auto-translation into the recipient's preferred language, computed once
+  // at send time. Null when no translation was needed/available — the chat
+  // UI then just shows `body`. translatedLang is the language it's in, so a
+  // "Show original" toggle knows what it's toggling away from.
+  translatedBody String?
+  translatedLang String?
+  // Set when a translation attempt used up its retries without succeeding
+  // (Gemini quota/rate-limit/config error) — lets the chat UI show a small
+  // "couldn't translate" notice instead of silently showing the original
+  // with no explanation. Left false for the "AI not configured" case, which
+  // is an intentional off-state, not a failure worth surfacing.
+  translationFailed Boolean @default(false)
+  // When the translation above landed — translation now runs in the
+  // background after the message is created (so sending stays instant), and
+  // the chat's poll endpoint uses this to find recently-completed
+  // translations for messages it already sent the client, similar to how
+  // deletedIds/reactions are patched onto already-loaded messages.
+  translatedAt DateTime?
+  createdAt   DateTime          @default(now())
+  deletedAt   DateTime?
+  attachments Attachment[]
+  replyTo     DirectMessage?    @relation("dmReplyTo", fields: [replyToId], references: [id], onDelete: SetNull)
+  replyToId   Int?
+  replies     DirectMessage[]   @relation("dmReplyTo")
+  reactions   MessageReaction[]
+  stars       MessageStar[]
+
+  @@index([senderId, recipientId])
+  @@index([recipientId, senderId])
+}
+
+/**
+ * A private bookmark — WhatsApp-style "star" — on a message. Visible only to
+ * the user who starred it (there's no notion of "who else starred this");
+ * unique per (message, user) so starring is a plain on/off toggle.
+ */
+model MessageStar {
+  id        Int           @id @default(autoincrement())
+  message   DirectMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId Int
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  createdAt DateTime      @default(now())
+
+  @@unique([messageId, userId])
+  @@index([messageId])
+}
+
+/**
+ * One emoji reaction from one user on one message — WhatsApp-style tap-to-react.
+ * Unique per (message, user) so picking a new emoji replaces your old one on
+ * that message rather than stacking; toggling the same emoji again removes it.
+ */
+model MessageReaction {
+  id        Int           @id @default(autoincrement())
+  message   DirectMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId Int
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  emoji     String
+  createdAt DateTime      @default(now())
+
+  @@unique([messageId, userId])
+  @@index([messageId])
+}
+
+model Attachment {
+  id                  Int                @id @default(autoincrement())
+  storedName          String?            @unique // random name on disk inside UPLOAD_DIR — null for a link attachment (externalUrl set instead)
+  originalName        String
+  mimeType            String
+  size                Int
+  externalUrl         String? // set instead of storedName/uploading a file — for something too large to upload (e.g. a Drive link)
+  task                Task?              @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId              Int?
+  message             DirectMessage?     @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId           Int?
+  discussion          DiscussionMessage? @relation(fields: [discussionMessageId], references: [id], onDelete: Cascade)
+  discussionMessageId Int?
+  note                Note?              @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  noteId              Int?
+  groupMessage        GroupMessage?      @relation(fields: [groupMessageId], references: [id], onDelete: Cascade)
+  groupMessageId      Int?
+  uploadedBy          User               @relation(fields: [uploadedById], references: [id])
+  uploadedById        Int
+  createdAt           DateTime           @default(now())
+
+  @@index([messageId])
+  @@index([discussionMessageId])
+  @@index([noteId])
+  @@index([taskId])
+  @@index([uploadedById])
+  @@index([groupMessageId])
+}
+
+// Kept only so the one-time migration script (scripts/migrate-discussion-to-group.ts)
+// can read the old single company-wide channel's history when copying it into
+// the "General" group — the Discussion tab itself now runs on Group/GroupMessage
+// below, WhatsApp-style (multiple named groups instead of one global channel).
+model DiscussionMessage {
+  id          Int          @id @default(autoincrement())
+  body        String
+  author      User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId    Int
+  createdAt   DateTime     @default(now())
+  deletedAt   DateTime?
+  attachments Attachment[]
+
+  @@index([createdAt])
+}
+
+model Group {
+  id          Int            @id @default(autoincrement())
+  name        String
+  createdBy   User           @relation("groupCreator", fields: [createdById], references: [id])
+  createdById Int
+  createdAt   DateTime       @default(now())
+  members     GroupMember[]
+  messages    GroupMessage[]
+}
+
+/**
+ * Membership row. `lastReadAt` powers the unread badge in the group list
+ * (any GroupMessage newer than this, not sent by you, counts as unread) —
+ * simpler than per-message read receipts, which don't generalize cleanly to
+ * "seen by N of M members" the way a 1:1 chat's single Seen/Delivered does.
+ */
+model GroupMember {
+  group      Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId    Int
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     Int
+  joinedAt   DateTime @default(now())
+  lastReadAt DateTime @default(now())
+
+  @@id([groupId, userId])
+  @@index([userId])
+}
+
+model GroupMessage {
+  id          Int                    @id @default(autoincrement())
+  body        String
+  sender      User                   @relation("groupMessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  senderId    Int
+  group       Group                  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId     Int
+  createdAt   DateTime               @default(now())
+  deletedAt   DateTime?
+  attachments Attachment[]
+  replyTo     GroupMessage?          @relation("groupReplyTo", fields: [replyToId], references: [id], onDelete: SetNull)
+  replyToId   Int?
+  replies     GroupMessage[]         @relation("groupReplyTo")
+  reactions   GroupMessageReaction[]
+  stars       GroupMessageStar[]
+
+  @@index([groupId, createdAt])
+  @@index([senderId])
+  @@index([replyToId])
+}
+
+model GroupMessageReaction {
+  id        Int          @id @default(autoincrement())
+  message   GroupMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId Int
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  emoji     String
+  createdAt DateTime     @default(now())
+
+  @@unique([messageId, userId])
+  @@index([messageId])
+}
+
+model GroupMessageStar {
+  id        Int          @id @default(autoincrement())
+  message   GroupMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId Int
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  createdAt DateTime     @default(now())
+
+  @@unique([messageId, userId])
+  @@index([messageId])
+}
+
+model TimeEntry {
+  id        Int       @id @default(autoincrement())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  task      Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  taskId    Int?
+  project   Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId Int?
+  date      DateTime
+  hours     Float
+  startedAt DateTime? // optional precise start of the work window
+  endedAt   DateTime? // optional precise end of the work window
+  note      String?
+  source    String    @default("manual") // manual | timer
+  createdAt DateTime  @default(now())
+
+  @@index([userId, date])
+  @@index([taskId])
+  @@index([projectId])
+}
+
+/**
+ * An employee's weekly timesheet submitted for a manager to approve. One row
+ * per person per week (weekStart is the Sunday 00:00 of that week). Once
+ * submitted or approved, that week's entries are locked from further edits.
+ */
+model TimesheetSubmission {
+  id           Int       @id @default(autoincrement())
+  user         User      @relation("tsSubmitter", fields: [userId], references: [id], onDelete: Cascade)
+  userId       Int
+  weekStart    DateTime
+  status       String    @default("SUBMITTED") // SUBMITTED | APPROVED | REJECTED
+  totalHours   Float     @default(0)
+  note         String?
+  reviewedBy   User?     @relation("tsReviewer", fields: [reviewedById], references: [id])
+  reviewedById Int?
+  reviewNote   String?
+  submittedAt  DateTime  @default(now())
+  reviewedAt   DateTime?
+
+  @@unique([userId, weekStart])
+  @@index([status])
+}
+
+/**
+ * A browser's Web Push subscription, so we can deliver desktop/mobile push
+ * notifications even when the app isn't open. One person can be subscribed from
+ * several devices; the endpoint uniquely identifies each browser.
+ */
+model PushSubscription {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+/**
+ * Append-only history of changes to time entries — who created, edited or
+ * deleted which entry, with a snapshot before and after — so edits to a week
+ * before it's submitted remain visible to managers. No foreign key to the
+ * entry itself, so the trail survives the entry being deleted.
+ */
+model TimeEntryAudit {
+  id          Int      @id @default(autoincrement())
+  timeEntryId Int
+  ownerId     Int // whose timesheet the entry belongs to
+  actorId     Int? // who made the change; null = the system (auto-stopped timer)
+  action      String // create | update | delete | timer | auto_stop
+  before      String? // JSON snapshot before the change
+  after       String? // JSON snapshot after the change
+  createdAt   DateTime @default(now())
+
+  @@index([ownerId, createdAt])
+  @@index([timeEntryId])
+}
+
+/**
+ * A live, running stopwatch for a task. There is at most one per user (enforced
+ * by the unique userId) — starting a timer stops any other one first, matching
+ * the way tools like Toggl or Asana track "what am I working on right now".
+ */
+model TaskTimer {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int      @unique
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId    Int
+  note      String?
+  startedAt DateTime @default(now())
+  /// Last ping from any open tab; a stale value means the browser was closed
+  /// or the laptop shut down, and the timer is stopped automatically.
+  lastPingAt DateTime?
+}
+
+/**
+ * The per-seat rate an admin has set for internal cost-recovery billing (see
+ * /billing). Always exactly one row (id 1) — a singleton settings record, not
+ * a history; BillingSnapshot below is what preserves history month to month.
+ */
+model BillingSetting {
+  id          Int      @id @default(autoincrement())
+  ratePerSeat Int // whole currency units per active user per month, e.g. 100
+  currency    String   @default("INR")
+  updatedAt   DateTime @updatedAt
+}
+
+/**
+ * A generated monthly billing snapshot — active user count and rate frozen at
+ * the moment it was generated, so past months stay accurate even after the
+ * rate changes or headcount moves. One per calendar month (period "YYYY-MM");
+ * generating again for the same month overwrites it (e.g. to correct a
+ * headcount change before finance has seen it).
+ */
+model BillingSnapshot {
+  id            Int      @id @default(autoincrement())
+  period        String   @unique // "2026-09"
+  activeUsers   Int
+  ratePerSeat   Int
+  currency      String
+  totalAmount   Int
+  generatedAt   DateTime @default(now())
+  generatedBy   User     @relation(fields: [generatedById], references: [id])
+  generatedById Int
+}

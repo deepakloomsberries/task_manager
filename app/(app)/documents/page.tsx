@@ -19,11 +19,13 @@ export default async function DocumentsPage({
 }) {
   const user = await requireUser();
   const attachments = await db.attachment.findMany({
-    // Files shared inside a 1:1 chat are private to that conversation, not
-    // company documents — they belong in Messages' own media/docs view (see
-    // ChatInfoPanel), not this shared library. Discussion-post attachments
-    // stay here since that feed is already company-wide, like this page.
-    where: { messageId: null },
+    // Files shared inside a 1:1 chat or a group are private to that
+    // conversation's members, not company documents — they belong in that
+    // chat's own media/docs view (see ChatInfoPanel), not this shared
+    // library. Only old company-wide Discussion-post attachments (from
+    // before groups existed) stay here, since that channel really was
+    // visible to everyone — unlike an arbitrary group can be.
+    where: { messageId: null, groupMessageId: null },
     orderBy: { createdAt: "desc" },
     include: { uploadedBy: true, task: true },
   });

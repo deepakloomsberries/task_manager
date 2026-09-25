@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   const idMatch = q.match(/^(?:tm-?|#)?(\d+)$/i);
   const where = idMatch
     ? { deletedAt: null, id: Number(idMatch[1]) }
-    : { deletedAt: null, title: { contains: q } };
+    : { deletedAt: null, title: { contains: q, mode: "insensitive" as const } };
 
   const tasks = await db.task.findMany({
     where,

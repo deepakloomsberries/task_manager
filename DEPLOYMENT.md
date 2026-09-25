@@ -7,9 +7,114 @@ based on the production deployment on `task.donetella.com` (Ubuntu 24.04 VPS) an
 documents the issues encountered there together with their resolutions.
 
 > **Critical data.** The application's live data consists of exactly three items:
-> the database file `prisma/dev.db`, the `uploads/` directory, and the `.env` file.
-> These must never be deleted or overwritten. Everything else can be restored from
-> this repository at any time.
+> the PostgreSQL database `task_manager`, the `uploads/` directory, and the `.env`
+> file. These must never be deleted or overwritten. Everything else can be restored
+> from this repository at any time. (Before the move to Postgres the database was the
+> file `prisma/dev.db` — keep that file as an archive; see Part 0.)
+
+---
+
+## Part 0 — One-time upgrade: moving this server from SQLite to PostgreSQL
+
+Do this **once**, on the existing server, when you first pull a version that uses
+Postgres. It takes about 10 minutes and the app is offline for a couple of them.
+Your SQLite file is only read, never changed, so you can always go back (0.8).
+
+### 0.1 Stop the app and keep a safety copy
+
+```bash
+cd /home/kapil/task_manager
+systemctl stop task-manager
+mkdir -p /home/kapil/backups/pre-postgres
+cp prisma/dev.db* .env /home/kapil/backups/pre-postgres/
+cp -r uploads /home/kapil/backups/pre-postgres/ 2>/dev/null
+ls -la /home/kapil/backups/pre-postgres/        # dev.db should be there
+```
+
+### 0.2 Install PostgreSQL
+
+```bash
+apt update && apt install -y postgresql
+systemctl enable --now postgresql
+sudo -u postgres psql -c "select version();"   # prints "PostgreSQL 16…"
+```
+
+### 0.3 Create the database and a login for the app
+
+```bash
+DBPASS=$(openssl rand -hex 16)
+echo "Database password: $DBPASS"     # note it down somewhere safe
+sudo -u postgres psql -c "CREATE USER taskapp WITH PASSWORD '$DBPASS';"
+sudo -u postgres psql -c "CREATE DATABASE task_manager OWNER taskapp;"
+```
+
+Postgres only listens on the server itself (`localhost`) by default — keep it that
+way; nothing outside needs to reach it.
+
+### 0.4 Get the new code
+
+```bash
+git pull origin claude/todo-count-paras-mfemnu
+npm install
+```
+
+### 0.5 Point the app at Postgres
+
+Run this **in the same SSH session as 0.3** (it uses `$DBPASS`). The old SQLite line
+is kept, commented out, for rollback:
+
+```bash
+sed -i 's|^DATABASE_URL=|# OLD SQLite: DATABASE_URL=|' .env
+echo "DATABASE_URL=\"postgresql://taskapp:$DBPASS@localhost:5432/task_manager\"" >> .env
+grep DATABASE_URL .env
+```
+
+Expected: one commented `file:./dev.db` line and one active `postgresql://…` line.
+
+### 0.6 Create the tables and copy your data
+
+```bash
+npx prisma db push
+npm run db:migrate-from-sqlite
+```
+
+The second command copies every table from `prisma/dev.db` into Postgres, keeping
+all ids, then **compares every row** in both databases. It ends with:
+
+```
+✓ All 37 tables copied and verified (… rows).
+```
+
+If it prints `Migration FAILED`, nothing has been switched on yet — send the output
+for help. It refuses to run twice into the same database (so data can't be
+duplicated); to retry from scratch:
+`sudo -u postgres psql -c "DROP DATABASE task_manager;" -c "CREATE DATABASE task_manager OWNER taskapp;"`
+then repeat 0.6.
+
+### 0.7 Build and start
+
+```bash
+npm run build && systemctl start task-manager
+systemctl status task-manager --no-pager | head -5    # active (running)
+npm run backup                                          # first Postgres backup
+```
+
+Sign in and check a few things you know well (your tasks, a timesheet, messages).
+The nightly backup cron from Part 3 keeps working unchanged — it now uses `pg_dump`.
+
+### 0.8 Rollback (only if something is wrong)
+
+Anything created after the switch lives only in Postgres, so decide quickly.
+
+```bash
+systemctl stop task-manager
+sed -i 's|^DATABASE_URL="postgresql|# POSTGRES: DATABASE_URL="postgresql|; s|^# OLD SQLite: DATABASE_URL=|DATABASE_URL=|' .env
+git checkout db0bb3a          # the last SQLite version
+npm install && npx prisma generate && npm run build && systemctl start task-manager
+```
+
+Afterwards the SQLite file `prisma/dev.db` is no longer used. Leave it where it is as
+an archive (it's also in `/home/kapil/backups/pre-postgres/`).
 
 ---
 
@@ -79,7 +184,7 @@ Nano reference: navigate with arrow keys · save = `Ctrl+O` then `Enter` · exit
 Set the values as follows:
 
 ```
-DATABASE_URL="file:./dev.db"
+DATABASE_URL="postgresql://taskapp:<database password>@localhost:5432/task_manager"
 AUTH_SECRET="<the 64-character string from openssl>"
 APP_URL="https://task.donetella.com"
 UPLOAD_DIR="/home/kapil/task_manager/uploads"
@@ -112,6 +217,18 @@ Verify the values were saved correctly:
 ```bash
 grep -E "AUTH_SECRET|SMTP_PASS|UPLOAD_DIR" .env
 ```
+
+### 1.4b Install PostgreSQL and create the database
+
+```bash
+apt update && apt install -y postgresql
+systemctl enable --now postgresql
+DBPASS=$(openssl rand -hex 16); echo "Database password: $DBPASS"
+sudo -u postgres psql -c "CREATE USER taskapp WITH PASSWORD '$DBPASS';"
+sudo -u postgres psql -c "CREATE DATABASE task_manager OWNER taskapp;"
+```
+
+Put that password into `DATABASE_URL` in `.env` (step 1.4).
 
 ### 1.5 Install dependencies, initialize the database, build
 
@@ -311,11 +428,32 @@ Command reference by type of change:
 
 ## Part 3 — Backups
 
-One-time setup (nightly at 02:00, 14-day retention):
+One-time setup (nightly at 02:00, 14-day retention). `scripts/backup.ts` takes a
+consistent snapshot with SQLite's `VACUUM INTO` (safe while the app is running —
+a plain `cp` of `dev.db` can capture a half-written file or miss data still in
+the WAL), runs an integrity check on it, copies `uploads/`, and prunes old days:
 
 ```bash
-(crontab -l 2>/dev/null; echo '0 2 * * * d=$(date +\%F); mkdir -p /home/kapil/backups/$d; cp /home/kapil/task_manager/prisma/dev.db /home/kapil/backups/$d/; cp -r /home/kapil/task_manager/uploads /home/kapil/backups/$d/ 2>/dev/null; find /home/kapil/backups -maxdepth 1 -mtime +14 -exec rm -rf {} \;') | crontab -
+# Remove the old cp-based entry if it's there, then add the new one.
+crontab -l 2>/dev/null | grep -v 'cp /home/kapil/task_manager/prisma/dev.db' | crontab -
+(crontab -l 2>/dev/null; echo '0 2 * * * cd /home/kapil/task_manager && /usr/bin/npx tsx scripts/backup.ts >> /var/log/task-backup.log 2>&1') | crontab -
 ```
+
+Backups land in `/home/kapil/backups/YYYY-MM-DD/` as `db.dump` (a `pg_dump`
+archive, checked with `pg_restore --list` after every run) plus `uploads/`
+(override with `BACKUP_DIR`, retention with `BACKUP_KEEP_DAYS`). Run once by hand to
+check: `npm run backup`.
+
+Restore a day's backup:
+
+```bash
+systemctl stop task-manager
+cd /home/kapil/task_manager && set -a && . ./.env && set +a
+pg_restore --clean --if-exists --no-owner -d "$DATABASE_URL" /home/kapil/backups/2026-10-01/db.dump
+cp -r /home/kapil/backups/2026-10-01/uploads/. uploads/
+systemctl start task-manager
+``` Keep a copy off the server too (e.g. a
+weekly `rclone`/`scp` of the backups folder to Google Drive or another machine).
 
 Required — nightly recurring-task roll-over at 00:05 (closes out each elapsed
 recurring occurrence — marking it missed if nobody finished it — and creates the
@@ -327,11 +465,22 @@ entry, recurring tasks never roll over or get deduplicated:
 (crontab -l 2>/dev/null; echo '5 0 * * * cd /home/kapil/task_manager && /usr/bin/npx tsx scripts/recurring.ts >> /var/log/task-recurring.log 2>&1') | crontab -
 ```
 
-Optional — daily reminder emails at 08:00 (each employee receives a digest of their
-overdue and due-today tasks; requires SMTP to be configured in `.env`):
+Recommended — morning summary email at 08:00 (each person gets their overdue and
+due-today tasks, what's waiting for their approval, and who's off today and this
+week; skipped on their own weekend, holiday or leave; people can turn it off in
+Settings; requires SMTP to be configured in `.env`):
 
 ```bash
 (crontab -l 2>/dev/null; echo '0 8 * * * cd /home/kapil/task_manager && /usr/bin/npx tsx scripts/reminders.ts >> /var/log/task-reminders.log 2>&1') | crontab -
+```
+
+Recommended — Friday 16:00 timesheet reminder (in-app notification, browser push
+and email for everyone whose week isn't submitted yet; safe to re-run — nobody
+is reminded twice in a day). Set `TIMESHEET_REMINDER_ROLES` in `.env` to change
+who gets it (default `EMPLOYEE,MANAGER`):
+
+```bash
+(crontab -l 2>/dev/null; echo '0 16 * * 5 cd /home/kapil/task_manager && /usr/bin/npx tsx scripts/timesheet-reminder.ts >> /var/log/task-timesheet-reminder.log 2>&1') | crontab -
 ```
 
 Verify registration: `crontab -l`
@@ -349,22 +498,26 @@ loss.
 
 1. On the old server, collect the three data items:
    ```bash
-   ls /home/kapil/backups                    # identify the newest dated directory
+   npm run backup                            # fresh db.dump + uploads
+   ls /home/kapil/backups                    # the newest dated directory
    ```
-   Copy via WinSCP: that backup's `dev.db` and `uploads`, plus
+   Copy via WinSCP: that backup's `db.dump` and `uploads`, plus
    `/home/kapil/task_manager/.env`.
-2. On the new server, perform Part 1 with one modification — restore data instead of
-   seeding:
+2. On the new server, perform Part 1 (including 1.4b — create the Postgres user and
+   database with the **same password** as in the saved `.env`), then restore data
+   instead of seeding:
    ```bash
    npm install
    # via WinSCP: place the saved .env at /home/kapil/task_manager/.env
-   # via WinSCP: place the saved dev.db at /home/kapil/task_manager/prisma/dev.db
+   # via WinSCP: place db.dump at /home/kapil/db.dump
    # via WinSCP: place the saved uploads directory at /home/kapil/task_manager/uploads
+   set -a && . ./.env && set +a
+   pg_restore --no-owner -d "$DATABASE_URL" /home/kapil/db.dump
    npx prisma generate
    npm run build
    ```
-   Do not run `npm run setup` — the restored `dev.db` already contains all users and
-   data (running it would not damage the data, but it is unnecessary).
+   Do not run `npm run setup` — the restored database already contains all users and
+   data.
 3. Continue Part 1 from step 1.7 (systemd), then 1.8 (update the DNS A record to the
    new server's IP), then 1.9 (Apache and certbot).
 4. All accounts, tasks, and files continue unchanged.
@@ -432,9 +585,32 @@ certbot renew --dry-run         # certificate auto-renewal functional
 systemctl status task-manager   # service active
 ```
 
+## Part 8 — Error monitoring (Sentry)
+
+The app reports crashes to [Sentry](https://sentry.io) (free tier is plenty).
+It stays switched off until a DSN is configured.
+
+1. Create a Sentry project (platform: Next.js) and copy its DSN.
+2. Add to `.env`:
+
+   ```
+   SENTRY_DSN="https://…@o0.ingest.sentry.io/0"
+   NEXT_PUBLIC_SENTRY_DSN="https://…@o0.ingest.sentry.io/0"   # same DSN; baked in at build time
+   SENTRY_ENVIRONMENT="production"
+   # Optional — readable stack traces (uploads source maps during build):
+   # SENTRY_ORG="looms-berries"  SENTRY_PROJECT="task-manager"  SENTRY_AUTH_TOKEN="sntrys_…"
+   ```
+
+3. `npm run build && systemctl restart task-manager`.
+
+Server errors (pages, API routes, server actions) and browser errors both show
+up in Sentry with the stack trace. Set an alert rule there to email you on new issues.
+
+---
+
 ## Prohibited actions
 
-- Do not delete or modify `prisma/dev.db`, `uploads/`, or `.env` — this is the live data.
+- Do not drop or modify the `task_manager` Postgres database, `uploads/`, or `.env` — this is the live data. Keep `prisma/dev.db` as the pre-Postgres archive.
 - Do not run `npm audit fix --force` — it can install breaking package versions.
 - Do not install Node.js from Ubuntu's default repositories — use NodeSource (Part 1.2).
 - Do not commit real credentials to the repository — `.env` is intentionally excluded

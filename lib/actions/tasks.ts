@@ -1,12 +1,13 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { safeBack } from "@/lib/backLink";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import { notifyAssignment, notifyComment, notifyReminder, notifyReviewNeeded, notifyCompletion, notifyApproval, notifyReopened, pushNotification, logActivity } from "@/lib/notify";
-import { notifyCollaboratorAdded } from "@/lib/mail";
+import { notifyClientStepDone, notifyCollaboratorAdded } from "@/lib/mail";
 import { seriesKeyFor } from "@/lib/recurrence";
 import { findMentionedIds } from "@/lib/mentions";
 import { companyTimezone, zonedStartOfToday } from "@/lib/tz";
@@ -67,19 +68,15 @@ function canChangeStatus(
  * or clicking "Back to tasks" afterwards silently loses the filter.
  */
 function backOr(formData: FormData, fallback: string): string {
-  const back = formData.get("back");
-  return typeof back === "string" && back.startsWith("/tasks") ? back : fallback;
+  return safeBack(formData.get("back"), fallback);
 }
 
 /** Same as `backOr`, but appends the `back` value as a query param onto a
  *  DIFFERENT url (used when an action navigates to a different task, e.g.
  *  a duplicate, and that page's own "Back to tasks" should keep the filter). */
 function appendBack(url: string, formData: FormData): string {
-  const back = formData.get("back");
-  if (typeof back === "string" && back.startsWith("/tasks")) {
-    return `${url}?back=${encodeURIComponent(back)}`;
-  }
-  return url;
+  const back = safeBack(formData.get("back"), "");
+  return back ? `${url}?back=${encodeURIComponent(back)}` : url;
 }
 
 async function revalidateTaskViews(taskId?: number) {
@@ -396,6 +393,17 @@ async function changeStatus(
     // Stop any running timers on this task and bank their time — a completed
     // task shouldn't keep accruing time for anyone.
     await commitTimersForTask(taskId);
+
+    // Shared with a client? Ask them to review and approve it in the portal.
+    if (task.clientVisible && task.projectId) {
+      const project = await db.project.findUnique({
+        where: { id: task.projectId },
+        select: { name: true, client: { select: { contacts: { where: { active: true }, select: { email: true } } } } },
+      });
+      if (project?.client?.contacts.length) {
+        notifyClientStepDone({ to: project.client.contacts.map((c) => c.email), taskId, taskTitle: task.title, project: project.name });
+      }
+    }
 
     // Tell the task owner (in-app + email) when someone else completes their task.
     if (task.createdById !== user.id) {

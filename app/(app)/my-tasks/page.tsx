@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { taskHref } from "@/lib/backLink";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { setTaskStatus } from "@/lib/actions/tasks";
@@ -51,7 +52,7 @@ function Section({ title, accent, tasks, back }: { title: string; accent: string
           const priority = lookup(TASK_PRIORITIES, t.priority);
           const doneSubs = t.subtasks.filter((s) => s.status === "DONE").length;
           return (
-            <div key={t.id} className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50">
+            <div key={t.id} className="flex items-start gap-3 px-5 py-3 hover:bg-slate-50">
               <form action={setTaskStatus}>
                 <input type="hidden" name="id" value={t.id} />
                 <input type="hidden" name="status" value="DONE" />
@@ -67,7 +68,7 @@ function Section({ title, accent, tasks, back }: { title: string; accent: string
                 </ConfirmButton>
               </form>
               <div className="min-w-0 flex-1">
-                <Link href={`/tasks/${t.id}`} className="text-sm font-medium hover:text-sky-700">
+                <Link href={taskHref(t.id, "/my-tasks")} className="text-sm font-medium hover:text-sky-700">
                   {t.title}
                 </Link>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">

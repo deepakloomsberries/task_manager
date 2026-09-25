@@ -65,7 +65,7 @@ export function buildTaskListQuery(sp: TaskListParams, userId: number) {
     // Support searching by task ID, e.g. "TM-42", "#42" or plain "42".
     const idMatch = q.match(/^(?:tm-?|#)?(\d+)$/i);
     if (idMatch) where.id = Number(idMatch[1]);
-    else where.title = { contains: q };
+    else where.title = { contains: q, mode: "insensitive" as const };
   }
   if (sp.tag) where.tags = { some: { tag: { name: sp.tag } } };
 

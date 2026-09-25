@@ -70,7 +70,7 @@ const FEATURE_GROUPS: FeatureGroup[] = [
       {
         icon: "🗓️",
         title: "Calendar & scheduling",
-        body: "Every due date, meeting and project milestone on one calendar — filterable by project, person or department.",
+        body: "Every due date, holiday and who's on leave on one calendar — and synced to Google, Outlook or Apple Calendar.",
       },
       {
         icon: "🗄️",
@@ -88,9 +88,19 @@ const FEATURE_GROUPS: FeatureGroup[] = [
     title: "Track time & workload",
     items: [
       {
+        icon: "🌴",
+        title: "Leave & holidays",
+        body: "Leave requests and approvals, per-office holidays and weekends — and Workload, calendars and reminders all know who's away.",
+      },
+      {
+        icon: "🔁",
+        title: "Recurring jobs tracker",
+        body: "Daily, weekly and monthly routines regenerate on their own, with a day-by-day grid of what was done and what was missed.",
+      },
+      {
         icon: "⏱️",
         title: "Built-in time tracking",
-        body: "One-click task timers, weekly timesheets with an approval workflow, and live \"who's working on what right now\" visibility for managers.",
+        body: "One-click task timers that stop themselves if a laptop is shut or the browser closed, weekly timesheets with approval, and live \"who's working on what right now\" visibility.",
       },
       {
         icon: "⚖️",
@@ -114,8 +124,8 @@ const FEATURE_GROUPS: FeatureGroup[] = [
       },
       {
         icon: "📢",
-        title: "Company-wide discussion",
-        body: "A dedicated space for announcements and cross-team discussion, kept separate from day-to-day project chat.",
+        title: "Group chats",
+        body: "WhatsApp-style groups for teams, projects and announcements — with replies, reactions, attachments and video calls.",
       },
       {
         icon: "🔔",
@@ -139,8 +149,8 @@ const FEATURE_GROUPS: FeatureGroup[] = [
       },
       {
         icon: "🔎",
-        title: "Global search",
-        body: "Find any task, message, document or person in seconds, from one search bar.",
+        title: "Global search (Ctrl/⌘ + K)",
+        body: "Find any task, project, page or person in seconds — or create a task straight from the search box.",
       },
     ],
   },
@@ -163,6 +173,11 @@ const FEATURE_GROUPS: FeatureGroup[] = [
         body: "Admin, manager and employee roles, CSV import/export, and a recycle bin for anything deleted by mistake.",
       },
       {
+        icon: "🛡️",
+        title: "Secure & audited",
+        body: "Brute-force login protection, a full change history on every time entry, nightly verified backups and error monitoring.",
+      },
+      {
         icon: "💳",
         title: "Billing & per-seat reports",
         body: "Per-seat usage and cost-recovery reports for finance and internal billing, without spreadsheets.",
@@ -183,6 +198,14 @@ const STATS = [
 ];
 
 const FAQS = [
+  {
+    q: "Is there a guide for our team?",
+    a: "Yes — a step-by-step knowledge base with annotated screenshots lives at /use, covering everything from signing in to approving timesheets.",
+  },
+  {
+    q: "What if someone forgets to stop their timer?",
+    a: "Timers stop themselves once the browser is closed or the laptop is shut down, logging time only up to the person's last activity — no more 50-hour entries.",
+  },
   {
     q: "Is this a SaaS we sign up for, or do we run it ourselves?",
     a: "It's self-hosted on your own domain and server — your data stays on infrastructure you control, not a shared multi-tenant cloud.",
@@ -221,6 +244,33 @@ const WHY = [
     icon: "🛠️",
     title: "Yours to shape",
     body: "Hosted on your own domain and server, so it grows around how your team actually works.",
+  },
+];
+
+const HOW = [
+  {
+    icon: "📝",
+    title: "Plan",
+    body: "Create tasks (or let AI draft them), assign owners and due dates, group them into projects.",
+    anchor: "create-task",
+  },
+  {
+    icon: "⏱️",
+    title: "Work",
+    body: "Everyone starts the timer on what they're doing — managers see who's working on what, live.",
+    anchor: "timer",
+  },
+  {
+    icon: "💬",
+    title: "Collaborate",
+    body: "Comment, @mention and chat in any language — messages translate themselves.",
+    anchor: "messages",
+  },
+  {
+    icon: "✅",
+    title: "Review",
+    body: "Approve finished work and weekly timesheets, then check workload and reports.",
+    anchor: "approve-timesheets",
   },
 ];
 
@@ -282,9 +332,15 @@ export default function AboutPage() {
             <a href="#features" className="hover:text-slate-900 dark:hover:text-white">
               Features
             </a>
+            <a href="#how" className="hover:text-slate-900 dark:hover:text-white">
+              How it works
+            </a>
             <a href="#why" className="hover:text-slate-900 dark:hover:text-white">
               Why it&apos;s different
             </a>
+            <Link href="/use" className="hover:text-slate-900 dark:hover:text-white">
+              Guide
+            </Link>
             <a href="#contact" className="hover:text-slate-900 dark:hover:text-white">
               Contact
             </a>
@@ -311,11 +367,18 @@ export default function AboutPage() {
                 <a href="#contact" className="block rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
                   Contact
                 </a>
+                <Link href="/use" className="block rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
+                  How-to guide
+                </Link>
+                <div className="my-1 border-t border-slate-200 dark:border-slate-700" />
+                <Link href="/login" className="block rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800">
+                  Sign in
+                </Link>
               </div>
             </details>
             <Link
               href="/login"
-              className="btn-secondary whitespace-nowrap !px-2.5 !py-1.5 text-xs sm:!px-4 sm:text-sm"
+              className="btn-secondary hidden whitespace-nowrap !px-4 text-sm sm:inline-flex"
             >
               Sign in
             </Link>
@@ -323,7 +386,8 @@ export default function AboutPage() {
               href={CONTACT_HREF}
               className="btn-primary whitespace-nowrap !px-2.5 !py-1.5 text-xs sm:!px-4 sm:text-sm"
             >
-              Request a demo
+              <span className="min-[400px]:hidden">Demo</span>
+              <span className="hidden min-[400px]:inline">Request a demo</span>
             </a>
           </div>
         </div>
@@ -356,6 +420,12 @@ export default function AboutPage() {
                 See what&apos;s inside ↓
               </a>
             </div>
+            <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
+              Already on the team?{" "}
+              <Link href="/use" className="font-medium text-sky-700 hover:underline dark:text-sky-400">
+                Read the step-by-step guide →
+              </Link>
+            </p>
           </div>
 
           <div className="mx-auto mt-14 max-w-5xl">
@@ -492,6 +562,40 @@ export default function AboutPage() {
         </div>
       </section>
 
+      {/* How it works — the daily loop, each step linking into the guide */}
+      <section id="how" className="scroll-mt-16 border-y border-slate-200 bg-white py-20 dark:border-slate-800 dark:bg-slate-950">
+        <div className="mx-auto max-w-6xl px-5">
+          <div className="mx-auto max-w-2xl text-center">
+            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">How a working day flows</h2>
+            <p className="mt-3 text-slate-600 dark:text-slate-300">
+              Four steps, the same for every team. Each one links to the illustrated guide.
+            </p>
+          </div>
+          <ol className="relative mt-12 grid gap-6 md:grid-cols-4">
+            {HOW.map((h, i) => (
+              <li key={h.title} className="relative">
+                <Link
+                  href={`/use#${h.anchor}`}
+                  className="group block h-full rounded-2xl border border-slate-200 p-6 transition hover:-translate-y-1 hover:border-sky-300 hover:shadow-lg dark:border-slate-700 dark:hover:border-sky-700"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-600 text-sm font-bold text-white">
+                      {i + 1}
+                    </span>
+                    <span className="text-2xl">{h.icon}</span>
+                  </div>
+                  <h3 className="mt-4 font-semibold">{h.title}</h3>
+                  <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{h.body}</p>
+                  <span className="mt-4 inline-block text-sm font-medium text-sky-700 group-hover:underline dark:text-sky-400">
+                    See how →
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
       {/* Why it's different */}
       <section id="why" className="mx-auto max-w-6xl scroll-mt-16 px-5 py-20">
         <div className="mx-auto max-w-2xl text-center">
@@ -568,9 +672,14 @@ export default function AboutPage() {
           <span>
             © {new Date().getFullYear()} Looms &amp; Berries Tasks
           </span>
-          <Link href="/login" className="hover:text-slate-700 dark:hover:text-slate-200">
-            Sign in →
-          </Link>
+          <div className="flex gap-4">
+            <Link href="/use" className="hover:text-slate-700 dark:hover:text-slate-200">
+              How-to guide
+            </Link>
+            <Link href="/login" className="hover:text-slate-700 dark:hover:text-slate-200">
+              Sign in →
+            </Link>
+          </div>
         </div>
       </footer>
     </div>

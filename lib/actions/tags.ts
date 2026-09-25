@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { safeBack } from "@/lib/backLink";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
@@ -11,8 +12,7 @@ import { TAG_COLORS } from "@/lib/ui";
  *  the filtered list/board the person opened this task from, so "Back to
  *  tasks" afterwards doesn't silently lose the filter. */
 function backOr(formData: FormData, fallback: string): string {
-  const back = formData.get("back");
-  return typeof back === "string" && back.startsWith("/tasks") ? back : fallback;
+  return safeBack(formData.get("back"), fallback);
 }
 
 export async function addTagToTask(formData: FormData) {

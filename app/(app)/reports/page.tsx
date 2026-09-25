@@ -2,6 +2,8 @@ import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import { TASK_STATUSES, fmtHours } from "@/lib/ui";
 import SearchSelect from "@/components/SearchSelect";
+import Link from "next/link";
+import { compareEstimates, overBudget, type Band } from "@/lib/estimates";
 
 export const dynamic = "force-dynamic";
 
@@ -130,6 +132,28 @@ export default async function ReportsPage({
   });
   const tpPeak = Math.max(...throughput.map((w) => w.count), 1);
   const completedThisWeek = throughput[7].count;
+
+  // --- Estimates vs actual --------------------------------------------------
+  // Completed-in-window tasks are compared with what was really logged on them
+  // (all time, not just the window); open tasks flag anything already over.
+  const openWithEstimate = scopedTasks.filter((t) => t.status !== "DONE" && (t.estimateHours ?? 0) > 0);
+  const doneWithEstimate = doneInWindow.filter((t) => (t.estimateHours ?? 0) > 0);
+  const estimateTaskIds = [...doneWithEstimate, ...openWithEstimate].map((t) => t.id);
+  const loggedByTask = new Map(
+    (estimateTaskIds.length
+      ? await db.timeEntry.groupBy({ by: ["taskId"], where: { taskId: { in: estimateTaskIds } }, _sum: { hours: true } })
+      : []
+    ).map((g) => [g.taskId as number, g._sum.hours ?? 0])
+  );
+  const est = compareEstimates(doneWithEstimate, loggedByTask);
+  const overNow = overBudget(openWithEstimate, loggedByTask);
+  const userName = new Map(allUsers.map((u) => [u.id, u.name]));
+  const BAND_STYLE: Record<Band, { label: string; cls: string; bar: string }> = {
+    under: { label: "Faster than estimate", cls: "bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300", bar: "bg-sky-400" },
+    on: { label: "On target", cls: "bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300", bar: "bg-green-500" },
+    over: { label: "Took longer", cls: "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300", bar: "bg-amber-500" },
+  };
+  const estCompared = est.compared.length;
 
   const maxStatus = Math.max(...statusCounts.map((s) => s.count), 1);
   const STATUS_BAR: Record<string, string> = {
@@ -337,6 +361,120 @@ export default async function ReportsPage({
             })}
           </div>
         </div>
+      </div>
+
+      {/* Estimates vs actual */}
+      <div className="card p-5">
+        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="font-semibold">Estimates vs actual</h2>
+          <span className="text-xs text-slate-400">
+            Tasks completed in the window that had an estimate · {daysLabel.toLowerCase()}
+          </span>
+        </div>
+        {estCompared === 0 ? (
+          <p className="text-sm text-slate-500">
+            No completed tasks with both an estimate and logged time in this window
+            {est.untracked > 0 ? ` (${est.untracked} had an estimate but no time logged)` : ""}. Add estimates to tasks and use the
+            timer to see how accurate plans are.
+          </p>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div>
+                <div className="text-2xl font-bold">{estCompared}</div>
+                <div className="text-xs text-slate-500">Tasks compared</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold">{fmtHours(est.totalEstimate)}</div>
+                <div className="text-xs text-slate-500">Estimated</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold">{fmtHours(est.totalActual)}</div>
+                <div className="text-xs text-slate-500">Actually logged</div>
+              </div>
+              <div>
+                <div className={`text-2xl font-bold ${est.ratio && est.ratio > 1.25 ? "text-amber-600" : "text-green-600"}`}>
+                  {est.ratio === null ? "—" : `${Math.round(est.ratio * 100)}%`}
+                </div>
+                <div className="text-xs text-slate-500">of estimate used</div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700" aria-hidden>
+              {(["under", "on", "over"] as Band[]).map((b) =>
+                est.counts[b] ? (
+                  <div key={b} className={BAND_STYLE[b].bar} style={{ width: `${(est.counts[b] / estCompared) * 100}%` }} />
+                ) : null
+              )}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+              {(["under", "on", "over"] as Band[]).map((b) => (
+                <span key={b} className="flex items-center gap-1.5">
+                  <span className={`h-2 w-2 rounded-full ${BAND_STYLE[b].bar}`} />
+                  {BAND_STYLE[b].label}: <b className="text-slate-700 dark:text-slate-200">{est.counts[b]}</b>
+                </span>
+              ))}
+              {est.untracked > 0 && <span>· {est.untracked} with no time logged</span>}
+            </div>
+
+            {teamWide && est.byPerson.length > 0 && (
+              <div className="mt-5 overflow-x-auto">
+                <table className="w-full min-w-[520px]">
+                  <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50">
+                    <tr>
+                      <th className="th">Person</th>
+                      <th className="th">Tasks</th>
+                      <th className="th">Estimated</th>
+                      <th className="th">Actual</th>
+                      <th className="th">Accuracy</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                    {est.byPerson.map((p) => (
+                      <tr key={p.assigneeId}>
+                        <td className="td font-medium">{userName.get(p.assigneeId) ?? "—"}</td>
+                        <td className="td">{p.tasks}</td>
+                        <td className="td">{fmtHours(p.estimate)}</td>
+                        <td className="td">{fmtHours(p.actual)}</td>
+                        <td className="td">
+                          <span className={`badge ${BAND_STYLE[p.band].cls}`}>
+                            {Math.round(p.ratio * 100)}% · {BAND_STYLE[p.band].label}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+
+        {overNow.length > 0 && (
+          <div className="mt-6 border-t border-slate-100 pt-4 dark:border-slate-700">
+            <h3 className="mb-3 text-sm font-semibold">⚠️ Open tasks already over their estimate</h3>
+            <ul className="space-y-2.5">
+              {overNow.map((t) => (
+                <li key={t.id} className="flex flex-wrap items-center gap-3">
+                  <Link href={`/tasks/${t.id}`} className="min-w-0 flex-1 truncate text-sm font-medium hover:text-sky-700">
+                    {t.title}
+                    {t.assigneeId ? <span className="ml-2 text-xs font-normal text-slate-400">{userName.get(t.assigneeId)}</span> : null}
+                  </Link>
+                  <div
+                    className="flex h-1.5 w-32 overflow-hidden rounded-full bg-red-500"
+                    title="Grey = estimate, red = time over the estimate"
+                  >
+                    <div className="h-full bg-slate-400" style={{ width: `${Math.round(100 / t.ratio)}%` }} />
+                  </div>
+                  <span className="w-40 text-right text-xs text-slate-500">
+                    {fmtHours(t.actual)} of {fmtHours(t.estimate)} ·{" "}
+                    <b className="text-red-600">+{Math.round((t.ratio - 1) * 100)}%</b>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       <div className="card overflow-x-auto">

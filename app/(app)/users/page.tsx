@@ -7,7 +7,8 @@ import {
   resetUserPassword,
   toggleUserActive,
 } from "@/lib/actions/users";
-import { ROLES, lookup, fmtDate, isOnline, lastSeenLabel } from "@/lib/ui";
+import { ROLES, lookup, fmtDate, lastSeenLabel } from "@/lib/ui";
+import { PRESENCE, presenceLabel, resolvePresence } from "@/lib/presence";
 import PasswordField from "@/components/PasswordField";
 import BulkUserImport from "@/components/BulkUserImport";
 import DeleteUserButton from "@/components/DeleteUserButton";
@@ -266,12 +267,8 @@ export default async function UsersPage({
                         </span>
                         {u.active && (
                           <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-500">
-                            <span
-                              className={`h-2 w-2 rounded-full ${
-                                isOnline(u.lastSeenAt) ? "bg-green-500" : "bg-slate-300 dark:bg-slate-600"
-                              }`}
-                            />
-                            {lastSeenLabel(u.lastSeenAt)}
+                            <span className={`h-2 w-2 rounded-full ${PRESENCE[resolvePresence(u).key].dot}`} />
+                            {resolvePresence(u).key === "OFFLINE" ? lastSeenLabel(u.lastSeenAt) : presenceLabel(u)}
                           </div>
                         )}
                       </td>

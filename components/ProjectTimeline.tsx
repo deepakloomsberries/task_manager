@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { taskHref } from "@/lib/backLink";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { rescheduleTask } from "@/lib/actions/tasks";
 import { lookup, TASK_STATUSES, fmtDate } from "@/lib/ui";
@@ -34,7 +35,9 @@ export default function ProjectTimeline({
   blockersByTask,
   projectStart,
   canReschedule = false,
+  back,
 }: {
+  back?: string;
   tasks: TLTask[];
   blockersByTask: Record<number, { title: string; status: string }[]>;
   projectStart: Date | string;
@@ -135,7 +138,7 @@ export default function ProjectTimeline({
             return (
               <div key={t.id} className="flex items-center gap-2">
                 <Link
-                  href={`/tasks/${t.id}`}
+                  href={back ? taskHref(t.id, back) : `/tasks/${t.id}`}
                   className="shrink-0 truncate text-xs font-medium hover:text-sky-700"
                   style={{ width: "12rem" }}
                   title={t.title}
@@ -148,6 +151,8 @@ export default function ProjectTimeline({
                     <div
                       className="absolute top-0 z-0 h-full border-l border-dashed border-rose-400/70"
                       style={{ left: `${todayLeft}%` }}
+                      // "Now" moves a hair between server render and hydration.
+                      suppressHydrationWarning
                       title="Today"
                     />
                   )}

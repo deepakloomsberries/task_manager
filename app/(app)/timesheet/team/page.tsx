@@ -5,9 +5,10 @@ import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import RangePicker from "@/components/RangePicker";
 import UserAvatar from "@/components/UserAvatar";
 import { approveTimesheet, rejectTimesheet, approveAllTimesheets } from "@/lib/actions/time";
-import { fmtDate, fmtHours, toInputDate } from "@/lib/ui";
+import { fmtDate, fmtDateTime, fmtHours, toInputDate } from "@/lib/ui";
 import { rangeBounds } from "@/lib/timerange";
 import AutoRefresh from "@/components/AutoRefresh";
+import { describeChange } from "@/lib/timeAudit";
 
 export const dynamic = "force-dynamic";
 
@@ -85,6 +86,23 @@ export default async function TeamTimesheetPage({
   }
   const projectRows = Array.from(byProject.entries()).sort((a, b) => b[1] - a[1]);
   const selectedTotal = selectedEntries.reduce((s, e) => s + e.hours, 0);
+
+  // Change history for the selected person's time entries in this window.
+  const audits = selectedId
+    ? await db.timeEntryAudit.findMany({
+        where: { ownerId: selectedId, createdAt: { gte: from, lte: to } },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      })
+    : [];
+  const actorName = new Map(users.map((u) => [u.id, u.name]));
+  const ACTION_LABEL: Record<string, string> = {
+    create: "Added",
+    update: "Edited",
+    delete: "Deleted",
+    timer: "Timer logged",
+    auto_stop: "Timer auto-stopped",
+  };
 
   return (
     <div className="space-y-4">
@@ -195,7 +213,7 @@ export default async function TeamTimesheetPage({
                 <tr key={r.user.id} className={`hover:bg-slate-50 ${r.hours === 0 ? "opacity-60" : ""}`}>
                   <td className="td">
                     <div className="flex items-center gap-2">
-                      <UserAvatar user={r.user} size={28} presence={r.user.lastSeenAt} />
+                      <UserAvatar user={r.user} size={28} presence={r.user} />
                       <span className="font-medium">{r.user.name}</span>
                     </div>
                   </td>
@@ -235,7 +253,7 @@ export default async function TeamTimesheetPage({
         <div className="card p-6">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <UserAvatar user={selected} size={36} presence={selected.lastSeenAt} />
+              <UserAvatar user={selected} size={36} presence={selected} />
               <div>
                 <h2 className="font-semibold leading-tight">{selected.name}</h2>
                 <p className="text-xs text-slate-500">
@@ -304,6 +322,28 @@ export default async function TeamTimesheetPage({
                 ))}
               </tbody>
             </table>
+          </div>
+
+          <div className="mt-6">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Change history
+            </div>
+            {audits.length === 0 ? (
+              <p className="text-sm text-slate-400">No changes recorded in this window.</p>
+            ) : (
+              <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-700">
+                {audits.map((a) => (
+                  <li key={a.id} className="flex flex-wrap items-baseline gap-x-2 py-2">
+                    <span className="font-medium">{ACTION_LABEL[a.action] ?? a.action}</span>
+                    <span className="text-slate-600 dark:text-slate-300">{describeChange(a.before, a.after)}</span>
+                    <span className="ml-auto text-xs text-slate-400">
+                      {a.actorId ? actorName.get(a.actorId) ?? "Former user" : "System"} ·{" "}
+                      {fmtDateTime(a.createdAt)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       )}

@@ -16,6 +16,14 @@ export function advanceDate(date: Date, recurrence: string) {
   const d = new Date(date);
   if (recurrence === "DAILY") d.setDate(d.getDate() + 1);
   else if (recurrence === "WEEKLY") d.setDate(d.getDate() + 7);
-  else if (recurrence === "MONTHLY") d.setMonth(d.getMonth() + 1);
+  else if (recurrence === "MONTHLY") {
+    // Clamp to the last day of the next month so e.g. 31 Jan → 28/29 Feb
+    // instead of overflowing into March.
+    const day = d.getDate();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + 1);
+    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    d.setDate(Math.min(day, lastDay));
+  }
   return d;
 }

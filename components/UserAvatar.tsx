@@ -1,12 +1,14 @@
-import { initials, avatarColor, isOnline } from "@/lib/ui";
+import { initials, avatarColor } from "@/lib/ui";
+import { PRESENCE, presenceLabel, resolvePresence, type PresenceInput } from "@/lib/presence";
 
 /**
  * Shows a user's uploaded photo when they have one, otherwise a coloured
  * initials badge. Used everywhere people are represented so avatars stay
  * consistent across the app.
  *
- * Pass `presence` (the user's lastSeenAt) to overlay a live online/offline dot
- * in the corner, the way chat apps show who is currently around.
+ * Pass `presence` to overlay a Teams-style status dot in the corner: either the
+ * user row itself (lastSeenAt + chosen status, see lib/presence) or just a
+ * lastSeenAt date.
  */
 export default function UserAvatar({
   user,
@@ -17,12 +19,14 @@ export default function UserAvatar({
   user: { id: number; name: string; avatarPath?: string | null };
   size?: number;
   className?: string;
-  presence?: Date | string | null;
+  presence?: Date | string | null | PresenceInput;
 }) {
   const dimension = { width: size, height: size };
   const fontSize = Math.max(10, Math.round(size * 0.38));
   const showDot = presence !== undefined;
-  const online = isOnline(presence);
+  const input: PresenceInput =
+    presence && typeof presence === "object" && !(presence instanceof Date) ? presence : { lastSeenAt: presence ?? null };
+  const status = resolvePresence(input);
   const dotSize = Math.max(8, Math.round(size * 0.28));
 
   const inner = user.avatarPath ? (
@@ -49,12 +53,12 @@ export default function UserAvatar({
     <span className="relative inline-flex shrink-0" style={dimension}>
       {inner}
       <span
-        title={online ? "Active now" : "Offline"}
+        title={presenceLabel(input)}
         style={{ width: dotSize, height: dotSize }}
-        className={`absolute bottom-0 right-0 rounded-full ring-2 ring-white dark:ring-slate-800 ${
-          online ? "bg-green-500" : "bg-slate-300 dark:bg-slate-600"
-        }`}
-      />
+        className={`absolute bottom-0 right-0 flex items-center justify-center rounded-full ring-2 ring-white dark:ring-slate-800 ${PRESENCE[status.key].dot}`}
+      >
+        {status.key === "DND" && <span className="h-[2px] w-1/2 rounded bg-white" />}
+      </span>
     </span>
   );
 }

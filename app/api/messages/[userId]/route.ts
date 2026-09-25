@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { isTyping } from "@/lib/typing";
+import { PRESENCE_SELECT } from "@/lib/presence";
 
 /**
  * Polling endpoint that powers the live chat thread. Returns any messages newer
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
       orderBy: { id: "desc" },
       select: { id: true },
     }),
-    db.user.findUnique({ where: { id: otherId }, select: { lastSeenAt: true } }),
+    db.user.findUnique({ where: { id: otherId }, select: PRESENCE_SELECT }),
     // Messages deleted recently, so already-loaded bubbles can flip to tombstones live.
     db.directMessage.findMany({
       where: { deletedAt: { gte: recentlyDeletedSince }, ...conversationWhere },
@@ -79,7 +80,7 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
     // the same way deletedIds patches an already-loaded bubble.
     db.directMessage.findMany({
       where: { translatedAt: { gte: recentlyTranslatedSince }, ...conversationWhere },
-      select: { id: true, translatedBody: true, translatedLang: true },
+      select: { id: true, translatedBody: true, translatedLang: true, translationFailed: true },
     }),
   ]);
   const myStarredIds = new Set(starRows.map((s) => s.messageId));
@@ -105,6 +106,7 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
         body: isDeleted ? "" : m.body,
         translatedBody: isDeleted ? null : m.translatedBody,
         translatedLang: isDeleted ? null : m.translatedLang,
+        translationFailed: isDeleted ? false : m.translationFailed,
         senderId: m.senderId,
         createdAt: m.createdAt.toISOString(),
         deleted: isDeleted,
@@ -133,7 +135,7 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
     myStarredIds: Array.from(myStarredIds),
     translationUpdates: translated,
     lastReadMyId: lastRead?.id ?? 0,
-    partnerLastSeenAt: partner?.lastSeenAt ? partner.lastSeenAt.toISOString() : null,
+    partnerPresence: partner ?? null,
     partnerTyping: isTyping(otherId, meId),
     deletedIds: deleted.map((d) => d.id),
   });

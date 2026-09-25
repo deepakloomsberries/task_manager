@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
 
 /**
  * Catches any otherwise-uncaught error thrown while rendering a page (the
@@ -19,6 +20,7 @@ export default function ErrorBoundary({
 }) {
   useEffect(() => {
     console.error("Unhandled render error:", error);
+    Sentry.captureException(error);
   }, [error]);
 
   return (

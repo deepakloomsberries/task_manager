@@ -1,4 +1,10 @@
+import ClientPanel from "./ClientPanel";
 import Link from "next/link";
+import { googleCalendarLink } from "@/lib/ics";
+import { companyTimezone } from "@/lib/tz";
+import { fmtRange, leaveType, todayIn, ymd } from "@/lib/leave";
+import { leaveBetween } from "@/lib/leaveData";
+import { backLabel, safeBack } from "@/lib/backLink";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
@@ -90,13 +96,24 @@ export default async function TaskDetailPage({
   // Where "Back to tasks" returns to — the filtered list/board the user came
   // from, when passed along; otherwise the plain tasks page. Only accept
   // internal /tasks URLs so `back` can't be used to redirect off-site.
-  const backTo = searchParams.back && searchParams.back.startsWith("/tasks") ? searchParams.back : "/tasks";
+  const backTo = safeBack(searchParams.back, "/tasks");
+  // For an action that should leave you right where you are — commenting,
+  // tagging, watching, adding a collaborator/dependency, saving an edit —
+  // redirect back to this same task, carrying `backTo` forward as its own
+  // `back` query param so the task's "Back to tasks" link (and any further
+  // action here) still remembers the filtered list you originally came
+  // from. Passing `backTo` itself as the form's `back` field would instead
+  // redirect straight to that list, which is only correct for an action
+  // that actually removes the task from view (delete) or navigates to a
+  // different task (duplicate) — see deleteAttachment's form below for the
+  // same pattern already in place.
+  const selfBack = `/tasks/${id}?back=${encodeURIComponent(backTo)}`;
 
   const [task, users, projects, activeTimer, loggedAgg, timeLogs, allTasks, taskTimers] = await Promise.all([
     db.task.findUnique({
       where: { id },
       include: {
-        project: true,
+        project: { include: { client: { select: { name: true } } } },
         assignee: true,
         createdBy: true,
         comments: { include: { author: true }, orderBy: { createdAt: "asc" } },
@@ -219,6 +236,15 @@ export default async function TaskDetailPage({
   // is flagged review-required — they must send it to Review for the owner.
   const canCompleteDone = canEdit || (!user.requiresApproval && !task.reviewRequired);
   const editing = searchParams.edit === "1" && canEdit;
+
+  // Is the assignee away now, or before this is due? Worth knowing before
+  // chasing them or piling more on.
+  const todayLocal = todayIn(companyTimezone(user.company));
+  const dueDay = task.dueDate ? ymd(task.dueDate) : todayLocal;
+  const assigneeLeave =
+    task.assignee && task.status !== "DONE"
+      ? (await leaveBetween(todayLocal, dueDay > todayLocal ? dueDay : todayLocal, { userIds: [task.assignee.id] }))[0] ?? null
+      : null;
   const taskCode = `TM-${task.id}`;
 
   // A quiet floating toast after a one-click status change.
@@ -251,7 +277,15 @@ export default async function TaskDetailPage({
                       ? { text: "This task can't be marked Done yet — finish all of its subtasks first.", error: true }
                       : searchParams.error === "badlink"
                         ? { text: "That doesn't look like a valid link — it should start with http:// or https://.", error: true }
-                        : null;
+                        : searchParams.ok === "client-shared"
+                          ? { text: "Shared with the client — it now shows in their portal.", error: false }
+                          : searchParams.ok === "client-hidden"
+                            ? { text: "Hidden from the client.", error: false }
+                            : searchParams.ok === "client-reply"
+                              ? { text: "Sent — the client has been emailed.", error: false }
+                              : searchParams.error === "client"
+                                ? { text: "Share the task with the client before messaging them.", error: true }
+                                : null;
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
@@ -270,8 +304,25 @@ export default async function TaskDetailPage({
         prefetch={false}
         className="text-sm text-slate-500 hover:underline"
       >
-        ← {task.parent ? `Back to "${task.parent.title}"` : "Back to tasks"}
+        ← {task.parent ? `Back to "${task.parent.title}"` : backLabel(backTo, task.project?.name)}
       </Link>
+
+      {assigneeLeave && task.assignee && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+          {leaveType(assigneeLeave.type).emoji}{" "}
+          {ymd(assigneeLeave.startDate) <= todayLocal ? (
+            <>
+              <b>{task.assignee.name}</b> is on leave today{assigneeLeave.halfDay ? " (half day)" : ""} — back after{" "}
+              {fmtRange(assigneeLeave.endDate, assigneeLeave.endDate)}.
+            </>
+          ) : (
+            <>
+              <b>{task.assignee.name}</b> will be on leave {fmtRange(assigneeLeave.startDate, assigneeLeave.endDate)}
+              {task.dueDate ? ", before this task is due" : ""}.
+            </>
+          )}
+        </div>
+      )}
 
       {banner && (
         <div
@@ -323,7 +374,7 @@ export default async function TaskDetailPage({
                         <form action={removeTagFromTask} className="ml-1 inline">
                           <input type="hidden" name="taskId" value={task.id} />
                           <input type="hidden" name="tagId" value={tag.id} />
-                          <input type="hidden" name="back" value={backTo} />
+                          <input type="hidden" name="back" value={selfBack} />
                           <button type="submit" title="Remove tag" className="opacity-50 hover:opacity-100">
                             ✕
                           </button>
@@ -341,7 +392,7 @@ export default async function TaskDetailPage({
                         className="absolute left-0 top-7 z-10 flex w-64 gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-lg"
                       >
                         <input type="hidden" name="taskId" value={task.id} />
-                        <input type="hidden" name="back" value={backTo} />
+                        <input type="hidden" name="back" value={selfBack} />
                         <input name="name" required maxLength={30} placeholder="Tag name" className="input !py-1.5" />
                         <select name="color" className="input w-24 !py-1.5">
                           {TAG_COLORS.map((c) => (
@@ -365,7 +416,7 @@ export default async function TaskDetailPage({
                   return (
                     <form action={isWatching ? unwatchTask : watchTask}>
                       <input type="hidden" name="taskId" value={task.id} />
-                      <input type="hidden" name="back" value={backTo} />
+                      <input type="hidden" name="back" value={selfBack} />
                       <button
                         type="submit"
                         title={isWatching ? "Stop following this task" : "Get notified of status changes and comments"}
@@ -381,7 +432,7 @@ export default async function TaskDetailPage({
                 {task.createdById === user.id && task.assignee && (
                   <form action={sendTaskReminder}>
                     <input type="hidden" name="id" value={task.id} />
-                    <input type="hidden" name="back" value={backTo} />
+                    <input type="hidden" name="back" value={selfBack} />
                     <button
                       type="submit"
                       className="btn-secondary"
@@ -465,6 +516,21 @@ export default async function TaskDetailPage({
                 <dt className="text-xs text-slate-500">Due date</dt>
                 <dd className="mt-0.5 font-medium">
                   {fmtDate(task.dueDate)}
+                  {task.dueDate && task.status !== "DONE" && (
+                    <a
+                      href={googleCalendarLink({
+                        title: `TM-${task.id} · ${task.title}`,
+                        day: toInputDate(task.dueDate),
+                        details: `${process.env.APP_URL ?? ""}/tasks/${task.id}`,
+                      })}
+                      target="_blank"
+                      rel="noopener"
+                      className="mt-0.5 block text-xs font-normal text-sky-700 hover:underline dark:text-sky-400"
+                      title="Add this due date to your Google Calendar"
+                    >
+                      ＋ Google Calendar
+                    </a>
+                  )}
                 </dd>
               </div>
               <div>
@@ -492,7 +558,7 @@ export default async function TaskDetailPage({
                 {task.assignee && (
                   <span className="flex items-center gap-1.5 rounded-full bg-slate-100 px-2 py-1 text-xs">
                     <Link href={`/people/${task.assignee.id}`} className="flex items-center gap-1.5 hover:underline">
-                      <UserAvatar user={task.assignee} size={20} presence={task.assignee.lastSeenAt} />
+                      <UserAvatar user={task.assignee} size={20} presence={task.assignee} />
                       {task.assignee.name}
                     </Link>
                     <span className="text-slate-400">· assignee</span>
@@ -501,14 +567,14 @@ export default async function TaskDetailPage({
                 {task.collaborators.map((c) => (
                   <span key={c.userId} className="flex items-center gap-1.5 rounded-full bg-sky-50 px-2 py-1 text-xs ring-1 ring-sky-100">
                     <Link href={`/people/${c.userId}`} className="flex items-center gap-1.5 hover:underline">
-                      <UserAvatar user={c.user} size={20} presence={c.user.lastSeenAt} />
+                      <UserAvatar user={c.user} size={20} presence={c.user} />
                       {c.user.name}
                     </Link>
                     {(canManageCollab || c.userId === user.id) && (
                       <form action={removeTaskCollaborator} className="inline">
                         <input type="hidden" name="taskId" value={task.id} />
                         <input type="hidden" name="userId" value={c.userId} />
-                        <input type="hidden" name="back" value={backTo} />
+                        <input type="hidden" name="back" value={selfBack} />
                         <ConfirmButton
                           message={`Remove ${c.user.name} from this task?`}
                           title="Remove collaborator"
@@ -527,7 +593,7 @@ export default async function TaskDetailPage({
               {canManageCollab && (
                 <form action={addTaskCollaborator} className="mt-2 flex items-center gap-2">
                   <input type="hidden" name="taskId" value={task.id} />
-                  <input type="hidden" name="back" value={backTo} />
+                  <input type="hidden" name="back" value={selfBack} />
                   <SearchSelect
                     name="userId"
                     required
@@ -604,7 +670,7 @@ export default async function TaskDetailPage({
                       <form key={s.value} action={setTaskStatus}>
                         <input type="hidden" name="id" value={task.id} />
                         <input type="hidden" name="status" value={s.value} />
-                        <input type="hidden" name="back" value={backTo} />
+                        <input type="hidden" name="back" value={selfBack} />
                         {isRevert ? (
                           <ConfirmButton
                             tone="primary"
@@ -635,7 +701,7 @@ export default async function TaskDetailPage({
         ) : (
           <form action={updateTask} className="grid gap-4 md:grid-cols-2">
             <input type="hidden" name="id" value={task.id} />
-            <input type="hidden" name="back" value={backTo} />
+            <input type="hidden" name="back" value={selfBack} />
             <div className="md:col-span-2">
               <label className="label">Title *</label>
               <input name="title" required defaultValue={task.title} className="input" />
@@ -868,7 +934,7 @@ export default async function TaskDetailPage({
                       <form action={removeTaskDependency}>
                         <input type="hidden" name="taskId" value={task.id} />
                         <input type="hidden" name="blockerId" value={b.id} />
-                        <input type="hidden" name="back" value={backTo} />
+                        <input type="hidden" name="back" value={selfBack} />
                         <button type="submit" title="Remove blocker" className="text-slate-400 hover:text-red-600">
                           ✕
                         </button>
@@ -883,7 +949,7 @@ export default async function TaskDetailPage({
           {canEdit && dependencyOptions.length > 0 && (
             <form action={addTaskDependency} className="mb-5 flex flex-col gap-2 sm:flex-row">
               <input type="hidden" name="taskId" value={task.id} />
-              <input type="hidden" name="back" value={backTo} />
+              <input type="hidden" name="back" value={selfBack} />
               <SearchSelect
                 name="blockerId"
                 required
@@ -950,7 +1016,7 @@ export default async function TaskDetailPage({
                 <form action={setTaskStatus}>
                   <input type="hidden" name="id" value={s.id} />
                   <input type="hidden" name="status" value={s.status === "DONE" ? "TODO" : "DONE"} />
-                  <input type="hidden" name="back" value={`/tasks/${task.id}?back=${encodeURIComponent(backTo)}`} />
+                  <input type="hidden" name="back" value={selfBack} />
                   <button
                     type="submit"
                     title={s.status === "DONE" ? "Mark as not done" : "Mark as done"}
@@ -986,7 +1052,7 @@ export default async function TaskDetailPage({
               className="mt-3 flex flex-col gap-2 sm:flex-row"
             >
               <input type="hidden" name="parentId" value={task.id} />
-              <input type="hidden" name="back" value={backTo} />
+              <input type="hidden" name="back" value={selfBack} />
               <input name="title" required placeholder="Add a subtask…" className="input flex-1" />
               <SearchSelect
                 name="assigneeId"
@@ -1046,11 +1112,7 @@ export default async function TaskDetailPage({
               {(a.uploadedById === user.id || user.role === "ADMIN") && (
                 <form action={deleteAttachment}>
                   <input type="hidden" name="id" value={a.id} />
-                  <input
-                    type="hidden"
-                    name="back"
-                    value={`/tasks/${task.id}?back=${encodeURIComponent(backTo)}`}
-                  />
+                  <input type="hidden" name="back" value={selfBack} />
                   <ConfirmButton
                     message={`Delete "${a.originalName}"? This can't be undone.`}
                     className="text-xs text-red-600 hover:underline"
@@ -1070,6 +1132,10 @@ export default async function TaskDetailPage({
           <PasteAttachment taskId={task.id} />
         </div>
       </div>
+
+      {task.project?.client && (
+        <ClientPanel task={task} client={task.project.client} canShare={canEdit} backTo={backTo} />
+      )}
 
       <div className="card p-6">
         <h2 className="mb-4 font-semibold">
@@ -1091,7 +1157,7 @@ export default async function TaskDetailPage({
                     {(c.authorId === user.id || user.role === "ADMIN") && (
                       <form action={deleteComment} className="inline">
                         <input type="hidden" name="id" value={c.id} />
-                        <input type="hidden" name="back" value={backTo} />
+                        <input type="hidden" name="back" value={selfBack} />
                         <ConfirmButton message="Delete this comment?" className="text-xs text-slate-400 hover:text-red-600">
                           ✕
                         </ConfirmButton>
@@ -1109,7 +1175,7 @@ export default async function TaskDetailPage({
         </div>
         <form action={addComment} key={task.comments.length} className="mt-5 flex gap-3">
           <input type="hidden" name="taskId" value={task.id} />
-          <input type="hidden" name="back" value={backTo} />
+          <input type="hidden" name="back" value={selfBack} />
           <MentionTextarea
             name="body"
             users={users}
