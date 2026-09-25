@@ -1,4 +1,5 @@
 import ClientPanel from "./ClientPanel";
+import { setAttachmentClientVisible } from "@/lib/actions/clients";
 import Link from "next/link";
 import { googleCalendarLink } from "@/lib/ics";
 import { companyTimezone } from "@/lib/tz";
@@ -118,7 +119,7 @@ export default async function TaskDetailPage({
         createdBy: true,
         comments: { include: { author: true }, orderBy: { createdAt: "asc" } },
         collaborators: { include: { user: true }, orderBy: { addedAt: "asc" } },
-        attachments: { include: { uploadedBy: true }, orderBy: { createdAt: "desc" } },
+        attachments: { include: { uploadedBy: true, clientContact: { select: { name: true } } }, orderBy: { createdAt: "desc" } },
         parent: true,
         subtasks: {
           where: { deletedAt: null },
@@ -283,9 +284,15 @@ export default async function TaskDetailPage({
                             ? { text: "Hidden from the client.", error: false }
                             : searchParams.ok === "client-reply"
                               ? { text: "Sent — the client has been emailed.", error: false }
-                              : searchParams.error === "client"
+                              : searchParams.ok === "file-shared"
+                                ? { text: "File shared — the client can now see and download it.", error: false }
+                                : searchParams.ok === "file-hidden"
+                                  ? { text: "File hidden from the client.", error: false }
+                                  : searchParams.error === "client"
                                 ? { text: "Share the task with the client before messaging them.", error: true }
                                 : null;
+
+  const clientName = task.project?.client?.name ?? null;
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
@@ -1074,7 +1081,7 @@ export default async function TaskDetailPage({
         </div>
       )}
 
-      <div className="card p-6">
+      <div id="files" className="card scroll-mt-20 p-6">
         <h2 className="mb-4 font-semibold">
           Attachments{" "}
           <span className="text-sm font-normal text-slate-400">({task.attachments.length})</span>
@@ -1098,9 +1105,39 @@ export default async function TaskDetailPage({
                   {a.originalName}
                 </a>
                 <div className="text-xs text-slate-400">
-                  {isLink ? "External link" : fmtSize(a.size)} · {a.uploadedBy.name} · {fmtDateTime(a.createdAt)}
+                  {isLink ? "External link" : fmtSize(a.size)} ·{" "}
+                  {a.uploadedBy ? (
+                    a.uploadedBy.name
+                  ) : (
+                    <span className="font-medium text-violet-600">From {a.clientContact?.name ?? "the client"} (client)</span>
+                  )}{" "}
+                  · {fmtDateTime(a.createdAt)}
                 </div>
               </div>
+              {clientName && task.clientVisible && (
+                a.clientContactId ? (
+                  <span className="badge bg-violet-100 text-violet-700" title="Uploaded by the client">
+                    Client file
+                  </span>
+                ) : (
+                  <form action={setAttachmentClientVisible}>
+                    <input type="hidden" name="id" value={a.id} />
+                    <input type="hidden" name="visible" value={a.clientVisible ? "0" : "1"} />
+                    <input type="hidden" name="back" value={backTo} />
+                    <button
+                      type="submit"
+                      title={a.clientVisible ? `Visible to ${clientName} — click to hide` : `Only your team sees this — click to share with ${clientName}`}
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        a.clientVisible
+                          ? "bg-violet-100 text-violet-700 hover:bg-violet-200"
+                          : "bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300"
+                      }`}
+                    >
+                      {a.clientVisible ? "👁 Client sees" : "Internal"}
+                    </button>
+                  </form>
+                )
+              )}
               {!isLink && (
                 <a
                   href={`/api/files/${a.id}?download=1`}
@@ -1109,7 +1146,7 @@ export default async function TaskDetailPage({
                   Download
                 </a>
               )}
-              {(a.uploadedById === user.id || user.role === "ADMIN") && (
+              {(a.uploadedById === user.id || user.role === "ADMIN" || (a.clientContactId && canEdit)) && (
                 <form action={deleteAttachment}>
                   <input type="hidden" name="id" value={a.id} />
                   <input type="hidden" name="back" value={selfBack} />

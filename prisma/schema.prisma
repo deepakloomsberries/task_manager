@@ -464,8 +464,14 @@ model Attachment {
   noteId              Int?
   groupMessage        GroupMessage?      @relation(fields: [groupMessageId], references: [id], onDelete: Cascade)
   groupMessageId      Int?
-  uploadedBy          User               @relation(fields: [uploadedById], references: [id])
-  uploadedById        Int
+  /// Staff uploader — null when a client uploaded it through the portal.
+  uploadedBy          User?              @relation(fields: [uploadedById], references: [id])
+  uploadedById        Int?
+  /// Set when a client contact uploaded it in the portal.
+  clientContact       ClientContact?     @relation(fields: [clientContactId], references: [id], onDelete: SetNull)
+  clientContactId     Int?
+  /// Shown to the client in the portal (their own uploads always are).
+  clientVisible       Boolean            @default(false)
   createdAt           DateTime           @default(now())
 
   @@index([messageId])
@@ -765,6 +771,7 @@ model ClientContact {
   lastSeenAt         DateTime?
   createdAt          DateTime        @default(now())
   comments           ClientComment[]
+  uploads            Attachment[]
 }
 
 /**

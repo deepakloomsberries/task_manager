@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { clientTask, createClientSession, destroyClientSession, requireClient } from "@/lib/clientAuth";
 import { isStrongPassword } from "@/lib/password";
 import { pushNotification } from "@/lib/notify";
+import { MAX_FILE_SIZE, saveUpload } from "@/lib/storage";
 import { LIMITS, clientIp, hit, isLimited, reset as clearLimit } from "@/lib/rateLimit";
 
 // bcrypt hash of a random string, compared against when the email is unknown.
@@ -102,4 +103,60 @@ export async function clientSignOff(formData: FormData) {
   }
   revalidatePath(`/portal/tasks/${taskId}`);
   redirect(`/portal/tasks/${taskId}?ok=${approve ? "approved" : "changes"}`);
+}
+
+/**
+ * The client adds a file (tech pack, sample photos, comments…) or a link to a
+ * big file (WeTransfer, Drive) on a shared task. The team is notified.
+ */
+export async function clientUpload(formData: FormData) {
+  const contact = await requireClient();
+  const taskId = Number(formData.get("taskId"));
+  const task = await clientTask(contact.clientId, taskId);
+  if (!task) redirect("/portal");
+  const back = (q: string) => redirect(`/portal/tasks/${taskId}?${q}#files`);
+
+  const file = formData.get("file");
+  const link = String(formData.get("link") ?? "").trim();
+  const note = String(formData.get("note") ?? "").trim().slice(0, 1000);
+  let name: string;
+
+  if (file instanceof File && file.size > 0) {
+    if (file.size > MAX_FILE_SIZE) back("error=too-big");
+    const saved = await saveUpload(file as File);
+    await db.attachment.create({ data: { ...saved, taskId, clientContactId: contact.id, clientVisible: true } });
+    name = saved.originalName;
+  } else if (link) {
+    let url: URL;
+    try {
+      url = new URL(link);
+    } catch {
+      return back("error=link");
+    }
+    if (url.protocol !== "https:" && url.protocol !== "http:") back("error=link");
+    name = url.hostname.replace(/^www\./, "") + (url.pathname.length > 1 ? url.pathname.slice(0, 60) : "");
+    await db.attachment.create({
+      data: {
+        taskId,
+        clientContactId: contact.id,
+        clientVisible: true,
+        originalName: name,
+        mimeType: "text/uri-list",
+        size: 0,
+        externalUrl: url.toString(),
+      },
+    });
+  } else {
+    return back("error=nofile");
+  }
+
+  await db.clientComment.create({
+    data: { taskId, contactId: contact.id, body: `📎 Added ${name}${note ? `\n${note}` : ""}` },
+  });
+  for (const id of await taskPeople(task)) {
+    await pushNotification(id, `📎 ${contact.name} (${contact.client.name}) added a file to: ${task.title}`, `/tasks/${taskId}#files`);
+  }
+  revalidatePath(`/portal/tasks/${taskId}`);
+  revalidatePath(`/tasks/${taskId}`);
+  back("ok=uploaded");
 }

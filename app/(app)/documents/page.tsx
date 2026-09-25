@@ -27,7 +27,7 @@ export default async function DocumentsPage({
     // visible to everyone — unlike an arbitrary group can be.
     where: { messageId: null, groupMessageId: null },
     orderBy: { createdAt: "desc" },
-    include: { uploadedBy: true, task: true },
+    include: { uploadedBy: true, clientContact: { select: { name: true } }, task: true },
   });
 
   const error = searchParams.error ? ERRORS[searchParams.error] : null;
@@ -40,7 +40,7 @@ export default async function DocumentsPage({
     externalUrl: a.externalUrl,
     sizeLabel: fmtSize(a.size),
     dateLabel: fmtDateTime(a.createdAt),
-    uploadedByName: a.uploadedBy.name,
+    uploadedByName: a.uploadedBy?.name ?? `${a.clientContact?.name ?? "Client"} (client)`,
     taskId: a.task?.id ?? null,
     taskTitle: a.task?.title ?? null,
     canDelete: a.uploadedById === user.id || user.role === "ADMIN",

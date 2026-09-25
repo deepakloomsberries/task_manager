@@ -65,7 +65,13 @@ export async function deleteAttachment(formData: FormData) {
     attachment.taskId && typeof backField === "string" && backField.startsWith("/tasks")
       ? backField
       : fallback;
-  if (attachment.uploadedById !== user.id && user.role !== "ADMIN") redirect(back);
+  // A client's upload has no staff uploader: managers and the task owner may remove it.
+  let clientFileManager = false;
+  if (attachment.clientContactId && attachment.taskId) {
+    const task = await db.task.findUnique({ where: { id: attachment.taskId }, select: { createdById: true } });
+    clientFileManager = user.role === "MANAGER" || task?.createdById === user.id;
+  }
+  if (attachment.uploadedById !== user.id && user.role !== "ADMIN" && !clientFileManager) redirect(back);
 
   await db.attachment.delete({ where: { id } });
   await deleteUpload(attachment.storedName);

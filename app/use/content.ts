@@ -711,6 +711,8 @@ export const CATEGORIES: Category[] = [
           { spot: "reply", title: "Reply", body: "Your reply is emailed to the client's people.", side: "top" },
         ],
         tips: [
+          "Files stay internal until you share them: in Attachments, click “Internal” on a file to make it “👁 Client sees” (click again to hide).",
+          "Files the client uploads show as “Client file” with their name — you're notified, and managers or the task owner can delete them.",
           "When a shared task is marked Done, the client is emailed to approve it.",
           "The client's sign-off (✅ Approved or ✏️ Changes requested) shows on the task, and the task owner and assignee are notified.",
           "Shared tasks have a 👁 next to their title on the project page.",
@@ -720,7 +722,7 @@ export const CATEGORIES: Category[] = [
         id: "client-portal",
         title: "What the client sees",
         audience: "Everyone",
-        summary: "A simple, separate site: their projects with progress, the shared steps, files to download, and approve / request changes.",
+        summary: "A simple, separate site: their projects with progress, the shared steps, the files you shared, uploading their own files, and approve / request changes.",
         shot: "portal",
         callouts: [
           { spot: "waiting", title: "Waiting for your approval", body: "Finished steps they haven't signed off yet.", side: "bottom" },
@@ -729,6 +731,7 @@ export const CATEGORIES: Category[] = [
         tips: [
           "In Review shows to clients as “Final checks” — they're asked to approve only once the task is Done.",
           "Asking for changes needs a comment, so the team knows what to fix.",
+          "Clients can add files (up to 50 MB) or a WeTransfer / Google Drive link for bigger ones, with a note — e.g. an updated tech pack or sample photos.",
         ],
       },
     ],
@@ -946,6 +949,7 @@ export const FAQS: { q: string; a: string }[] = [
 
 /** Newest first. `link` is an article id. */
 export const WHATS_NEW: { date: string; title: string; body: string; link?: string }[] = [
+  { date: "Sep 2026", title: "Client files", body: "Pick which files a client sees, and let clients upload tech packs and sample photos.", link: "client-share" },
   { date: "Sep 2026", title: "Two-step sign-in", body: "A code from your phone after your password. Required for admins, available to everyone.", link: "two-step" },
   { date: "Sep 2026", title: "Client portal", body: "Clients get their own login to follow shared tasks, download files and approve work.", link: "clients-setup" },
   { date: "Sep 2026", title: "Set your status", body: "Available, Busy, In a meeting, Do not disturb, Away or Appear offline — with a message, like Teams.", link: "status" },

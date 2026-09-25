@@ -325,6 +325,7 @@ async function main() {
   if (doneShared[0]) {
     await db.task.update({ where: { id: doneShared[0].id }, data: { clientStatus: "APPROVED", clientStatusAt: at(-1, 15), clientStatusBy: "Lena Brooks" } });
   }
+  await db.attachment.updateMany({ where: { taskId: t1.id }, data: { clientVisible: true } });
   const lena = await db.clientContact.findUniqueOrThrow({ where: { email: "lena@demo.local" } });
   await db.clientComment.createMany({
     data: [
