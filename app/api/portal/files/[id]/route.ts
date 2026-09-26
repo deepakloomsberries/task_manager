@@ -16,8 +16,13 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   const attachment = await db.attachment.findFirst({
     where: {
       id: Number(params.id) || 0,
-      clientVisible: true,
-      task: { clientVisible: true, deletedAt: null, project: { clientId: contact.clientId } },
+      deletedAt: null,
+      OR: [
+        // Files on a shared task, marked "Client sees" (or uploaded by the client)
+        { clientVisible: true, task: { clientVisible: true, deletedAt: null, project: { clientId: contact.clientId } } },
+        // Documents files shared into this client's portal
+        { clientShares: { some: { clientId: contact.clientId } } },
+      ],
     },
   });
   if (!attachment) return new NextResponse("Not found", { status: 404 });

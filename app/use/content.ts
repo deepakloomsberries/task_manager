@@ -667,7 +667,7 @@ export const CATEGORIES: Category[] = [
         id: "documents",
         title: "Documents",
         audience: "Everyone",
-        summary: "Every file and link shared in the company, in one searchable list.",
+        summary: "Your company drive: folders, previews, sharing, public links, versions and a bin for every file and link.",
         shot: "documents",
         callouts: [
           { spot: "attach", title: "Attach file", body: "Upload up to 50 MB, or drop / paste a file anywhere on the page.", side: "bottom" },
@@ -675,11 +675,17 @@ export const CATEGORIES: Category[] = [
           { spot: "table", title: "File list", body: "See which task a file belongs to, who uploaded it and when.", side: "inside" },
         ],
         tips: [
-          "Share like Google Drive: upload a file and the Share window opens — or click Share on any file you uploaded.",
-          "Add people to give them access; they're notified and find it under “Shared with me”.",
-          "General access: 🔒 Restricted (only you and the people you add), 🏢 Looms & Berries (everyone), or 🌐 Anyone with the link — a public download page for buyers, vendors or anyone without an account.",
-          "Public links can expire after 1, 7 or 30 days, show how many times they were downloaded, and can be reset or switched off at any time. All your public links are listed under 🌐 Public links.",
-          "Task files are always visible to your team; you can still give one a public link.",
+          "Folders: 📁 New folder, then open it and upload — files go straight in. ⋯ on a folder: Share, Rename, Move, Delete (its contents move up, nothing is lost).",
+          "Sharing a folder shares everything inside it, sub-folders too. Files you put in a folder follow the folder's access.",
+          "Click a file's name to preview it — images, PDFs, videos and text open right here; ← / → go to the next file.",
+          "▦ Grid shows picture thumbnails; ☰ List shows details. Sort by name, size or date; filter by type, person, date, or task files vs uploads.",
+          "⭐ Star files you use often (Starred tab); Recent shows what you opened lately.",
+          "Delete moves a file to 🗑 Bin for 30 days — restore it from there. Empty bin deletes for good.",
+          "⋯ → Versions: upload a new version of a price list — links you already sent now give the new file; older versions can be restored.",
+          "Share: add people, pick 🔒 Restricted / 🏢 Looms & Berries / 🌐 Anyone with the link. Public links can expire, need a password, count downloads, and be reset or switched off.",
+          "In Share, managers can put a file into a client's portal (they see it under Files). “Send the link” emails it, opens WhatsApp, or shows a QR code.",
+          "Select several files → 🔗 Share as one link: one download page with Download all (.zip), with optional expiry and password.",
+          "Admins: 📊 Storage shows space used per person and type, disk space left, and every public link — with a switch to turn them all off.",
         ],
       },
     ],
@@ -959,6 +965,7 @@ export const FAQS: { q: string; a: string }[] = [
 
 /** Newest first. `link` is an article id. */
 export const WHATS_NEW: { date: string; title: string; body: string; link?: string }[] = [
+  { date: "Sep 2026", title: "Documents like Google Drive", body: "Folders, previews, thumbnails, bin, versions, stars, one link for many files, passwords and a storage report.", link: "documents" },
   { date: "Sep 2026", title: "Share files like Google Drive", body: "Share a document with people, or make a public link anyone can download — with expiry and download counts.", link: "documents" },
   { date: "Sep 2026", title: "Forward messages", body: "Send any chat message — with its files — to other people or groups in one go.", link: "messages" },
   { date: "Sep 2026", title: "Client files", body: "Pick which files a client sees, and let clients upload tech packs and sample photos.", link: "client-share" },

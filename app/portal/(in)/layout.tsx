@@ -22,6 +22,14 @@ export default async function PortalLayout({ children }: { children: React.React
             </span>
             <span className="badge bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300">{contact.client.name}</span>
           </Link>
+          <nav className="ml-2 flex gap-1 text-sm">
+            <Link href="/portal" className="rounded-lg px-2.5 py-1.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700">
+              Projects
+            </Link>
+            <Link href="/portal/files" className="rounded-lg px-2.5 py-1.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700">
+              Files
+            </Link>
+          </nav>
           <div className="flex-1" />
           <ThemeToggle />
           <Link href="/portal/password" className="hidden text-sm text-slate-600 hover:underline dark:text-slate-300 sm:block" title="Change password">

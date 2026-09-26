@@ -180,6 +180,7 @@ async function main() {
 
 /**
  * Housekeeping for the uploads folder:
+ * - files in the Documents bin for more than 30 days are deleted for good;
  * - chat-box drafts (a file added to a chat box, then the message never sent)
  *   are removed after a day — Documents uploads are never touched;
  * - files on disk that no record points to any more (e.g. the attachments of
@@ -199,14 +200,22 @@ async function cleanUploads(now: Date): Promise<number> {
     select: { id: true },
   });
   if (stray.length) await db.attachment.deleteMany({ where: { id: { in: stray.map((a) => a.id) } } });
+  // Documents bin: files deleted more than 30 days ago go for good.
+  const binCutoff = new Date(now.getTime() - 30 * 86_400_000);
+  const binned = await db.attachment.deleteMany({ where: { deletedAt: { lt: binCutoff } } });
 
   const dir = process.env.UPLOAD_DIR ?? path.join(process.cwd(), "uploads");
-  if (!fs.existsSync(dir)) return stray.length;
-  const [files, avatars] = await Promise.all([
+  if (!fs.existsSync(dir)) return stray.length + binned.count;
+  const [files, versions, avatars] = await Promise.all([
     db.attachment.findMany({ where: { storedName: { not: null } }, select: { storedName: true } }),
+    db.attachmentVersion.findMany({ where: { storedName: { not: null } }, select: { storedName: true } }),
     db.user.findMany({ where: { avatarPath: { not: null } }, select: { avatarPath: true } }),
   ]);
-  const inUse = new Set<string>([...files.map((f) => f.storedName!), ...avatars.map((u) => u.avatarPath!)]);
+  const inUse = new Set<string>([
+    ...files.map((f) => f.storedName!),
+    ...versions.map((v) => v.storedName!),
+    ...avatars.map((u) => u.avatarPath!),
+  ]);
   let removed = 0;
   for (const name of fs.readdirSync(dir)) {
     if (inUse.has(name)) continue;
@@ -216,7 +225,14 @@ async function cleanUploads(now: Date): Promise<number> {
     fs.unlinkSync(full);
     removed++;
   }
-  return removed;
+  // Thumbnails of files that are gone.
+  const thumbs = path.join(dir, ".thumbs");
+  if (fs.existsSync(thumbs)) {
+    for (const t of fs.readdirSync(thumbs)) {
+      if (!inUse.has(t.replace(/\.webp$/, ""))) fs.rmSync(path.join(thumbs, t), { force: true });
+    }
+  }
+  return removed + binned.count;
 }
 
 main()

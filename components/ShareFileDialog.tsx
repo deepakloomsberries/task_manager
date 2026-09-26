@@ -2,7 +2,18 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import UserAvatar from "@/components/UserAvatar";
-import { getShareInfo, resetPublicLink, setFileAccess, shareFileWith, unshareFile, type ShareInfo } from "@/lib/actions/sharing";
+import QrButton from "@/components/docs/QrButton";
+import {
+  getShareInfo,
+  resetPublicLink,
+  sendFileLink,
+  setFileAccess,
+  setPublicPassword,
+  shareFileWith,
+  shareWithClient,
+  unshareFile,
+  type ShareInfo,
+} from "@/lib/actions/sharing";
 
 const ACCESS = [
   { value: "RESTRICTED", icon: "🔒", label: "Restricted", hint: "Only you, admins and the people added above" },
@@ -25,6 +36,11 @@ export default function ShareFileDialog({ fileId, onClose }: { fileId: number; o
   const [picked, setPicked] = useState<Set<number>>(new Set());
   const [expiry, setExpiry] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [password, setPassword] = useState("");
+  const [emails, setEmails] = useState("");
+  const [emailNote, setEmailNote] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sentMsg, setSentMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
   useEffect(() => {
@@ -51,7 +67,7 @@ export default function ShareFileDialog({ fileId, onClose }: { fileId: number; o
   }, [info, q]);
 
   const publicUrl = info?.token ? `${typeof window !== "undefined" ? window.location.origin : ""}/f/${info.token}` : null;
-  const internalUrl = info ? `${typeof window !== "undefined" ? window.location.origin : ""}/api/files/${info.id}` : "";
+  const internalUrl = info ? `${typeof window !== "undefined" ? window.location.origin : ""}/documents?file=${info.id}` : "";
   const linkToCopy = info?.access === "PUBLIC" && publicUrl ? publicUrl : internalUrl;
 
   const copy = async () => {
@@ -208,6 +224,9 @@ export default function ShareFileDialog({ fileId, onClose }: { fileId: number; o
                     <span className="font-medium">{ACCESS.find((a) => a.value === info.access)?.label}</span>
                   )}
                   <p className="mt-1 text-xs text-slate-500">{ACCESS.find((a) => a.value === info.access)?.hint}</p>
+                  {info.folderName && info.access !== "COMPANY" && (
+                    <p className="mt-1 text-xs text-slate-500">📁 Also everyone who can open the folder “{info.folderName}”.</p>
+                  )}
                   {info.access === "PUBLIC" && info.canManage && (
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                       <select
@@ -245,6 +264,112 @@ export default function ShareFileDialog({ fileId, onClose }: { fileId: number; o
                 {publicUrl}
               </div>
             )}
+
+            {info.access === "PUBLIC" && info.canManage && (
+              <div className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-700">
+                <div className="mb-2 font-medium">🔑 Password {info.hasPassword ? <span className="badge bg-green-100 text-green-700">On</span> : <span className="text-xs font-normal text-slate-400">(optional)</span>}</div>
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder={info.hasPassword ? "New password" : "Set a password"}
+                    autoComplete="off"
+                    className="input !w-48 !py-1 text-sm"
+                    aria-label="Link password"
+                  />
+                  <button
+                    type="button"
+                    disabled={pending || password.trim().length < 4}
+                    onClick={() => {
+                      run(setPublicPassword(info.id, password));
+                      setPassword("");
+                    }}
+                    className="btn-secondary !py-1 text-xs"
+                  >
+                    {info.hasPassword ? "Change" : "Set password"}
+                  </button>
+                  {info.hasPassword && (
+                    <button type="button" disabled={pending} onClick={() => run(setPublicPassword(info.id, ""))} className="text-xs text-red-600 hover:underline">
+                      Remove password
+                    </button>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-slate-400">People with the link must type it before they can download. Send it separately (e.g. by phone).</p>
+              </div>
+            )}
+
+            {info.clientChoices.length > 0 && (
+              <div>
+                <h3 className="mb-2 text-sm font-semibold">🤝 Client portals</h3>
+                <div className="flex flex-wrap gap-2">
+                  {info.clientChoices.map((c) => {
+                    const on = info.clients.some((x) => x.id === c.id);
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        disabled={pending}
+                        onClick={() => run(shareWithClient(info.id, c.id, !on))}
+                        aria-pressed={on}
+                        className={`rounded-full border px-3 py-1 text-xs ${on ? "border-violet-500 bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300" : "border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300"}`}
+                      >
+                        {on ? "✓ " : "+ "}
+                        {c.name}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1 text-xs text-slate-400">Shown under “Files” in that client&apos;s portal.</p>
+              </div>
+            )}
+
+            <details className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-700">
+              <summary className="cursor-pointer font-medium">✉️ Send the link by email, WhatsApp or QR</summary>
+              <div className="mt-3 space-y-2">
+                <textarea
+                  value={emails}
+                  onChange={(e) => setEmails(e.target.value)}
+                  rows={2}
+                  placeholder="Email addresses — separate with commas"
+                  className="input text-sm"
+                  aria-label="Email addresses"
+                />
+                <input value={emailNote} onChange={(e) => setEmailNote(e.target.value)} placeholder="Message (optional)" className="input text-sm" aria-label="Message" />
+                {info.access !== "PUBLIC" && (
+                  <p className="text-xs text-amber-700">Not public: the email links to the app, so only people with an account (and access) can open it.</p>
+                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={sending || !emails.trim()}
+                    onClick={async () => {
+                      setSending(true);
+                      setSentMsg(null);
+                      const r = await sendFileLink(info.id, emails, emailNote, window.location.origin);
+                      setSending(false);
+                      if (r.ok) {
+                        setSentMsg(`✓ Sent to ${r.sent} ${r.sent === 1 ? "person" : "people"}.`);
+                        setEmails("");
+                        setEmailNote("");
+                      } else setSentMsg(r.error);
+                    }}
+                    className="btn-primary !py-1.5 text-xs"
+                  >
+                    {sending ? "Sending…" : "Send email"}
+                  </button>
+                  <a
+                    className="btn-secondary !py-1.5 text-xs"
+                    target="_blank"
+                    rel="noreferrer"
+                    href={`https://wa.me/?text=${encodeURIComponent(`${info.name}: ${linkToCopy}`)}`}
+                  >
+                    WhatsApp
+                  </a>
+                  <QrButton url={linkToCopy} />
+                </div>
+                {sentMsg && <p className="text-xs text-slate-600 dark:text-slate-300">{sentMsg}</p>}
+              </div>
+            </details>
 
             <div className="flex items-center justify-between gap-3 pt-1">
               <button type="button" onClick={copy} className="btn-secondary">

@@ -120,7 +120,7 @@ export default async function TaskDetailPage(
         createdBy: true,
         comments: { include: { author: true }, orderBy: { createdAt: "asc" } },
         collaborators: { include: { user: true }, orderBy: { addedAt: "asc" } },
-        attachments: { include: { uploadedBy: true, clientContact: { select: { name: true } } }, orderBy: { createdAt: "desc" } },
+        attachments: { where: { deletedAt: null }, include: { uploadedBy: true, clientContact: { select: { name: true } } }, orderBy: { createdAt: "desc" } },
         parent: true,
         subtasks: {
           where: { deletedAt: null },

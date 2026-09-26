@@ -35,7 +35,7 @@ export default async function PortalTask(
 
   const [attachments, comments] = await Promise.all([
     db.attachment.findMany({
-      where: { taskId: task.id, clientVisible: true },
+      where: { taskId: task.id, clientVisible: true, deletedAt: null },
       include: { clientContact: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
     }),

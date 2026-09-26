@@ -53,3 +53,34 @@ describe("document access rules", () => {
     expect(await seen(friend)).toEqual([restricted.id, company.id, taskFile.id].sort());
   });
 });
+
+describe("folders", () => {
+  it("inherit access down the tree, and files inside follow the folder", async () => {
+    const { accessibleFolders, folderVisibleTo } = await import("@/lib/docAccess");
+    const owner = await makeUser();
+    const friend = await makeUser();
+    const other = await makeUser();
+    const top = await db.docFolder.create({ data: { name: `Top ${Date.now()}`, ownerId: owner.id, access: "RESTRICTED" } });
+    const sub = await db.docFolder.create({ data: { name: "Sub", ownerId: owner.id, access: "RESTRICTED", parentId: top.id } });
+    await db.docFolderShare.create({ data: { folderId: top.id, userId: friend.id } });
+    const file = await db.attachment.create({
+      data: { originalName: `in-sub-${Date.now()}`, mimeType: "x", size: 1, uploadedById: owner.id, access: "RESTRICTED", folderId: sub.id },
+    });
+
+    const f = await accessibleFolders(friend);
+    expect(f.canSee(top.id) && f.canSee(sub.id)).toBe(true); // shared the parent → sees the child
+    expect(await folderVisibleTo(sub.id, friend)).toBe(true);
+    const o = await accessibleFolders(other);
+    expect(o.canSee(sub.id)).toBe(false);
+    expect(await folderVisibleTo(sub.id, other)).toBe(false);
+
+    const list = async (u: { id: number; role: string }, ids: number[]) =>
+      (await db.attachment.findMany({ where: { AND: [visibleDocsWhere(u, ids), { id: file.id }] } })).length;
+    expect(await list(friend, f.visibleIds)).toBe(1);
+    expect(await list(other, o.visibleIds)).toBe(0);
+
+    // Binned files drop out of every list.
+    await db.attachment.update({ where: { id: file.id }, data: { deletedAt: new Date() } });
+    expect(await list(owner, (await accessibleFolders(owner)).visibleIds)).toBe(0);
+  });
+});

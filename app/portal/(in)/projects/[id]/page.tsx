@@ -21,7 +21,7 @@ export default async function PortalProject(props: { params: Promise<{ id: strin
           dueDate: true,
           completedAt: true,
           clientStatus: true,
-          _count: { select: { attachments: { where: { clientVisible: true } }, clientComments: true } },
+          _count: { select: { attachments: { where: { clientVisible: true, deletedAt: null } }, clientComments: true } },
         },
         orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
       },

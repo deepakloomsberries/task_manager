@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { saveUpload, MAX_FILE_SIZE } from "@/lib/storage";
+import { folderVisibleTo } from "@/lib/docAccess";
 
 /**
  * Uploads a task/document attachment. A plain JSON API route rather than a
@@ -18,6 +19,11 @@ export async function POST(req: NextRequest) {
   const file = form.get("file");
   const taskId = form.get("taskId") ? Number(form.get("taskId")) : null;
   const noteId = form.get("noteId") ? Number(form.get("noteId")) : null;
+  // Documents: upload straight into a folder the person can see.
+  const folderId = !taskId && !noteId && form.get("folderId") ? Number(form.get("folderId")) : null;
+  if (folderId && !(await folderVisibleTo(folderId, { id: session.userId, role: session.role }))) {
+    return NextResponse.json({ error: "That folder isn't available." }, { status: 404 });
+  }
 
   if (!(file instanceof File) || file.size === 0) {
     return NextResponse.json({ error: "Please choose a file to upload." }, { status: 400 });
@@ -44,7 +50,8 @@ export async function POST(req: NextRequest) {
 
   const saved = await saveUpload(file);
   const attachment = await db.attachment.create({
-    data: { ...saved, taskId, noteId, uploadedById: session.userId },
+    // Inside a folder, the folder decides who can see it (like Google Drive).
+    data: { ...saved, taskId, noteId, folderId, uploadedById: session.userId, ...(folderId ? { access: "RESTRICTED" } : {}) },
   });
 
   revalidatePath(taskId ? `/tasks/${taskId}` : noteId ? "/notes" : "/documents");

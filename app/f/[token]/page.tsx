@@ -3,17 +3,21 @@ import { db } from "@/lib/db";
 import { fmtSize } from "@/lib/storage";
 import { publicLinkLive } from "@/lib/docAccess";
 import { canShowInline } from "@/lib/fileResponse";
+import { isUnlocked } from "@/lib/publicAccess";
+import PublicPasswordForm from "@/components/PublicPasswordForm";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Shared file · Looms & Berries", robots: { index: false, follow: false } };
 
 /** The page someone outside the company sees when you send them a file link. */
-export default async function PublicFilePage(props: { params: Promise<{ token: string }> }) {
+export default async function PublicFilePage(props: { params: Promise<{ token: string }>; searchParams: Promise<{ error?: string }> }) {
   const { token } = await props.params;
+  const { error } = await props.searchParams;
   const a = /^[A-Za-z0-9_-]{20,64}$/.test(token)
     ? await db.attachment.findFirst({ where: { shareToken: token }, include: { uploadedBy: { select: { name: true } } } })
     : null;
   const live = !!a && publicLinkLive(a);
+  const locked = live && !(await isUnlocked("f", token, a!.sharePasswordHash));
   const src = `/api/public/${token}`;
   const isImage = live && !!a!.storedName && a!.mimeType.startsWith("image/") && canShowInline(a!.mimeType);
 
@@ -23,7 +27,9 @@ export default async function PublicFilePage(props: { params: Promise<{ token: s
         <div className="mb-6 text-2xl font-bold">
           Looms <span className="text-sky-600">&amp;</span> Berries
         </div>
-        {!live ? (
+        {locked ? (
+          <PublicPasswordForm kind="f" token={token} error={error} />
+        ) : !live ? (
           <>
             <div className="mb-2 text-5xl">🔒</div>
             <h1 className="text-lg font-semibold">This link isn&apos;t available</h1>

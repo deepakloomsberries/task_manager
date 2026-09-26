@@ -20,6 +20,7 @@ type UploadItem = {
 function uploadWithProgress(
   file: File,
   taskId: number | undefined,
+  folderId: number | null | undefined,
   onProgress: (pct: number) => void,
   bindXhr: (xhr: XMLHttpRequest) => void
 ): Promise<{ id: number; originalName: string }> {
@@ -48,6 +49,7 @@ function uploadWithProgress(
     const fd = new FormData();
     fd.append("file", file);
     if (taskId) fd.append("taskId", String(taskId));
+    if (folderId) fd.append("folderId", String(folderId));
     xhr.send(fd);
   });
 }
@@ -64,12 +66,15 @@ export default function PasteAttachment({
   listenPaste = true,
   compact = false,
   shareAfterUpload = false,
+  folderId = null,
 }: {
   taskId?: number;
   listenPaste?: boolean;
   compact?: boolean;
   /** Documents page: after uploading one file, open its Share dialog. */
   shareAfterUpload?: boolean;
+  /** Documents: the folder being viewed — uploads and links go into it. */
+  folderId?: number | null;
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -104,6 +109,7 @@ export default function PasteAttachment({
         return uploadWithProgress(
           file,
           taskId,
+          folderId,
           (pct) => patchUpload(item.id, { progress: pct }),
           (xhr) => patchUpload(item.id, { xhr })
         )
@@ -127,7 +133,7 @@ export default function PasteAttachment({
       // Refresh the server-rendered attachment list once this batch settles
       // (a plain fetch/XHR upload doesn't navigate, so nothing else would).
       if (!anySucceeded) return;
-      if (shareAfterUpload && files.length === 1 && lastId) router.push(`/documents?share=${lastId}`);
+      if (shareAfterUpload && files.length === 1 && lastId) router.push(`/documents?${folderId ? `folder=${folderId}&` : ""}share=${lastId}`);
       else router.refresh();
     });
   }
@@ -182,6 +188,7 @@ export default function PasteAttachment({
     setAddingLink(true);
     const fd = new FormData();
     if (taskId) fd.append("taskId", String(taskId));
+    if (folderId) fd.append("folderId", String(folderId));
     fd.append("url", url);
     fd.append("label", linkLabel.trim());
     try {

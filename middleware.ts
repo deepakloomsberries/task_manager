@@ -14,7 +14,7 @@ const PUBLIC_PATHS = ["/login", "/forgot"];
 // Public regardless of auth state, in either direction — unlike /login and
 // /forgot, an already-signed-in visitor should still be able to see this
 // (e.g. checking their own marketing page), not get bounced to /dashboard.
-const ALWAYS_PUBLIC_PATHS = ["/about", "/use", "/f"]; // /f/<token> = public file links
+const ALWAYS_PUBLIC_PATHS = ["/about", "/use", "/f", "/b"]; // /f/<token>, /b/<token> = public file links
 // Exact path or a sub-path — never a bare prefix, so "/use" can't expose "/users".
 const matchesPath = (pathname: string, p: string) => pathname === p || pathname.startsWith(`${p}/`);
 
