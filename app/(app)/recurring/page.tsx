@@ -14,11 +14,12 @@ function ymd(d: Date) {
 
 type Cell = { id: number; state: "done" | "missed" | "pending" | "off" | "retired"; };
 
-export default async function RecurringPage({
-  searchParams,
-}: {
-  searchParams: Record<string, string | undefined>;
-}) {
+export default async function RecurringPage(
+  props: {
+    searchParams: Promise<Record<string, string | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const viewer = await requireUser();
   const canSeeAll = isManagerOrAdmin(viewer.role);
 

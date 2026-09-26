@@ -5,7 +5,8 @@ import GroupChatThread from "@/components/GroupChatThread";
 
 export const dynamic = "force-dynamic";
 
-export default async function GroupPage({ params }: { params: { groupId: string } }) {
+export default async function GroupPage(props: { params: Promise<{ groupId: string }> }) {
+  const params = await props.params;
   const user = await requireUser();
   const groupId = Number(params.groupId);
   if (!groupId) notFound();
@@ -69,6 +70,7 @@ export default async function GroupPage({ params }: { params: { groupId: string 
           : null,
       reactions: reactionsByMessage.get(m.id) ?? [],
       starred: myStarredIds.has(m.id),
+      forwarded: m.forwarded,
     };
   });
 

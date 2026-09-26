@@ -8,11 +8,12 @@ import ConfirmButton from "@/components/ConfirmButton";
 
 export const dynamic = "force-dynamic";
 
-export default async function TrashPage({
-  searchParams,
-}: {
-  searchParams: { q?: string };
-}) {
+export default async function TrashPage(
+  props: {
+    searchParams: Promise<{ q?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   // Only administrators can see the recycle bin and restore items.
   await requireAdmin();
   const q = (searchParams.q ?? "").trim();

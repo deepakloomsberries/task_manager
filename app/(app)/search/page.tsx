@@ -1,3 +1,4 @@
+import { visibleDocsWhere } from "@/lib/docAccess";
 import Link from "next/link";
 import { taskHref } from "@/lib/backLink";
 import { db } from "@/lib/db";
@@ -7,11 +8,12 @@ import { parseChecklist } from "@/lib/checklist";
 
 export const dynamic = "force-dynamic";
 
-export default async function SearchPage({
-  searchParams,
-}: {
-  searchParams: { q?: string };
-}) {
+export default async function SearchPage(
+  props: {
+    searchParams: Promise<{ q?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const user = await requireUser();
   const q = (searchParams.q ?? "").trim();
 
@@ -49,7 +51,8 @@ export default async function SearchPage({
       take: 10,
     }),
     db.attachment.findMany({
-      where: { originalName: { contains: q, mode: "insensitive" as const } },
+      // Only files this person can see in Documents (not other people's chats or notes).
+      where: { AND: [visibleDocsWhere(user), { originalName: { contains: q, mode: "insensitive" as const } }] },
       include: { uploadedBy: true, clientContact: { select: { name: true } } },
       take: 10,
       orderBy: { createdAt: "desc" },

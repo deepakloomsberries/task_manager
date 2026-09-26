@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { confirmTwoStepSetup, disableTwoStep, regenerateRecoveryCodes, startTwoStepSetup } from "@/lib/actions/twoStep";
 
@@ -8,7 +8,18 @@ import { confirmTwoStepSetup, disableTwoStep, regenerateRecoveryCodes, startTwoS
  * Settings → Two-step sign-in. Setup: scan the QR code with an authenticator
  * app, type the first code, then save the backup codes (shown only once).
  */
-export default function TwoStepCard({ enabled, codesLeft, required }: { enabled: boolean; codesLeft: number; required: boolean }) {
+export default function TwoStepCard({
+  enabled,
+  codesLeft,
+  required,
+  focus = false,
+}: {
+  enabled: boolean;
+  codesLeft: number;
+  required: boolean;
+  /** Scroll this card into view on load (sent here to set it up). */
+  focus?: boolean;
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [setup, setSetup] = useState<{ secret: string; qr: string } | null>(null);
@@ -49,6 +60,10 @@ export default function TwoStepCard({ enabled, codesLeft, required }: { enabled:
       router.refresh();
     });
   };
+
+  useEffect(() => {
+    if (focus) document.getElementById("two-step")?.scrollIntoView({ block: "start" });
+  }, [focus]);
 
   const download = () => {
     const text = `Looms & Berries Tasks — two-step sign-in backup codes\nEach code works once. Keep them somewhere safe.\n\n${codes!.join("\n")}\n`;

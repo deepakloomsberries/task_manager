@@ -20,7 +20,7 @@ export async function clientLogin(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
   const emailKey = `portal:email:${email}`;
-  const ipKey = `portal:ip:${clientIp(headers())}`;
+  const ipKey = `portal:ip:${clientIp(await headers())}`;
   if (isLimited(emailKey, LIMITS.loginPerEmail) || isLimited(ipKey, LIMITS.loginPerIp)) redirect("/portal/login?error=locked");
 
   const contact = await db.clientContact.findUnique({ where: { email } });
@@ -37,7 +37,7 @@ export async function clientLogin(formData: FormData) {
 }
 
 export async function clientLogout() {
-  destroyClientSession();
+  await destroyClientSession();
   redirect("/portal/login");
 }
 

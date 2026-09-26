@@ -6,7 +6,8 @@ import { awaitingClient, fmtDay, stage } from "./status";
 
 export const dynamic = "force-dynamic";
 
-export default async function PortalHome({ searchParams }: { searchParams: { ok?: string } }) {
+export default async function PortalHome(props: { searchParams: Promise<{ ok?: string }> }) {
+  const searchParams = await props.searchParams;
   const contact = await requireClient();
   const projects = await db.project.findMany({
     where: { clientId: contact.clientId },

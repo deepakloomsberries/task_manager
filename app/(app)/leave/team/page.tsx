@@ -15,7 +15,8 @@ export const dynamic = "force-dynamic";
 const WINDOW_DAYS = 21;
 const DOW = ["S", "M", "T", "W", "T", "F", "S"];
 
-export default async function TeamLeavePage({ searchParams }: { searchParams: { ok?: string; error?: string } }) {
+export default async function TeamLeavePage(props: { searchParams: Promise<{ ok?: string; error?: string }> }) {
+  const searchParams = await props.searchParams;
   const user = await requireUser();
   if (!isManagerOrAdmin(user.role)) redirect("/leave");
 

@@ -12,11 +12,12 @@ const ERRORS: Record<string, string> = {
   throttled: "Too many attempts. Please wait 15 minutes before trying again.",
 };
 
-export default function ForgotPasswordPage({
-  searchParams,
-}: {
-  searchParams: { step?: string; email?: string; error?: string };
-}) {
+export default async function ForgotPasswordPage(
+  props: {
+    searchParams: Promise<{ step?: string; email?: string; error?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const onCodeStep = searchParams.step === "code";
   const email = searchParams.email ?? "";
   const error = searchParams.error ? ERRORS[searchParams.error] : null;

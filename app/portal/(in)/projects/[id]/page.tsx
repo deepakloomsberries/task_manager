@@ -6,7 +6,8 @@ import { awaitingClient, fmtDay, stage } from "../../status";
 
 export const dynamic = "force-dynamic";
 
-export default async function PortalProject({ params }: { params: { id: string } }) {
+export default async function PortalProject(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const contact = await requireClient();
   const project = await db.project.findFirst({
     where: { id: Number(params.id) || 0, clientId: contact.clientId },
@@ -20,7 +21,7 @@ export default async function PortalProject({ params }: { params: { id: string }
           dueDate: true,
           completedAt: true,
           clientStatus: true,
-          _count: { select: { attachments: { where: { clientVisible: true } }, clientComments: true } },
+          _count: { select: { attachments: { where: { clientVisible: true, deletedAt: null } }, clientComments: true } },
         },
         orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
       },

@@ -103,7 +103,18 @@ model User {
   totpEnabled           Boolean                @default(false)
   totpLastStep          Int? // last code's time step — a code can't be used twice
   totpRecovery          String? // sha256 hashes of unused backup codes, comma-separated
+  /// Bumped to sign this person out everywhere (password change, reset,
+  /// deactivation, role change, "sign out other devices"). Sessions carry the
+  /// version they were issued with and stop working once it moves on.
+  sessionVersion        Int                    @default(0)
   clientComments        ClientComment[]
+  fileShares            AttachmentShare[]
+  docFolders            DocFolder[]
+  folderShares          DocFolderShare[]
+  fileStars             FileStar[]
+  fileViews             FileView[]
+  fileBundles           FileBundle[]
+  fileVersions          AttachmentVersion[]
 }
 
 /**
@@ -132,6 +143,7 @@ model Project {
   createdBy   User            @relation(fields: [createdById], references: [id])
   createdById Int
   createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @default(now()) @updatedAt
   tasks       Task[]
   members     ProjectMember[]
   timeEntries TimeEntry[]
@@ -399,6 +411,8 @@ model DirectMessage {
   // translations for messages it already sent the client, similar to how
   // deletedIds/reactions are patched onto already-loaded messages.
   translatedAt      DateTime?
+  /// A copy forwarded from another chat — shown with a "Forwarded" label.
+  forwarded         Boolean           @default(false)
   createdAt         DateTime          @default(now())
   deletedAt         DateTime?
   attachments       Attachment[]
@@ -448,32 +462,60 @@ model MessageReaction {
 }
 
 model Attachment {
-  id                  Int                @id @default(autoincrement())
-  storedName          String?            @unique // random name on disk inside UPLOAD_DIR — null for a link attachment (externalUrl set instead)
+  id                  Int                 @id @default(autoincrement())
+  storedName          String?             @unique // random name on disk inside UPLOAD_DIR — null for a link attachment (externalUrl set instead)
   originalName        String
   mimeType            String
   size                Int
   externalUrl         String? // set instead of storedName/uploading a file — for something too large to upload (e.g. a Drive link)
-  task                Task?              @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task                Task?               @relation(fields: [taskId], references: [id], onDelete: Cascade)
   taskId              Int?
-  message             DirectMessage?     @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  message             DirectMessage?      @relation(fields: [messageId], references: [id], onDelete: Cascade)
   messageId           Int?
-  discussion          DiscussionMessage? @relation(fields: [discussionMessageId], references: [id], onDelete: Cascade)
+  discussion          DiscussionMessage?  @relation(fields: [discussionMessageId], references: [id], onDelete: Cascade)
   discussionMessageId Int?
-  note                Note?              @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  note                Note?               @relation(fields: [noteId], references: [id], onDelete: Cascade)
   noteId              Int?
-  groupMessage        GroupMessage?      @relation(fields: [groupMessageId], references: [id], onDelete: Cascade)
+  groupMessage        GroupMessage?       @relation(fields: [groupMessageId], references: [id], onDelete: Cascade)
   groupMessageId      Int?
   /// Staff uploader — null when a client uploaded it through the portal.
-  uploadedBy          User?              @relation(fields: [uploadedById], references: [id])
+  uploadedBy          User?               @relation(fields: [uploadedById], references: [id])
   uploadedById        Int?
   /// Set when a client contact uploaded it in the portal.
-  clientContact       ClientContact?     @relation(fields: [clientContactId], references: [id], onDelete: SetNull)
+  clientContact       ClientContact?      @relation(fields: [clientContactId], references: [id], onDelete: SetNull)
   clientContactId     Int?
   /// Shown to the client in the portal (their own uploads always are).
-  clientVisible       Boolean            @default(false)
-  createdAt           DateTime           @default(now())
+  clientVisible       Boolean             @default(false)
+  /// Uploaded into a chat box but not sent yet. Only drafts are ever cleaned
+  /// up automatically (after a day) — Documents uploads are never touched.
+  draft               Boolean             @default(false)
+  /// Who can open a Documents file, like Google Drive's "General access":
+  /// RESTRICTED (owner, admins and people it's shared with), COMPANY (everyone
+  /// signed in) or PUBLIC (also anyone with the public link /f/<shareToken>).
+  access              String              @default("COMPANY")
+  shareToken          String? // public link id — stays the same if access is switched off and on
+  shareExpiresAt      DateTime? // public link stops working after this
+  downloads           Int                 @default(0) // public-link downloads
+  shares              AttachmentShare[]
+  /// Optional password for the public link (bcrypt hash).
+  sharePasswordHash   String?
+  lastDownloadAt      DateTime? // last public-link download
+  /// Documents folder it lives in (null = top level).
+  folder              DocFolder?          @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  folderId            Int?
+  /// In the Documents bin since then; purged for good after 30 days.
+  deletedAt           DateTime?
+  deletedById         Int?
+  versions            AttachmentVersion[]
+  stars               FileStar[]
+  views               FileView[]
+  bundleItems         FileBundleItem[]
+  clientShares        ClientFileShare[]
+  createdAt           DateTime            @default(now())
 
+  @@index([shareToken])
+  @@index([folderId])
+  @@index([deletedAt])
   @@index([messageId])
   @@index([discussionMessageId])
   @@index([noteId])
@@ -535,6 +577,8 @@ model GroupMessage {
   groupId     Int
   createdAt   DateTime               @default(now())
   deletedAt   DateTime?
+  /// A copy forwarded from another chat — shown with a "Forwarded" label.
+  forwarded   Boolean                @default(false)
   attachments Attachment[]
   replyTo     GroupMessage?          @relation("groupReplyTo", fields: [replyToId], references: [id], onDelete: SetNull)
   replyToId   Int?
@@ -587,6 +631,7 @@ model TimeEntry {
   note      String?
   source    String    @default("manual") // manual | timer
   createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now()) @updatedAt
 
   @@index([userId, date])
   @@index([taskId])
@@ -737,6 +782,7 @@ model Leave {
   reviewedAt   DateTime?
   reviewNote   String?
   createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
 
   @@index([userId, startDate])
   @@index([status])
@@ -749,11 +795,12 @@ model Leave {
  * they never show up in assignee pickers, chat, workload or timesheets.
  */
 model Client {
-  id        Int             @id @default(autoincrement())
-  name      String          @unique
-  createdAt DateTime        @default(now())
+  id        Int               @id @default(autoincrement())
+  name      String            @unique
+  createdAt DateTime          @default(now())
   contacts  ClientContact[]
   projects  Project[]
+  files     ClientFileShare[]
 }
 
 /**
@@ -789,4 +836,136 @@ model ClientComment {
   createdAt DateTime       @default(now())
 
   @@index([taskId, createdAt])
+}
+
+/**
+ * A Documents file shared with one person (they see it under "Shared with me").
+ */
+model AttachmentShare {
+  attachment   Attachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+  attachmentId Int
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       Int
+  createdAt    DateTime   @default(now())
+
+  @@id([attachmentId, userId])
+  @@index([userId])
+}
+
+/**
+ * A Documents folder. Access works like a file's: its owner, admins, people
+ * it's shared with, or everyone (COMPANY). Files and sub-folders inside
+ * inherit it — sharing a folder shares everything in it.
+ */
+model DocFolder {
+  id        Int              @id @default(autoincrement())
+  name      String
+  parent    DocFolder?       @relation("folderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  parentId  Int?
+  children  DocFolder[]      @relation("folderTree")
+  owner     User             @relation(fields: [ownerId], references: [id])
+  ownerId   Int
+  access    String           @default("COMPANY") // RESTRICTED | COMPANY
+  files     Attachment[]
+  shares    DocFolderShare[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @default(now()) @updatedAt
+
+  @@index([parentId])
+}
+
+model DocFolderShare {
+  folder    DocFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  folderId  Int
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  createdAt DateTime  @default(now())
+
+  @@id([folderId, userId])
+  @@index([userId])
+}
+
+/**
+ * An earlier version of a Documents file (kept when a new one is uploaded).
+ */
+model AttachmentVersion {
+  id           Int        @id @default(autoincrement())
+  attachment   Attachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+  attachmentId Int
+  storedName   String?
+  originalName String
+  mimeType     String
+  size         Int
+  uploadedBy   User?      @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  uploadedById Int?
+  createdAt    DateTime   @default(now()) // when this version was first uploaded
+  replacedAt   DateTime   @default(now())
+
+  @@index([attachmentId])
+}
+
+model FileStar {
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       Int
+  attachment   Attachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+  attachmentId Int
+  createdAt    DateTime   @default(now())
+
+  @@id([userId, attachmentId])
+}
+
+/**
+ * Last time someone opened a file — powers "Recent".
+ */
+model FileView {
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       Int
+  attachment   Attachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+  attachmentId Int
+  viewedAt     DateTime   @default(now())
+
+  @@id([userId, attachmentId])
+  @@index([userId, viewedAt])
+}
+
+/**
+ * Several files behind one public link (a download page + "Download all" zip).
+ */
+model FileBundle {
+  id           Int              @id @default(autoincrement())
+  token        String
+  title        String
+  createdBy    User             @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdById  Int
+  expiresAt    DateTime?
+  passwordHash String?
+  downloads    Int              @default(0)
+  disabled     Boolean          @default(false)
+  items        FileBundleItem[]
+  createdAt    DateTime         @default(now())
+
+  @@index([token])
+}
+
+model FileBundleItem {
+  bundle       FileBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  bundleId     Int
+  attachment   Attachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+  attachmentId Int
+
+  @@id([bundleId, attachmentId])
+}
+
+/**
+ * A Documents file shared into a client's portal.
+ */
+model ClientFileShare {
+  attachment   Attachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+  attachmentId Int
+  client       Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId     Int
+  createdAt    DateTime   @default(now())
+
+  @@id([attachmentId, clientId])
+  @@index([clientId])
 }

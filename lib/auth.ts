@@ -15,14 +15,15 @@ export type SessionPayload = {
   role: string;
 };
 
-export async function createSession(userId: number, role: string) {
-  const token = await new SignJWT({ userId, role })
+/** Signs a session cookie. `version` is the user's current sessionVersion. */
+export async function createSession(userId: number, role: string, version = 0) {
+  const token = await new SignJWT({ userId, role, sv: version })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${SESSION_DAYS}d`)
     .sign(secret);
 
-  cookies().set(COOKIE_NAME, token, {
+  (await cookies()).set(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -31,34 +32,56 @@ export async function createSession(userId: number, role: string) {
   });
 }
 
-export function destroySession() {
-  cookies().delete(COOKIE_NAME);
+export async function destroySession() {
+  (await cookies()).delete(COOKIE_NAME);
 }
 
-export async function getSession(): Promise<SessionPayload | null> {
-  const token = cookies().get(COOKIE_NAME)?.value;
+/** The signed cookie's contents, without checking the database. */
+async function readSessionToken(): Promise<(SessionPayload & { sv: number }) | null> {
+  const token = (await cookies()).get(COOKIE_NAME)?.value;
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secret);
-    return {
-      userId: payload.userId as number,
-      role: payload.role as string,
-    };
+    if (typeof payload.userId !== "number") return null;
+    return { userId: payload.userId, role: String(payload.role ?? ""), sv: typeof payload.sv === "number" ? payload.sv : 0 };
   } catch {
     return null;
   }
 }
 
+/**
+ * The signed-in person, checked against the database: the account must still
+ * be active and the session not revoked (sessionVersion). The role comes from
+ * the database too, so a demotion takes effect immediately.
+ */
+export async function getSession(): Promise<SessionPayload | null> {
+  const t = await readSessionToken();
+  if (!t) return null;
+  const u = await db.user.findUnique({ where: { id: t.userId }, select: { active: true, role: true, sessionVersion: true } });
+  if (!u || !u.active || u.sessionVersion !== t.sv) return null;
+  return { userId: t.userId, role: u.role };
+}
+
 /** Loads the full current user, redirecting to /login when not authenticated. */
 export async function requireUser() {
-  const session = await getSession();
-  if (!session) redirect("/login");
+  const t = await readSessionToken();
+  if (!t) redirect("/login");
   const user = await db.user.findUnique({
-    where: { id: session.userId },
+    where: { id: t.userId },
     include: { company: true, department: true },
   });
-  if (!user || !user.active) redirect("/login");
+  // The cookie is valid-looking but no longer good: clear it on the way out.
+  if (!user || !user.active || user.sessionVersion !== t.sv) redirect("/api/auth/signed-out");
   return user;
+}
+
+/**
+ * Signs a person out on every device by moving their session version on.
+ * Returns the new version (to re-issue the current device's cookie if needed).
+ */
+export async function revokeSessions(userId: number): Promise<number> {
+  const u = await db.user.update({ where: { id: userId }, data: { sessionVersion: { increment: 1 } }, select: { sessionVersion: true } });
+  return u.sessionVersion;
 }
 
 export async function requireAdmin() {

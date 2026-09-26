@@ -17,7 +17,7 @@ export async function startTwoStep(userId: number) {
     .setIssuedAt()
     .setExpirationTime(`${MINUTES}m`)
     .sign(key());
-  cookies().set(COOKIE, token, {
+  (await cookies()).set(COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -27,7 +27,7 @@ export async function startTwoStep(userId: number) {
 }
 
 export async function pendingTwoStep(): Promise<number | null> {
-  const token = cookies().get(COOKIE)?.value;
+  const token = (await cookies()).get(COOKIE)?.value;
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, key());
@@ -37,8 +37,8 @@ export async function pendingTwoStep(): Promise<number | null> {
   }
 }
 
-export function endTwoStep() {
-  cookies().delete(COOKIE);
+export async function endTwoStep() {
+  (await cookies()).delete(COOKIE);
 }
 
 /** Admins must use two-step sign-in unless ADMIN_TWO_STEP=optional in .env. */

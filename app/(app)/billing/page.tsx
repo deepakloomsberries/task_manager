@@ -14,11 +14,12 @@ const MESSAGES: Record<string, { text: string; error?: boolean }> = {
   invalid: { text: "Please enter a valid rate and currency code.", error: true },
 };
 
-export default async function BillingPage({
-  searchParams,
-}: {
-  searchParams: { error?: string; saved?: string; generated?: string };
-}) {
+export default async function BillingPage(
+  props: {
+    searchParams: Promise<{ error?: string; saved?: string; generated?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   await requireAdmin();
 
   const [setting, activeUsers, activeUserRows, snapshots] = await Promise.all([

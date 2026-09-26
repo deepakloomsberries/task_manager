@@ -10,3 +10,6 @@ Sentry.init({
   tracesSampleRate: 0,
   sendDefaultPii: false,
 });
+
+// Lets Sentry trace client-side navigations (a no-op while disabled).
+export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;

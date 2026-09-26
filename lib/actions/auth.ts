@@ -4,12 +4,12 @@ import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
-import { createSession, destroySession, requireUser } from "@/lib/auth";
+import { createSession, destroySession, requireUser, revokeSessions } from "@/lib/auth";
 import { isStrongPassword } from "@/lib/password";
 import { notifyPasswordOtp } from "@/lib/mail";
 import { CHAT_LANGUAGES } from "@/lib/ui";
 import { LIMITS, clientIp, hit, isLimited, reset as clearLimit } from "@/lib/rateLimit";
-import { endTwoStep, pendingTwoStep, startTwoStep } from "@/lib/twoFactor";
+import { adminTwoStepRequired, endTwoStep, pendingTwoStep, startTwoStep } from "@/lib/twoFactor";
 import { recoveryCodesLeft, consumeRecoveryCode, verifyTotp } from "@/lib/totp";
 
 const OTP_TTL_MIN = 15;
@@ -19,11 +19,18 @@ const OTP_MAX_SENDS = 5; // codes we'll email within one active window (resend c
 // bcrypt hash of a random string, compared against when the email is unknown.
 const DUMMY_HASH = "$2b$10$CC6rVNOW008B.W6HG3wfp.vMNi6Wy/w7CG0R24JCyCtPp8eV0j5vi";
 
+/** Where to go after signing in: Settings while a required setup step is open. */
+function landingFor(user: { mustChangePassword: boolean; role: string; totpEnabled: boolean }) {
+  if (user.mustChangePassword) return "/settings?first=1";
+  if (user.role === "ADMIN" && !user.totpEnabled && adminTwoStepRequired()) return "/settings";
+  return "/dashboard";
+}
+
 export async function login(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
 
-  const ip = clientIp(headers());
+  const ip = clientIp(await headers());
   const emailKey = `login:email:${email}`;
   const ipKey = `login:ip:${ip}`;
   if (isLimited(emailKey, LIMITS.loginPerEmail) || isLimited(ipKey, LIMITS.loginPerIp)) {
@@ -46,8 +53,8 @@ export async function login(formData: FormData) {
     await startTwoStep(user.id);
     redirect("/login/verify");
   }
-  await createSession(user.id, user.role);
-  redirect(user.mustChangePassword ? "/settings?first=1" : "/dashboard");
+  await createSession(user.id, user.role, user.sessionVersion);
+  redirect(landingFor(user));
 }
 
 /** Step 2 of sign-in for two-step accounts: the authenticator code or a backup code. */
@@ -57,12 +64,12 @@ export async function verifyTwoStep(formData: FormData) {
   const code = String(formData.get("code") ?? "").trim();
 
   const key = `2fa:user:${userId}`;
-  const ipKey = `2fa:ip:${clientIp(headers())}`;
+  const ipKey = `2fa:ip:${clientIp(await headers())}`;
   if (isLimited(key, LIMITS.twoStepPerUser) || isLimited(ipKey, LIMITS.loginPerIp)) redirect("/login/verify?error=locked");
 
   const user = await db.user.findUnique({ where: { id: userId } });
   if (!user || !user.active || !user.totpEnabled || !user.totpSecret) {
-    endTwoStep();
+    await endTwoStep();
     redirect("/login");
   }
 
@@ -79,15 +86,15 @@ export async function verifyTwoStep(formData: FormData) {
     data: step !== null ? { totpLastStep: step } : { totpRecovery: remaining },
   });
   clearLimit(key);
-  endTwoStep();
-  await createSession(user.id, user.role);
+  await endTwoStep();
+  await createSession(user.id, user.role, user.sessionVersion);
   if (user.mustChangePassword) redirect("/settings?first=1");
   // Signed in with a backup code — show how many are left.
-  redirect(step === null ? `/settings?recovery=${recoveryCodesLeft(remaining)}#two-step` : "/dashboard");
+  redirect(step === null ? `/settings?recovery=${recoveryCodesLeft(remaining)}` : landingFor(user));
 }
 
 export async function logout() {
-  destroySession();
+  await destroySession();
   redirect("/login");
 }
 
@@ -99,7 +106,7 @@ export async function logout() {
 export async function requestPasswordReset(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
 
-  const ipKey = `reset:req:${clientIp(headers())}`;
+  const ipKey = `reset:req:${clientIp(await headers())}`;
   if (isLimited(ipKey, LIMITS.resetRequestPerIp)) {
     redirect(`/forgot?step=code&email=${encodeURIComponent(email)}&error=throttled`);
   }
@@ -150,7 +157,7 @@ export async function resetPasswordWithOtp(formData: FormData) {
   const failUrl = (err: string) =>
     `/forgot?step=code&email=${encodeURIComponent(email)}&error=${err}`;
 
-  const ipKey = `reset:verify:${clientIp(headers())}`;
+  const ipKey = `reset:verify:${clientIp(await headers())}`;
   if (isLimited(ipKey, LIMITS.resetVerifyPerIp)) redirect(failUrl("throttled"));
   if (!isStrongPassword(password)) redirect(failUrl("weak"));
 
@@ -185,6 +192,7 @@ export async function resetPasswordWithOtp(formData: FormData) {
     data: { passwordHash: await bcrypt.hash(password, 10), mustChangePassword: false },
   });
   await db.passwordReset.delete({ where: { userId: user.id } });
+  await revokeSessions(user.id); // whoever knew the old password is signed out
   redirect("/login?reset=1");
 }
 
@@ -207,6 +215,8 @@ export async function changeOwnPassword(formData: FormData) {
     where: { id: user.id },
     data: { passwordHash: await bcrypt.hash(next, 10), mustChangePassword: false },
   });
+  // New password: sign out every other device, keep this one signed in.
+  await createSession(user.id, user.role, await revokeSessions(user.id));
   redirect("/settings?ok=1");
 }
 
@@ -236,4 +246,11 @@ export async function updateNotificationPrefs(formData: FormData) {
     data: { emailNotifications, dailyDigest },
   });
   redirect("/settings?ok=1");
+}
+
+/** Settings → "Sign out of all other devices" (lost laptop, shared computer…). */
+export async function signOutOtherDevices() {
+  const user = await requireUser();
+  await createSession(user.id, user.role, await revokeSessions(user.id));
+  redirect("/settings?ok=signed-out");
 }

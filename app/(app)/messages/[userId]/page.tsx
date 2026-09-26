@@ -8,7 +8,8 @@ import ChatThread from "@/components/ChatThread";
 
 export const dynamic = "force-dynamic";
 
-export default async function ConversationPage({ params }: { params: { userId: string } }) {
+export default async function ConversationPage(props: { params: Promise<{ userId: string }> }) {
+  const params = await props.params;
   const user = await requireUser();
   const otherId = Number(params.userId);
   if (!otherId || otherId === user.id) notFound();
@@ -115,6 +116,7 @@ export default async function ConversationPage({ params }: { params: { userId: s
             : null,
         reactions: reactionsByMessage.get(m.id) ?? [],
         starred: myStarredIds.has(m.id),
+        forwarded: m.forwarded,
       }))}
       initialLastReadMyId={lastRead?.id ?? 0}
       initialPartnerPresence={{

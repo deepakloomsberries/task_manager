@@ -1,17 +1,14 @@
 import Link from "next/link";
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { requireClient } from "@/lib/clientAuth";
 import { clientLogout } from "@/lib/actions/portal";
 import ThemeToggle from "@/components/ThemeToggle";
+import SetupGate from "@/components/SetupGate";
 
 export const metadata: Metadata = { title: "Client portal · Looms & Berries" };
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const contact = await requireClient();
-  const pathname = headers().get("x-pathname") ?? "";
-  if (contact.mustChangePassword && pathname && pathname !== "/portal/password") redirect("/portal/password?first=1");
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
@@ -25,6 +22,14 @@ export default async function PortalLayout({ children }: { children: React.React
             </span>
             <span className="badge bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300">{contact.client.name}</span>
           </Link>
+          <nav className="ml-2 flex gap-1 text-sm">
+            <Link href="/portal" className="rounded-lg px-2.5 py-1.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700">
+              Projects
+            </Link>
+            <Link href="/portal/files" className="rounded-lg px-2.5 py-1.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700">
+              Files
+            </Link>
+          </nav>
           <div className="flex-1" />
           <ThemeToggle />
           <Link href="/portal/password" className="hidden text-sm text-slate-600 hover:underline dark:text-slate-300 sm:block" title="Change password">
@@ -37,7 +42,11 @@ export default async function PortalLayout({ children }: { children: React.React
           </form>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl p-4 sm:p-6">{children}</main>
+      <main className="mx-auto max-w-5xl p-4 sm:p-6">
+        <SetupGate kind={contact.mustChangePassword ? "portal-password" : null} home="/portal/password">
+          {children}
+        </SetupGate>
+      </main>
     </div>
   );
 }

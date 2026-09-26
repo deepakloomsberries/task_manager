@@ -3,7 +3,7 @@ import ConfirmButton from "@/components/ConfirmButton";
 import CopyField from "@/components/CopyField";
 import { disableCalendarLink, resetCalendarLink } from "@/lib/actions/calendar";
 import { googleSubscribeLink } from "@/lib/ics";
-import { changeOwnPassword, updateOwnProfile, updateNotificationPrefs } from "@/lib/actions/auth";
+import { changeOwnPassword, signOutOtherDevices, updateOwnProfile, updateNotificationPrefs } from "@/lib/actions/auth";
 import { removeAvatar } from "@/lib/actions/profile";
 import PasswordField from "@/components/PasswordField";
 import TwoStepCard from "@/components/TwoStepCard";
@@ -24,15 +24,19 @@ const MESSAGES: Record<string, { text: string; error?: boolean }> = {
   avatar: { text: "Please choose an image under 5 MB.", error: true },
 };
 
-export default async function SettingsPage({
-  searchParams,
-}: {
-  searchParams: { ok?: string; error?: string; first?: string; twostep?: string; recovery?: string };
-}) {
+export default async function SettingsPage(
+  props: {
+    searchParams: Promise<{ ok?: string; error?: string; first?: string; twostep?: string; recovery?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const user = await requireUser();
+  const mustSetUpTwoStep = user.role === "ADMIN" && !user.totpEnabled && adminTwoStepRequired();
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   const feedUrl = user.calendarToken ? `${appUrl}/api/calendar/${user.calendarToken}.ics` : null;
-  const msg = searchParams.ok
+  const msg = searchParams.ok === "signed-out"
+    ? { text: "Signed out of every other device. This one stays signed in." }
+    : searchParams.ok
     ? MESSAGES.ok
     : searchParams.error
       ? MESSAGES[searchParams.error]
@@ -42,7 +46,7 @@ export default async function SettingsPage({
     <div className="max-w-2xl space-y-4">
       <h1 className="text-2xl font-bold">Settings</h1>
 
-      {searchParams.first && user.mustChangePassword && (
+      {user.mustChangePassword && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           For security, please change the password provided by your administrator before continuing.
         </div>
@@ -54,7 +58,7 @@ export default async function SettingsPage({
           sign-in off and on again below to link your new phone.
         </div>
       )}
-      {searchParams.twostep && user.role === "ADMIN" && !user.totpEnabled && !user.mustChangePassword && (
+      {mustSetUpTwoStep && !user.mustChangePassword && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           🔐 Administrator accounts need two-step sign-in. Set it up below — it takes a minute with your phone.
         </div>
@@ -167,6 +171,7 @@ export default async function SettingsPage({
         enabled={user.totpEnabled}
         codesLeft={recoveryCodesLeft(user.totpRecovery)}
         required={user.role === "ADMIN" && adminTwoStepRequired()}
+        focus={(mustSetUpTwoStep && !user.mustChangePassword) || searchParams.recovery !== undefined}
       />
 
       <div id="calendar" className="card scroll-mt-20 p-6">
@@ -244,6 +249,20 @@ export default async function SettingsPage({
               {user.mustChangePassword ? "Set password" : "Update password"}
             </button>
           </div>
+        </form>
+      </div>
+
+      <div className="card flex flex-wrap items-center justify-between gap-3 p-6">
+        <div>
+          <h2 className="font-semibold">Signed in somewhere else?</h2>
+          <p className="text-sm text-slate-500">
+            Lost a phone or used a shared computer? Sign out everywhere except here. Changing your password does this too.
+          </p>
+        </div>
+        <form action={signOutOtherDevices}>
+          <button type="submit" className="btn-secondary">
+            Sign out other devices
+          </button>
         </form>
       </div>
     </div>

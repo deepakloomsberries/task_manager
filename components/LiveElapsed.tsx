@@ -23,7 +23,7 @@ export default function LiveElapsed({
   }, []);
   const elapsed = now === null ? null : (now - new Date(startedAt).getTime()) / 1000;
   return (
-    <span className={`font-mono tabular-nums ${className}`}>
+    <span className={`font-mono tabular-nums ${className}`} suppressHydrationWarning>
       {elapsed === null ? "—" : fmtDuration(elapsed)}
     </span>
   );

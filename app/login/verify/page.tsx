@@ -4,7 +4,8 @@ import { pendingTwoStep } from "@/lib/twoFactor";
 
 export const dynamic = "force-dynamic";
 
-export default async function VerifyPage({ searchParams }: { searchParams: { error?: string; backup?: string } }) {
+export default async function VerifyPage(props: { searchParams: Promise<{ error?: string; backup?: string }> }) {
+  const searchParams = await props.searchParams;
   if (!(await pendingTwoStep())) redirect("/login?error=expired");
   const backup = searchParams.backup === "1";
 

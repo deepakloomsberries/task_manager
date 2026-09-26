@@ -9,7 +9,8 @@ import { NOTE_COLORS } from "@/lib/ui";
  * closed — so a half-written note is never lost on the way out. The note's
  * owner and anyone it's shared with may save it.
  */
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false }, { status: 401 });
 

@@ -14,11 +14,12 @@ const DAY_OPTIONS = [
   { value: "365", label: "Last 12 months" },
 ];
 
-export default async function ReportsPage({
-  searchParams,
-}: {
-  searchParams: { company?: string; department?: string; assignee?: string; days?: string };
-}) {
+export default async function ReportsPage(
+  props: {
+    searchParams: Promise<{ company?: string; department?: string; assignee?: string; days?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const user = await requireUser();
   const teamWide = isManagerOrAdmin(user.role);
 

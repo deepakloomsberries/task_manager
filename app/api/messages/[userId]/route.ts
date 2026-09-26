@@ -9,7 +9,8 @@ import { PRESENCE_SELECT } from "@/lib/presence";
  * than `after`, marks the partner's messages to us as read (so their side can
  * show "Seen"), and reports the partner's presence so the header stays live.
  */
-export async function GET(req: NextRequest, { params }: { params: { userId: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ userId: string }> }) {
+  const params = await props.params;
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
@@ -124,6 +125,7 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
             : null,
         reactions: reactionsByMessage.get(m.id) ?? [],
         starred: myStarredIds.has(m.id),
+        forwarded: m.forwarded,
       };
     }),
     // Full reaction snapshot for every message currently in the loaded window

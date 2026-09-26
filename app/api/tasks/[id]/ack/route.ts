@@ -4,7 +4,8 @@ import { getSession } from "@/lib/auth";
 
 /** Marks a task as seen by its assignee. Called ~1s after the assignee opens
  *  the task, so there's a record they viewed it. Idempotent. */
-export async function POST(_req: Request, { params }: { params: { id: string } }) {
+export async function POST(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false }, { status: 401 });
   const id = Number(params.id);

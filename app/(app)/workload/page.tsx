@@ -36,11 +36,12 @@ function toDateParam(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
-export default async function WorkloadPage({
-  searchParams,
-}: {
-  searchParams: { start?: string; company?: string; department?: string; assignee?: string; over?: string };
-}) {
+export default async function WorkloadPage(
+  props: {
+    searchParams: Promise<{ start?: string; company?: string; department?: string; assignee?: string; over?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const user = await requireUser();
   if (!isManagerOrAdmin(user.role)) redirect("/dashboard");
 

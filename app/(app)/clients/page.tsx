@@ -36,7 +36,8 @@ const ERR: Record<string, string> = {
   missing: "That contact no longer exists.",
 };
 
-export default async function ClientsPage({ searchParams }: { searchParams: { ok?: string; error?: string } }) {
+export default async function ClientsPage(props: { searchParams: Promise<{ ok?: string; error?: string }> }) {
+  const searchParams = await props.searchParams;
   const user = await requireUser();
   if (!isManagerOrAdmin(user.role)) redirect("/dashboard");
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";

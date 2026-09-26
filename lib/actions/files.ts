@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { folderVisibleTo } from "@/lib/docAccess";
 import { deleteUpload } from "@/lib/storage";
 
 // File uploads themselves go through POST /api/attachments/upload (a plain
@@ -21,7 +22,9 @@ import { deleteUpload } from "@/lib/storage";
 export async function addAttachmentLink(formData: FormData) {
   const user = await requireUser();
   const taskId = formData.get("taskId") ? Number(formData.get("taskId")) : null;
-  const back = taskId ? `/tasks/${taskId}` : "/documents";
+  const rawFolder = !taskId && formData.get("folderId") ? Number(formData.get("folderId")) : null;
+  const folderId = rawFolder && (await folderVisibleTo(rawFolder, user)) ? rawFolder : null;
+  const back = taskId ? `/tasks/${taskId}` : folderId ? `/documents?folder=${folderId}` : "/documents";
 
   const rawUrl = String(formData.get("url") ?? "").trim();
   const label = String(formData.get("label") ?? "").trim().slice(0, 200);
@@ -43,12 +46,19 @@ export async function addAttachmentLink(formData: FormData) {
       size: 0,
       externalUrl: url.toString(),
       taskId,
+      folderId,
+      ...(folderId ? { access: "RESTRICTED" } : {}),
       uploadedById: user.id,
     },
   });
 
   revalidatePath(back);
   redirect(back);
+}
+
+/** Files that live in Documents (task and standalone files) — deleting them uses the bin. */
+function inDocuments(a: { messageId: number | null; groupMessageId: number | null; noteId: number | null; draft: boolean }) {
+  return !a.messageId && !a.groupMessageId && !a.noteId && !a.draft;
 }
 
 export async function deleteAttachment(formData: FormData) {
@@ -62,7 +72,7 @@ export async function deleteAttachment(formData: FormData) {
   // person opened the task from, so this redirect doesn't strip it.
   const backField = formData.get("back");
   const back =
-    attachment.taskId && typeof backField === "string" && backField.startsWith("/tasks")
+    typeof backField === "string" && (backField.startsWith("/tasks") || backField.startsWith("/documents")) && !backField.startsWith("//")
       ? backField
       : fallback;
   // A client's upload has no staff uploader: managers and the task owner may remove it.
@@ -73,8 +83,13 @@ export async function deleteAttachment(formData: FormData) {
   }
   if (attachment.uploadedById !== user.id && user.role !== "ADMIN" && !clientFileManager) redirect(back);
 
-  await db.attachment.delete({ where: { id } });
-  await deleteUpload(attachment.storedName);
+  if (inDocuments(attachment)) {
+    // Documents and task files go to the bin for 30 days (restore from Documents → Bin).
+    await db.attachment.update({ where: { id }, data: { deletedAt: new Date(), deletedById: user.id } });
+  } else {
+    await db.attachment.delete({ where: { id } });
+    await deleteUpload(attachment.storedName);
+  }
   revalidatePath(back);
   redirect(back);
 }
@@ -94,8 +109,10 @@ export async function deleteAttachments(formData: FormData) {
     (a) => a.uploadedById === user.id || user.role === "ADMIN",
   );
   if (deletable.length > 0) {
-    await db.attachment.deleteMany({ where: { id: { in: deletable.map((a) => a.id) } } });
-    for (const a of deletable) await deleteUpload(a.storedName);
+    await db.attachment.updateMany({
+      where: { id: { in: deletable.map((a) => a.id) } },
+      data: { deletedAt: new Date(), deletedById: user.id },
+    });
   }
   revalidatePath("/documents");
   redirect("/documents");

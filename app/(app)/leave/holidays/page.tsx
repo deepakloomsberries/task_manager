@@ -16,7 +16,10 @@ const ERR: Record<string, string> = {
   exists: "That office already has a holiday on that date.",
 };
 
-export default async function HolidaysPage({ searchParams }: { searchParams: { ok?: string; error?: string; year?: string } }) {
+export default async function HolidaysPage(
+  props: { searchParams: Promise<{ ok?: string; error?: string; year?: string }> }
+) {
+  const searchParams = await props.searchParams;
   const user = await requireUser();
   const isAdmin = user.role === "ADMIN";
   const isManager = isManagerOrAdmin(user.role);

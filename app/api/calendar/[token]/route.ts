@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic";
  * calendar apps can't sign in — so it's long, random and can be reset from
  * Settings. Unknown or reset tokens get a plain 404.
  */
-export async function GET(_req: Request, { params }: { params: { token: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const body = await feedFor(params.token.replace(/\.ics$/, ""));
   if (!body) return new Response("Not found", { status: 404 });
   return new Response(body, {

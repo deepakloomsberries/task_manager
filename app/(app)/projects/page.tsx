@@ -8,11 +8,12 @@ import AutoRefresh from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProjectsPage({
-  searchParams,
-}: {
-  searchParams: { new?: string };
-}) {
+export default async function ProjectsPage(
+  props: {
+    searchParams: Promise<{ new?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const user = await requireUser();
   const canManage = isManagerOrAdmin(user.role);
 

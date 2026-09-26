@@ -47,13 +47,14 @@ const ROLE_BADGE: Record<string, string> = {
 };
 const ROLE_LABEL: Record<string, string> = { ADMIN: "Admin", MANAGER: "Manager", EMPLOYEE: "Employee" };
 
-export default async function PersonProfilePage({
-  params,
-  searchParams,
-}: {
-  params: { id: string };
-  searchParams: Record<string, string | undefined>;
-}) {
+export default async function PersonProfilePage(
+  props: {
+    params: Promise<{ id: string }>;
+    searchParams: Promise<Record<string, string | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const viewer = await requireUser();
   const id = Number(params.id);
   if (!id) notFound();
