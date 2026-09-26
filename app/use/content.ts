@@ -674,6 +674,13 @@ export const CATEGORIES: Category[] = [
           { spot: "link", title: "Add link", body: "For big files, add a Google Drive / OneDrive link instead.", side: "bottom" },
           { spot: "table", title: "File list", body: "See which task a file belongs to, who uploaded it and when.", side: "inside" },
         ],
+        tips: [
+          "Share like Google Drive: upload a file and the Share window opens — or click Share on any file you uploaded.",
+          "Add people to give them access; they're notified and find it under “Shared with me”.",
+          "General access: 🔒 Restricted (only you and the people you add), 🏢 Looms & Berries (everyone), or 🌐 Anyone with the link — a public download page for buyers, vendors or anyone without an account.",
+          "Public links can expire after 1, 7 or 30 days, show how many times they were downloaded, and can be reset or switched off at any time. All your public links are listed under 🌐 Public links.",
+          "Task files are always visible to your team; you can still give one a public link.",
+        ],
       },
     ],
   },
@@ -952,6 +959,7 @@ export const FAQS: { q: string; a: string }[] = [
 
 /** Newest first. `link` is an article id. */
 export const WHATS_NEW: { date: string; title: string; body: string; link?: string }[] = [
+  { date: "Sep 2026", title: "Share files like Google Drive", body: "Share a document with people, or make a public link anyone can download — with expiry and download counts.", link: "documents" },
   { date: "Sep 2026", title: "Forward messages", body: "Send any chat message — with its files — to other people or groups in one go.", link: "messages" },
   { date: "Sep 2026", title: "Client files", body: "Pick which files a client sees, and let clients upload tech packs and sample photos.", link: "client-share" },
   { date: "Sep 2026", title: "Two-step sign-in", body: "A code from your phone after your password. Required for admins, available to everyone.", link: "two-step" },

@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { deleteAttachment, deleteAttachments } from "@/lib/actions/files";
 import ConfirmButton from "@/components/ConfirmButton";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import ShareFileDialog from "@/components/ShareFileDialog";
 
 export type DocRow = {
   id: number;
@@ -17,10 +18,30 @@ export type DocRow = {
   taskId: number | null;
   taskTitle: string | null;
   canDelete: boolean;
+  /** RESTRICTED | COMPANY | PUBLIC (a live public link) */
+  access: string;
+  sharedCount: number;
+  canShare: boolean;
 };
 
-export default function DocumentsTable({ rows }: { rows: DocRow[] }) {
+const ACCESS_BADGE: Record<string, { icon: string; title: string }> = {
+  RESTRICTED: { icon: "🔒", title: "Restricted — only you and the people it's shared with" },
+  COMPANY: { icon: "🏢", title: "Everyone at Looms & Berries" },
+  PUBLIC: { icon: "🌐", title: "Anyone with the link" },
+};
+
+export default function DocumentsTable({ rows: allRows, openShare }: { rows: DocRow[]; openShare?: number | null }) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [sharing, setSharing] = useState<number | null>(openShare ?? null);
+  const [q, setQ] = useState("");
+  // Opened by URL (?share=<id>), e.g. straight after an upload.
+  useEffect(() => {
+    if (openShare) setSharing(openShare);
+  }, [openShare]);
+  const rows = useMemo(() => {
+    const n = q.trim().toLowerCase();
+    return n ? allRows.filter((r) => `${r.originalName} ${r.taskTitle ?? ""} ${r.uploadedByName}`.toLowerCase().includes(n)) : allRows;
+  }, [allRows, q]);
   const [confirmBulk, setConfirmBulk] = useState(false);
 
   const deletableIds = useMemo(() => rows.filter((r) => r.canDelete).map((r) => r.id), [rows]);
@@ -47,6 +68,13 @@ export default function DocumentsTable({ rows }: { rows: DocRow[] }) {
 
   return (
     <div className="space-y-3">
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search files by name, task or person…"
+        className="input max-w-md"
+        aria-label="Search files"
+      />
       {/* Bulk action bar — appears only when something is selected. */}
       {selectedCount > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm dark:border-sky-900 dark:bg-sky-950/40">
@@ -98,7 +126,7 @@ export default function DocumentsTable({ rows }: { rows: DocRow[] }) {
             {rows.length === 0 && (
               <tr>
                 <td colSpan={7} className="td py-10 text-center text-slate-400">
-                  No documents uploaded yet.
+                  {q ? "No files match your search." : "No files here yet."}
                 </td>
               </tr>
             )}
@@ -127,6 +155,10 @@ export default function DocumentsTable({ rows }: { rows: DocRow[] }) {
                       {a.isLink && "🔗 "}
                       {a.originalName}
                     </a>
+                    <span className="ml-2 whitespace-nowrap text-xs text-slate-400" title={ACCESS_BADGE[a.access]?.title}>
+                      {ACCESS_BADGE[a.access]?.icon}
+                      {a.sharedCount > 0 && ` +${a.sharedCount}`}
+                    </span>
                   </td>
                   <td className="td text-slate-600">{a.isLink ? "Link" : a.sizeLabel}</td>
                   <td className="td text-slate-600">
@@ -151,6 +183,9 @@ export default function DocumentsTable({ rows }: { rows: DocRow[] }) {
                           Download
                         </a>
                       )}
+                      <button type="button" onClick={() => setSharing(a.id)} className="font-medium text-sky-700 hover:underline dark:text-sky-400">
+                        {a.canShare ? "Share" : "Link"}
+                      </button>
                       {a.canDelete && (
                         <form action={deleteAttachment}>
                           <input type="hidden" name="id" value={a.id} />
@@ -170,6 +205,8 @@ export default function DocumentsTable({ rows }: { rows: DocRow[] }) {
           </tbody>
         </table>
       </div>
+
+      {sharing !== null && <ShareFileDialog fileId={sharing} onClose={() => setSharing(null)} />}
 
       {/* Hidden form that carries the selected ids to the bulk-delete action. */}
       <form id="bulk-delete-form" action={deleteAttachments}>

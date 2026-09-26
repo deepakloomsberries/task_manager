@@ -63,10 +63,13 @@ export default function PasteAttachment({
   taskId,
   listenPaste = true,
   compact = false,
+  shareAfterUpload = false,
 }: {
   taskId?: number;
   listenPaste?: boolean;
   compact?: boolean;
+  /** Documents page: after uploading one file, open its Share dialog. */
+  shareAfterUpload?: boolean;
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -94,6 +97,7 @@ export default function PasteAttachment({
     setUploads((prev) => [...prev, ...items]);
 
     let anySucceeded = false;
+    let lastId: number | null = null;
     Promise.allSettled(
       files.map((file, i) => {
         const item = items[i];
@@ -103,8 +107,9 @@ export default function PasteAttachment({
           (pct) => patchUpload(item.id, { progress: pct }),
           (xhr) => patchUpload(item.id, { xhr })
         )
-          .then(() => {
+          .then((res) => {
             anySucceeded = true;
+            lastId = res.id;
             patchUpload(item.id, { status: "done", progress: 100 });
             // Fade the success entry out of the popup on its own; errors stay
             // until dismissed so they're not missed.
@@ -121,7 +126,9 @@ export default function PasteAttachment({
     ).then(() => {
       // Refresh the server-rendered attachment list once this batch settles
       // (a plain fetch/XHR upload doesn't navigate, so nothing else would).
-      if (anySucceeded) router.refresh();
+      if (!anySucceeded) return;
+      if (shareAfterUpload && files.length === 1 && lastId) router.push(`/documents?share=${lastId}`);
+      else router.refresh();
     });
   }
 

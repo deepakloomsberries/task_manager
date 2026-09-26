@@ -19,6 +19,8 @@ export const LIMITS = {
   loginPerIp: { max: 20, windowMs: 15 * 60_000 },
   /** Reset-code emails requested from one IP. */
   resetRequestPerIp: { max: 10, windowMs: 15 * 60_000 },
+  /** Public file-link requests from one IP (stops a link being hammered). */
+  publicFilePerIp: { max: 300, windowMs: 15 * 60_000 },
   /** Two-step sign-in code guesses for one account. */
   twoStepPerUser: { max: 5, windowMs: 15 * 60_000 },
   /** Reset-code guesses from one IP (per-account guesses are capped separately). */

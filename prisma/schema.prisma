@@ -108,6 +108,7 @@ model User {
   /// version they were issued with and stop working once it moves on.
   sessionVersion        Int                    @default(0)
   clientComments        ClientComment[]
+  fileShares            AttachmentShare[]
 }
 
 /**
@@ -482,8 +483,17 @@ model Attachment {
   /// Uploaded into a chat box but not sent yet. Only drafts are ever cleaned
   /// up automatically (after a day) — Documents uploads are never touched.
   draft               Boolean            @default(false)
+  /// Who can open a Documents file, like Google Drive's "General access":
+  /// RESTRICTED (owner, admins and people it's shared with), COMPANY (everyone
+  /// signed in) or PUBLIC (also anyone with the public link /f/<shareToken>).
+  access              String             @default("COMPANY")
+  shareToken          String? // public link id — stays the same if access is switched off and on
+  shareExpiresAt      DateTime? // public link stops working after this
+  downloads           Int                @default(0) // public-link downloads
+  shares              AttachmentShare[]
   createdAt           DateTime           @default(now())
 
+  @@index([shareToken])
   @@index([messageId])
   @@index([discussionMessageId])
   @@index([noteId])
@@ -803,4 +813,18 @@ model ClientComment {
   createdAt DateTime       @default(now())
 
   @@index([taskId, createdAt])
+}
+
+/**
+ * A Documents file shared with one person (they see it under "Shared with me").
+ */
+model AttachmentShare {
+  attachment   Attachment @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+  attachmentId Int
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       Int
+  createdAt    DateTime   @default(now())
+
+  @@id([attachmentId, userId])
+  @@index([userId])
 }
