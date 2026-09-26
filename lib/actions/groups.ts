@@ -134,7 +134,7 @@ export async function sendGroupMessage(
   if (ids.length > 0) {
     await db.attachment.updateMany({
       where: { id: { in: ids }, uploadedById: user.id, messageId: null, taskId: null, discussionMessageId: null, groupMessageId: null },
-      data: { groupMessageId: msg.id },
+      data: { groupMessageId: msg.id, draft: false },
     });
   }
   const attachments = await db.attachment.findMany({

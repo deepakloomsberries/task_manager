@@ -26,7 +26,9 @@ export default async function DocumentsPage(
     // library. Only old company-wide Discussion-post attachments (from
     // before groups existed) stay here, since that channel really was
     // visible to everyone — unlike an arbitrary group can be.
-    where: { messageId: null, groupMessageId: null },
+    // Note attachments are private to the note's owner and the people it's
+    // shared with; unsent chat drafts aren't documents at all.
+    where: { messageId: null, groupMessageId: null, noteId: null, draft: false },
     orderBy: { createdAt: "desc" },
     include: { uploadedBy: true, clientContact: { select: { name: true } }, task: true },
   });

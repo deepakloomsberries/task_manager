@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
 
   const saved = await saveUpload(file);
   const attachment = await db.attachment.create({
-    data: { ...saved, uploadedById: session.userId },
+    data: { ...saved, uploadedById: session.userId, draft: true },
   });
 
   return NextResponse.json({

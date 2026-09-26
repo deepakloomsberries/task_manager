@@ -180,16 +180,19 @@ async function main() {
 
 /**
  * Housekeeping for the uploads folder:
- * - uploads never attached to anything (a file added to a chat box, then the
- *   message never sent) are removed after a day;
+ * - chat-box drafts (a file added to a chat box, then the message never sent)
+ *   are removed after a day — Documents uploads are never touched;
  * - files on disk that no record points to any more (e.g. the attachments of
  *   purged recurring occurrences, whose rows went with the task) are deleted.
  * Only touches files older than a day, so an upload in progress is safe.
  */
 async function cleanUploads(now: Date): Promise<number> {
   const dayAgo = new Date(now.getTime() - 86_400_000);
+  // Only chat-box drafts: a file uploaded straight to Documents has no task or
+  // message either, and must never be touched.
   const stray = await db.attachment.findMany({
     where: {
+      draft: true,
       createdAt: { lt: dayAgo },
       taskId: null, messageId: null, groupMessageId: null, noteId: null, discussionMessageId: null,
     },

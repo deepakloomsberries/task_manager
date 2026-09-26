@@ -479,6 +479,9 @@ model Attachment {
   clientContactId     Int?
   /// Shown to the client in the portal (their own uploads always are).
   clientVisible       Boolean            @default(false)
+  /// Uploaded into a chat box but not sent yet. Only drafts are ever cleaned
+  /// up automatically (after a day) — Documents uploads are never touched.
+  draft               Boolean            @default(false)
   createdAt           DateTime           @default(now())
 
   @@index([messageId])

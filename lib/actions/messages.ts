@@ -201,7 +201,7 @@ export async function sendMessage(
   if (ids.length > 0) {
     await db.attachment.updateMany({
       where: { id: { in: ids }, uploadedById: user.id, messageId: null, taskId: null },
-      data: { messageId: msg.id },
+      data: { messageId: msg.id, draft: false },
     });
   }
   const attachments = await db.attachment.findMany({
