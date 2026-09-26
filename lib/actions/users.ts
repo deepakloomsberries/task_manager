@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import { localPath } from "@/lib/backLink";
 import { requireAdmin } from "@/lib/auth";
 import { notifyUserWelcome, notifyPasswordReset } from "@/lib/mail";
 import { isStrongPassword } from "@/lib/password";
@@ -18,7 +19,7 @@ const ROLES = ["ADMIN", "MANAGER", "EMPLOYEE"];
  */
 function returnTo(formData: FormData, fallbackWithQuery: string): string {
   const to = String(formData.get("redirectTo") ?? "");
-  if (!to.startsWith("/") || to.startsWith("//")) return fallbackWithQuery;
+  if (localPath(to, "") === "") return fallbackWithQuery;
   const q = fallbackWithQuery.includes("?") ? `?${fallbackWithQuery.split("?")[1]}` : "";
   return `${to}${q}`;
 }
@@ -85,9 +86,12 @@ export async function updateUser(formData: FormData) {
   const clash = await db.user.findUnique({ where: { email }, select: { id: true } });
   if (clash && clash.id !== id) redirect(returnTo(formData, `/users?error=exists&edit=${id}`));
 
+  const before = await db.user.findUnique({ where: { id }, select: { role: true } });
   await db.user.update({
     where: { id },
     data: {
+      // A role change signs them out everywhere, so it applies at once.
+      ...(before && before.role !== role ? { sessionVersion: { increment: 1 } } : {}),
       name,
       email,
       role,
@@ -135,7 +139,7 @@ export async function resetUserPassword(formData: FormData) {
 
   const user = await db.user.update({
     where: { id },
-    data: { passwordHash: await bcrypt.hash(password, 10), mustChangePassword: true },
+    data: { passwordHash: await bcrypt.hash(password, 10), mustChangePassword: true, sessionVersion: { increment: 1 } },
   });
 
   notifyPasswordReset({ to: user.email, name: user.name, password });
@@ -151,7 +155,8 @@ export async function toggleUserActive(formData: FormData) {
 
   const user = await db.user.findUnique({ where: { id } });
   if (user) {
-    await db.user.update({ where: { id }, data: { active: !user.active } });
+    // Deactivating also ends their sessions on every device.
+    await db.user.update({ where: { id }, data: { active: !user.active, ...(user.active ? { sessionVersion: { increment: 1 } } : {}) } });
   }
   revalidatePath("/users");
   revalidatePath(`/people/${id}`);

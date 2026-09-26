@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
-import { createSession, destroySession, requireUser } from "@/lib/auth";
+import { createSession, destroySession, requireUser, revokeSessions } from "@/lib/auth";
 import { isStrongPassword } from "@/lib/password";
 import { notifyPasswordOtp } from "@/lib/mail";
 import { CHAT_LANGUAGES } from "@/lib/ui";
@@ -53,7 +53,7 @@ export async function login(formData: FormData) {
     await startTwoStep(user.id);
     redirect("/login/verify");
   }
-  await createSession(user.id, user.role);
+  await createSession(user.id, user.role, user.sessionVersion);
   redirect(landingFor(user));
 }
 
@@ -87,7 +87,7 @@ export async function verifyTwoStep(formData: FormData) {
   });
   clearLimit(key);
   await endTwoStep();
-  await createSession(user.id, user.role);
+  await createSession(user.id, user.role, user.sessionVersion);
   if (user.mustChangePassword) redirect("/settings?first=1");
   // Signed in with a backup code — show how many are left.
   redirect(step === null ? `/settings?recovery=${recoveryCodesLeft(remaining)}` : landingFor(user));
@@ -192,6 +192,7 @@ export async function resetPasswordWithOtp(formData: FormData) {
     data: { passwordHash: await bcrypt.hash(password, 10), mustChangePassword: false },
   });
   await db.passwordReset.delete({ where: { userId: user.id } });
+  await revokeSessions(user.id); // whoever knew the old password is signed out
   redirect("/login?reset=1");
 }
 
@@ -214,6 +215,8 @@ export async function changeOwnPassword(formData: FormData) {
     where: { id: user.id },
     data: { passwordHash: await bcrypt.hash(next, 10), mustChangePassword: false },
   });
+  // New password: sign out every other device, keep this one signed in.
+  await createSession(user.id, user.role, await revokeSessions(user.id));
   redirect("/settings?ok=1");
 }
 
@@ -243,4 +246,11 @@ export async function updateNotificationPrefs(formData: FormData) {
     data: { emailNotifications, dailyDigest },
   });
   redirect("/settings?ok=1");
+}
+
+/** Settings → "Sign out of all other devices" (lost laptop, shared computer…). */
+export async function signOutOtherDevices() {
+  const user = await requireUser();
+  await createSession(user.id, user.role, await revokeSessions(user.id));
+  redirect("/settings?ok=signed-out");
 }

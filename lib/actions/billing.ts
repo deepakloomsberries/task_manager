@@ -11,6 +11,7 @@ const DEFAULT_CURRENCY = "INR";
 
 /** The one-and-only billing rate row, created on first read if it doesn't exist yet. */
 export async function getBillingSetting() {
+  await requireAdmin(); // exported from a "use server" file, so callable from the browser
   const existing = await db.billingSetting.findUnique({ where: { id: 1 } });
   if (existing) return existing;
   return db.billingSetting.create({

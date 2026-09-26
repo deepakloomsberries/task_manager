@@ -3,7 +3,7 @@ import ConfirmButton from "@/components/ConfirmButton";
 import CopyField from "@/components/CopyField";
 import { disableCalendarLink, resetCalendarLink } from "@/lib/actions/calendar";
 import { googleSubscribeLink } from "@/lib/ics";
-import { changeOwnPassword, updateOwnProfile, updateNotificationPrefs } from "@/lib/actions/auth";
+import { changeOwnPassword, signOutOtherDevices, updateOwnProfile, updateNotificationPrefs } from "@/lib/actions/auth";
 import { removeAvatar } from "@/lib/actions/profile";
 import PasswordField from "@/components/PasswordField";
 import TwoStepCard from "@/components/TwoStepCard";
@@ -34,7 +34,9 @@ export default async function SettingsPage(
   const mustSetUpTwoStep = user.role === "ADMIN" && !user.totpEnabled && adminTwoStepRequired();
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   const feedUrl = user.calendarToken ? `${appUrl}/api/calendar/${user.calendarToken}.ics` : null;
-  const msg = searchParams.ok
+  const msg = searchParams.ok === "signed-out"
+    ? { text: "Signed out of every other device. This one stays signed in." }
+    : searchParams.ok
     ? MESSAGES.ok
     : searchParams.error
       ? MESSAGES[searchParams.error]
@@ -247,6 +249,20 @@ export default async function SettingsPage(
               {user.mustChangePassword ? "Set password" : "Update password"}
             </button>
           </div>
+        </form>
+      </div>
+
+      <div className="card flex flex-wrap items-center justify-between gap-3 p-6">
+        <div>
+          <h2 className="font-semibold">Signed in somewhere else?</h2>
+          <p className="text-sm text-slate-500">
+            Lost a phone or used a shared computer? Sign out everywhere except here. Changing your password does this too.
+          </p>
+        </div>
+        <form action={signOutOtherDevices}>
+          <button type="submit" className="btn-secondary">
+            Sign out other devices
+          </button>
         </form>
       </div>
     </div>

@@ -33,3 +33,13 @@ describe("backLabel", () => {
     expect(taskHref(7, "/projects/3")).toBe("/tasks/7?back=%2Fprojects%2F3");
   });
 });
+
+describe("localPath", () => {
+  it("only lets in-app paths through", async () => {
+    const { localPath } = await import("@/lib/backLink");
+    expect(localPath("/tasks?view=board", "/x")).toBe("/tasks?view=board");
+    for (const bad of ["https://evil.com", "//evil.com", "/\\evil.com", "evil.com", "", null, 5, "/ok\r\nSet-Cookie: x"]) {
+      expect(localPath(bad, "/fallback")).toBe("/fallback");
+    }
+  });
+});

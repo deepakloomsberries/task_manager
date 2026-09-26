@@ -50,3 +50,14 @@ export function backLabel(back: string, projectName?: string | null): string {
 export function taskHref(taskId: number, back: string): string {
   return `/tasks/${taskId}?back=${encodeURIComponent(back)}`;
 }
+
+/**
+ * A form's "back" value as an in-app path, or the fallback. Only "/…" paths on
+ * this site pass — never "//evil.com", "/\evil.com" or "https://…" — so a
+ * crafted form can't bounce someone to another website after an action.
+ */
+export function localPath(value: unknown, fallback: string): string {
+  const v = typeof value === "string" ? value.trim() : "";
+  if (!v.startsWith("/") || v.startsWith("//") || v.startsWith("/\\") || /[\r\n]/.test(v)) return fallback;
+  return v;
+}

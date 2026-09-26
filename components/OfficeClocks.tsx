@@ -40,7 +40,7 @@ export default function OfficeClocks({ myCode }: { myCode?: string }) {
                   title={open ? "Working hours" : "Outside working hours"}
                   className={`h-2 w-2 rounded-full ${open ? "bg-green-500" : "bg-slate-300"}`}
                 />
-                <span className="tabular-nums text-sm text-slate-600">{time}</span>
+                <span className="tabular-nums text-sm text-slate-600" suppressHydrationWarning>{time}</span>
               </span>
             </div>
           );

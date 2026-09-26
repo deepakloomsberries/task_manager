@@ -103,6 +103,10 @@ model User {
   totpEnabled           Boolean                @default(false)
   totpLastStep          Int? // last code's time step — a code can't be used twice
   totpRecovery          String? // sha256 hashes of unused backup codes, comma-separated
+  /// Bumped to sign this person out everywhere (password change, reset,
+  /// deactivation, role change, "sign out other devices"). Sessions carry the
+  /// version they were issued with and stop working once it moves on.
+  sessionVersion        Int                    @default(0)
   clientComments        ClientComment[]
 }
 
@@ -132,6 +136,7 @@ model Project {
   createdBy   User            @relation(fields: [createdById], references: [id])
   createdById Int
   createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @default(now()) @updatedAt
   tasks       Task[]
   members     ProjectMember[]
   timeEntries TimeEntry[]
@@ -591,6 +596,7 @@ model TimeEntry {
   note      String?
   source    String    @default("manual") // manual | timer
   createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now()) @updatedAt
 
   @@index([userId, date])
   @@index([taskId])
@@ -741,6 +747,7 @@ model Leave {
   reviewedAt   DateTime?
   reviewNote   String?
   createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
 
   @@index([userId, startDate])
   @@index([status])

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
 import { backdatedStart, MAX_BACKDATE_MIN } from "@/lib/timers";
-import { startTimerFor } from "@/lib/actions/time";
+import { startTimerFor } from "@/lib/timers";
 import { hoursAgo, makeTask, makeUser } from "./helpers";
 
 const now = new Date("2026-09-24T12:00:00Z");

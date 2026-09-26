@@ -171,9 +171,49 @@ async function main() {
     where: { seriesId: { not: null }, deletedAt: { not: null }, dueDate: { lt: cutoff } },
   });
 
+  const cleaned = await cleanUploads(now);
+
   console.log(
-    `Done at ${now.toISOString()}: ${bySeries.size} series, ${closed} closed (${missed} missed), ${created} created, ${purged.count} old occurrence(s) purged (>${RETENTION_DAYS}d).`
+    `Done at ${now.toISOString()}: ${bySeries.size} series, ${closed} closed (${missed} missed), ${created} created, ${purged.count} old occurrence(s) purged (>${RETENTION_DAYS}d), ${cleaned} unused upload(s) removed.`
   );
+}
+
+/**
+ * Housekeeping for the uploads folder:
+ * - uploads never attached to anything (a file added to a chat box, then the
+ *   message never sent) are removed after a day;
+ * - files on disk that no record points to any more (e.g. the attachments of
+ *   purged recurring occurrences, whose rows went with the task) are deleted.
+ * Only touches files older than a day, so an upload in progress is safe.
+ */
+async function cleanUploads(now: Date): Promise<number> {
+  const dayAgo = new Date(now.getTime() - 86_400_000);
+  const stray = await db.attachment.findMany({
+    where: {
+      createdAt: { lt: dayAgo },
+      taskId: null, messageId: null, groupMessageId: null, noteId: null, discussionMessageId: null,
+    },
+    select: { id: true },
+  });
+  if (stray.length) await db.attachment.deleteMany({ where: { id: { in: stray.map((a) => a.id) } } });
+
+  const dir = process.env.UPLOAD_DIR ?? path.join(process.cwd(), "uploads");
+  if (!fs.existsSync(dir)) return stray.length;
+  const [files, avatars] = await Promise.all([
+    db.attachment.findMany({ where: { storedName: { not: null } }, select: { storedName: true } }),
+    db.user.findMany({ where: { avatarPath: { not: null } }, select: { avatarPath: true } }),
+  ]);
+  const inUse = new Set<string>([...files.map((f) => f.storedName!), ...avatars.map((u) => u.avatarPath!)]);
+  let removed = 0;
+  for (const name of fs.readdirSync(dir)) {
+    if (inUse.has(name)) continue;
+    const full = path.join(dir, name);
+    const st = fs.statSync(full);
+    if (!st.isFile() || st.mtime > dayAgo) continue;
+    fs.unlinkSync(full);
+    removed++;
+  }
+  return removed;
 }
 
 main()

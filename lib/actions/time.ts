@@ -3,11 +3,12 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import { localPath } from "@/lib/backLink";
 import { requireUser, isManagerOrAdmin } from "@/lib/auth";
 import { pushNotification, logActivity } from "@/lib/notify";
 import { parseHours } from "@/lib/ui";
 import { weekStartOf } from "@/lib/timerange";
-import { backdatedStart, commitTimer } from "@/lib/timers";
+import { commitTimer, startTimerFor } from "@/lib/timers";
 import { auditTimeEntry } from "@/lib/timeAudit";
 import { weekLocked } from "@/lib/timesheetLock";
 
@@ -110,34 +111,6 @@ export async function deleteTimeEntry(formData: FormData) {
 }
 
 /**
- * Stops every running timer on a task and banks the elapsed time. Called when a
- * task is completed, so nobody keeps accruing time against finished work.
- * Returns how many timers were stopped.
- */
-export async function commitTimersForTask(taskId: number): Promise<number> {
-  const timers = await db.taskTimer.findMany({ where: { taskId } });
-  for (const t of timers) await commitTimer(t);
-  return timers.length;
-}
-
-/**
- * Starts (or switches to) a user's stopwatch on a task. A person can only time
- * one task at a time, so if they were already timing something else we bank that
- * time first and then switch — the "what am I working on now" flow of Toggl or
- * Harvest. No-ops if they're already timing this task. Shared by the Start-timer
- * button and the auto-start when a task is moved to In Progress.
- */
-export async function startTimerFor(userId: number, taskId: number, minutesAgo = 0) {
-  const existing = await db.taskTimer.findUnique({ where: { userId } });
-  if (existing?.taskId === taskId) return; // already timing this task
-  // "I forgot to start it" — count from when they really began. Whatever they
-  // were timing before is banked up to that same moment.
-  const startedAt = backdatedStart(minutesAgo, new Date(), existing?.startedAt);
-  if (existing) await commitTimer(existing, startedAt);
-  await db.taskTimer.create({ data: { userId, taskId, startedAt, lastPingAt: new Date() } });
-}
-
-/**
  * Starts the stopwatch on a task. A person can only time one task at a time, so
  * if they were already timing something else we bank that time first and then
  * switch — the same "what am I working on now" flow as Toggl or Harvest.
@@ -145,7 +118,7 @@ export async function startTimerFor(userId: number, taskId: number, minutesAgo =
 export async function startTaskTimer(formData: FormData) {
   const user = await requireUser();
   const taskId = Number(formData.get("taskId"));
-  const back = String(formData.get("back") ?? `/tasks/${taskId}`);
+  const back = localPath(formData.get("back"), `/tasks/${taskId}`);
   if (!taskId) redirect("/tasks");
 
   const task = await db.task.findFirst({ where: { id: taskId, deletedAt: null } });
@@ -173,7 +146,7 @@ export async function startTaskTimer(formData: FormData) {
 /** Stops the running timer and logs the elapsed time to the timesheet. */
 export async function stopTaskTimer(formData: FormData) {
   const user = await requireUser();
-  const back = String(formData.get("back") ?? "/timesheet");
+  const back = localPath(formData.get("back"), "/timesheet");
   const timer = await db.taskTimer.findUnique({ where: { userId: user.id } });
   if (timer) await commitTimer(timer);
   revalidatePath(back);
@@ -184,7 +157,7 @@ export async function stopTaskTimer(formData: FormData) {
 /** Discards the running timer without logging any time. */
 export async function cancelTaskTimer(formData: FormData) {
   const user = await requireUser();
-  const back = String(formData.get("back") ?? "/timesheet");
+  const back = localPath(formData.get("back"), "/timesheet");
   await db.taskTimer.deleteMany({ where: { userId: user.id } });
   revalidatePath(back);
   redirect(back);
@@ -257,7 +230,7 @@ export async function approveTimesheet(formData: FormData) {
   const user = await requireUser();
   if (!isManagerOrAdmin(user.role)) redirect("/timesheet");
   const id = Number(formData.get("id"));
-  const back = String(formData.get("back") ?? "/timesheet/team");
+  const back = localPath(formData.get("back"), "/timesheet/team");
 
   const sub = await db.timesheetSubmission.findUnique({ where: { id } });
   if (sub && sub.status === "SUBMITTED") {
@@ -276,7 +249,7 @@ export async function approveTimesheet(formData: FormData) {
 export async function approveAllTimesheets(formData: FormData) {
   const user = await requireUser();
   if (!isManagerOrAdmin(user.role)) redirect("/timesheet");
-  const back = String(formData.get("back") ?? "/timesheet/team");
+  const back = localPath(formData.get("back"), "/timesheet/team");
 
   const pending = await db.timesheetSubmission.findMany({
     where: { status: "SUBMITTED" },
@@ -308,7 +281,7 @@ export async function rejectTimesheet(formData: FormData) {
   if (!isManagerOrAdmin(user.role)) redirect("/timesheet");
   const id = Number(formData.get("id"));
   const note = String(formData.get("note") ?? "").trim() || null;
-  const back = String(formData.get("back") ?? "/timesheet/team");
+  const back = localPath(formData.get("back"), "/timesheet/team");
 
   const sub = await db.timesheetSubmission.findUnique({ where: { id } });
   if (sub && sub.status === "SUBMITTED") {

@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { safeBack } from "@/lib/backLink";
+import { safeBack, localPath } from "@/lib/backLink";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
@@ -11,7 +11,7 @@ import { notifyClientStepDone, notifyCollaboratorAdded } from "@/lib/mail";
 import { seriesKeyFor } from "@/lib/recurrence";
 import { findMentionedIds } from "@/lib/mentions";
 import { companyTimezone, zonedStartOfToday } from "@/lib/tz";
-import { commitTimersForTask, startTimerFor } from "@/lib/actions/time";
+import { commitTimersForTask, startTimerFor } from "@/lib/timers";
 import { fmtDate, lookup, parseHours, TASK_STATUSES } from "@/lib/ui";
 
 const STATUSES = ["TODO", "IN_PROGRESS", "REVIEW", "DONE"];
@@ -92,7 +92,7 @@ async function revalidateTaskViews(taskId?: number) {
 export async function setRecurringVisibility(formData: FormData) {
   const show = formData.get("show") === "1";
   (await cookies()).set("showRecurring", show ? "1" : "0", { sameSite: "lax", path: "/" });
-  redirect(String(formData.get("back") ?? "/tasks"));
+  redirect(localPath(formData.get("back"), "/tasks"));
 }
 
 export async function createTask(formData: FormData) {
@@ -445,7 +445,7 @@ export async function setTaskStatus(formData: FormData) {
   const user = await requireUser();
   const id = Number(formData.get("id"));
   const status = String(formData.get("status") ?? "");
-  const back = String(formData.get("back") ?? `/tasks/${id}`);
+  const back = localPath(formData.get("back"), `/tasks/${id}`);
 
   const result = await changeStatus(user, id, status, true);
   await revalidateTaskViews(id);
@@ -761,7 +761,7 @@ export async function bulkTaskAction(formData: FormData) {
   const user = await requireUser();
   const op = String(formData.get("op") ?? "");
   const value = String(formData.get("value") ?? "").trim();
-  const back = String(formData.get("back") ?? "/tasks");
+  const back = localPath(formData.get("back"), "/tasks");
   const ids = String(formData.get("ids") ?? "")
     .split(",")
     .map((s) => Number(s))

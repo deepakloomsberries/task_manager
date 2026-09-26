@@ -97,3 +97,31 @@ export async function reapStaleTimers(): Promise<number[]> {
   }
   return stopped;
 }
+
+/**
+ * Stops every running timer on a task and banks the elapsed time. Called when a
+ * task is completed, so nobody keeps accruing time against finished work.
+ * Returns how many timers were stopped.
+ */
+export async function commitTimersForTask(taskId: number): Promise<number> {
+  const timers = await db.taskTimer.findMany({ where: { taskId } });
+  for (const t of timers) await commitTimer(t);
+  return timers.length;
+}
+
+/**
+ * Starts (or switches to) a user's stopwatch on a task. A person can only time
+ * one task at a time, so if they were already timing something else we bank that
+ * time first and then switch — the "what am I working on now" flow of Toggl or
+ * Harvest. No-ops if they're already timing this task. Shared by the Start-timer
+ * button and the auto-start when a task is moved to In Progress.
+ */
+export async function startTimerFor(userId: number, taskId: number, minutesAgo = 0) {
+  const existing = await db.taskTimer.findUnique({ where: { userId } });
+  if (existing?.taskId === taskId) return; // already timing this task
+  // "I forgot to start it" — count from when they really began. Whatever they
+  // were timing before is banked up to that same moment.
+  const startedAt = backdatedStart(minutesAgo, new Date(), existing?.startedAt);
+  if (existing) await commitTimer(existing, startedAt);
+  await db.taskTimer.create({ data: { userId, taskId, startedAt, lastPingAt: new Date() } });
+}

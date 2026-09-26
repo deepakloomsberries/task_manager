@@ -607,6 +607,19 @@ To make it optional, add `ADMIN_TWO_STEP=optional` to `.env` and restart.
 
 ---
 
+## Part 6b — Uptime monitoring (free, 5 minutes to set up)
+
+`https://task.donetella.com/api/health` answers `{"ok":true}` when the app and the
+database are up (HTTP 503 otherwise). Add it to a free monitor such as
+**UptimeRobot** (HTTP(s) monitor, every 5 minutes, alert by email/WhatsApp) to hear
+about an outage before your team does.
+
+The nightly `scripts/recurring.ts` job also tidies the `uploads/` folder: files
+added to a chat box but never sent are removed after a day, and files no record
+points to any more are deleted.
+
+---
+
 ## Part 7 — Monthly health check
 
 ```bash
