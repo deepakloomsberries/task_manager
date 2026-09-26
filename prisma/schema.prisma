@@ -399,6 +399,8 @@ model DirectMessage {
   // translations for messages it already sent the client, similar to how
   // deletedIds/reactions are patched onto already-loaded messages.
   translatedAt      DateTime?
+  /// A copy forwarded from another chat — shown with a "Forwarded" label.
+  forwarded         Boolean           @default(false)
   createdAt         DateTime          @default(now())
   deletedAt         DateTime?
   attachments       Attachment[]
@@ -535,6 +537,8 @@ model GroupMessage {
   groupId     Int
   createdAt   DateTime               @default(now())
   deletedAt   DateTime?
+  /// A copy forwarded from another chat — shown with a "Forwarded" label.
+  forwarded   Boolean                @default(false)
   attachments Attachment[]
   replyTo     GroupMessage?          @relation("groupReplyTo", fields: [replyToId], references: [id], onDelete: SetNull)
   replyToId   Int?

@@ -98,6 +98,7 @@ export async function GET(req: NextRequest, { params }: { params: { groupId: str
             : null,
         reactions: reactionsByMessage.get(m.id) ?? [],
         starred: myStarredIds.has(m.id),
+        forwarded: m.forwarded,
       };
     }),
     allReactions: Array.from(reactionsByMessage.entries()).map(([messageId, reactions]) => ({ messageId, reactions })),

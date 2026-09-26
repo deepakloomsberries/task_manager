@@ -583,7 +583,10 @@ export const CATEGORIES: Category[] = [
           { spot: "translated", title: "Translated message", body: "Sara wrote in Arabic — Priya reads it in English. Hover to “Show original”.", side: "bottom" },
           { spot: "composer", title: "Write a message", body: "Attach files, paste screenshots, react with emoji, reply to a specific message.", side: "top" },
         ],
-        tips: ["Use the 📹 Call button at the top of a chat to start a video call — no separate meeting link needed."],
+        tips: [
+          "Forward: hover a message → ↪ Forward, tick one or more people or groups, then Forward. Files go along too, and the copy is marked “Forwarded”.",
+          "Use the 📹 Call button at the top of a chat to start a video call — no separate meeting link needed.",
+        ],
       },
       {
         id: "video-calls",
@@ -949,6 +952,7 @@ export const FAQS: { q: string; a: string }[] = [
 
 /** Newest first. `link` is an article id. */
 export const WHATS_NEW: { date: string; title: string; body: string; link?: string }[] = [
+  { date: "Sep 2026", title: "Forward messages", body: "Send any chat message — with its files — to other people or groups in one go.", link: "messages" },
   { date: "Sep 2026", title: "Client files", body: "Pick which files a client sees, and let clients upload tech packs and sample photos.", link: "client-share" },
   { date: "Sep 2026", title: "Two-step sign-in", body: "A code from your phone after your password. Required for admins, available to everyone.", link: "two-step" },
   { date: "Sep 2026", title: "Client portal", body: "Clients get their own login to follow shared tasks, download files and approve work.", link: "clients-setup" },

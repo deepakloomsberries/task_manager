@@ -115,6 +115,7 @@ export default async function ConversationPage({ params }: { params: { userId: s
             : null,
         reactions: reactionsByMessage.get(m.id) ?? [],
         starred: myStarredIds.has(m.id),
+        forwarded: m.forwarded,
       }))}
       initialLastReadMyId={lastRead?.id ?? 0}
       initialPartnerPresence={{

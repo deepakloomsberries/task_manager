@@ -69,6 +69,7 @@ export default async function GroupPage({ params }: { params: { groupId: string 
           : null,
       reactions: reactionsByMessage.get(m.id) ?? [],
       starred: myStarredIds.has(m.id),
+      forwarded: m.forwarded,
     };
   });
 

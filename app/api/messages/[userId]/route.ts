@@ -124,6 +124,7 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
             : null,
         reactions: reactionsByMessage.get(m.id) ?? [],
         starred: myStarredIds.has(m.id),
+        forwarded: m.forwarded,
       };
     }),
     // Full reaction snapshot for every message currently in the loaded window
