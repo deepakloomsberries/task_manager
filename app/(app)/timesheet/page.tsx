@@ -20,11 +20,12 @@ import { rangeBounds, weekStartOf } from "@/lib/timerange";
 
 export const dynamic = "force-dynamic";
 
-export default async function TimesheetPage({
-  searchParams,
-}: {
-  searchParams: { error?: string; edit?: string; range?: string; from?: string; to?: string };
-}) {
+export default async function TimesheetPage(
+  props: {
+    searchParams: Promise<{ error?: string; edit?: string; range?: string; from?: string; to?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const user = await requireUser();
 
   const rangeKey = searchParams.range ?? "30d";

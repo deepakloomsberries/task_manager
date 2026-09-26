@@ -98,11 +98,12 @@ function Section({ title, accent, tasks, back }: { title: string; accent: string
   );
 }
 
-export default async function MyTasksPage({
-  searchParams,
-}: {
-  searchParams: { filter?: string };
-}) {
+export default async function MyTasksPage(
+  props: {
+    searchParams: Promise<{ filter?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const user = await requireUser();
   const filter: MyFilter =
     searchParams.filter === "assigned" || searchParams.filter === "collab"

@@ -395,6 +395,13 @@ It then opens full-screen with its own icon, like a native app.
 
 ## Part 2 — Updating the application
 
+> **Upgrading to the Next.js 15 version (Sept 2026)?** Needs Node.js 18.18 or newer —
+> check with `node -v` (the install in Part 1 uses Node 22). `npm install` also
+> downloads the spreadsheet library from `cdn.sheetjs.com`, so the server needs
+> internet access during the install. The normal update commands below are enough;
+> if the build fails with odd errors, run `rm -rf .next node_modules && npm install`
+> and build again.
+
 Code changes take effect only after a rebuild and service restart.
 
 If installed with `git clone` (recommended):

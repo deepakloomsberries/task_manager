@@ -1,17 +1,14 @@
 import Link from "next/link";
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { requireClient } from "@/lib/clientAuth";
 import { clientLogout } from "@/lib/actions/portal";
 import ThemeToggle from "@/components/ThemeToggle";
+import SetupGate from "@/components/SetupGate";
 
 export const metadata: Metadata = { title: "Client portal · Looms & Berries" };
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const contact = await requireClient();
-  const pathname = headers().get("x-pathname") ?? "";
-  if (contact.mustChangePassword && pathname && pathname !== "/portal/password") redirect("/portal/password?first=1");
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
@@ -37,7 +34,11 @@ export default async function PortalLayout({ children }: { children: React.React
           </form>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl p-4 sm:p-6">{children}</main>
+      <main className="mx-auto max-w-5xl p-4 sm:p-6">
+        <SetupGate kind={contact.mustChangePassword ? "portal-password" : null} home="/portal/password">
+          {children}
+        </SetupGate>
+      </main>
     </div>
   );
 }

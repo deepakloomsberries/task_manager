@@ -24,7 +24,11 @@ const ERR: Record<string, string> = {
 
 const fmtSize = (b: number) => (b > 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
 
-export default async function PortalTask({ params, searchParams }: { params: { id: string }; searchParams: { ok?: string; error?: string } }) {
+export default async function PortalTask(
+  props: { params: Promise<{ id: string }>; searchParams: Promise<{ ok?: string; error?: string }> }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const contact = await requireClient();
   const task = await clientTask(contact.clientId, Number(params.id));
   if (!task) notFound();

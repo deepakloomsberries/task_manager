@@ -3,7 +3,8 @@ import { getSession } from "@/lib/auth";
 import { setTyping } from "@/lib/typing";
 
 /** Called (throttled) by the composer while the user is typing to someone. */
-export async function POST(_req: Request, { params }: { params: { userId: string } }) {
+export async function POST(_req: Request, props: { params: Promise<{ userId: string }> }) {
+  const params = await props.params;
   const session = await getSession();
   if (!session) return NextResponse.json({ ok: false }, { status: 401 });
 

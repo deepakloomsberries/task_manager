@@ -34,11 +34,12 @@ const MESSAGES: Record<string, { text: string; error?: boolean }> = {
   notempty: { text: "That account can't be deleted — it has logged in or already has data. Deactivate it instead.", error: true },
 };
 
-export default async function UsersPage({
-  searchParams,
-}: {
-  searchParams: Record<string, string | undefined>;
-}) {
+export default async function UsersPage(
+  props: {
+    searchParams: Promise<Record<string, string | undefined>>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const admin = await requireAdmin();
 
   const [users, companies, departments] = await Promise.all([

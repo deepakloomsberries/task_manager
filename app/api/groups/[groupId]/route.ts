@@ -10,7 +10,8 @@ import { getSession } from "@/lib/auth";
  * loaded window, and recently-deleted ids so already-loaded bubbles can
  * flip to tombstones live.
  */
-export async function GET(req: NextRequest, { params }: { params: { groupId: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ groupId: string }> }) {
+  const params = await props.params;
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 

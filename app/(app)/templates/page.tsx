@@ -19,11 +19,12 @@ const MESSAGES: Record<string, { text: string; error?: boolean }> = {
   saved: { text: "Project saved as a template." },
 };
 
-export default async function TemplatesPage({
-  searchParams,
-}: {
-  searchParams: { open?: string; error?: string; saved?: string };
-}) {
+export default async function TemplatesPage(
+  props: {
+    searchParams: Promise<{ open?: string; error?: string; saved?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const user = await requireUser();
   if (!isManagerOrAdmin(user.role)) redirect("/dashboard");
 

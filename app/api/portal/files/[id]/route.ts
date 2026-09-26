@@ -6,7 +6,8 @@ import { sendAttachment } from "@/lib/fileResponse";
 export const dynamic = "force-dynamic";
 
 /** A task file, for a client — only files shared with them (or their own), on shared tasks in their projects. */
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const session = await getClientSession();
   if (!session) return new NextResponse("Unauthorized", { status: 401 });
   const contact = await db.clientContact.findUnique({ where: { id: session.contactId } });

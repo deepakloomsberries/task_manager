@@ -14,7 +14,7 @@ export default async function GettingStarted({
 }: {
   user: { id: number; name: string; role: string; createdAt: Date; avatarPath: string | null; preferredLanguage: string | null };
 }) {
-  if (cookies().get(ONBOARDING_COOKIE)?.value === "1") return null;
+  if ((await cookies()).get(ONBOARDING_COOKIE)?.value === "1") return null;
   if (Date.now() - new Date(user.createdAt).getTime() > ONBOARDING_DAYS * 86400000) return null;
 
   const steps = await loadOnboarding(user);

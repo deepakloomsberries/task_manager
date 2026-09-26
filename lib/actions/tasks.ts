@@ -91,7 +91,7 @@ async function revalidateTaskViews(taskId?: number) {
 /** Toggle whether the Tasks list shows recurring occurrences (managers/admins). */
 export async function setRecurringVisibility(formData: FormData) {
   const show = formData.get("show") === "1";
-  cookies().set("showRecurring", show ? "1" : "0", { sameSite: "lax", path: "/" });
+  (await cookies()).set("showRecurring", show ? "1" : "0", { sameSite: "lax", path: "/" });
   redirect(String(formData.get("back") ?? "/tasks"));
 }
 

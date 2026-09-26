@@ -40,13 +40,14 @@ const PROJECT_OK: Record<string, string> = {
   unshared: "All tasks are hidden from the client.",
 };
 
-export default async function ProjectDetailPage({
-  params,
-  searchParams,
-}: {
-  params: { id: string };
-  searchParams: { edit?: string; addTask?: string; error?: string; ok?: string };
-}) {
+export default async function ProjectDetailPage(
+  props: {
+    params: Promise<{ id: string }>;
+    searchParams: Promise<{ edit?: string; addTask?: string; error?: string; ok?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const user = await requireUser();
   const id = Number(params.id);
   if (!id) notFound();

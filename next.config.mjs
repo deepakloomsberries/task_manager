@@ -3,8 +3,6 @@ import { withSentryConfig } from "@sentry/nextjs/config";
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    // Loads instrumentation.ts (Sentry error monitoring) on Next 14.
-    instrumentationHook: true,
     serverActions: {
       // File uploads go through server actions; allow up to 55 MB bodies
       // (attachments themselves are capped at 50 MB in lib/storage.ts —

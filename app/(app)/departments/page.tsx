@@ -12,11 +12,12 @@ const ERRORS: Record<string, string> = {
   inuse: "Cannot delete — users are still assigned to this department.",
 };
 
-export default async function DepartmentsPage({
-  searchParams,
-}: {
-  searchParams: { error?: string };
-}) {
+export default async function DepartmentsPage(
+  props: {
+    searchParams: Promise<{ error?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   await requireAdmin();
 
   const [departments, companies] = await Promise.all([

@@ -12,11 +12,12 @@ const ERRORS: Record<string, string> = {
   badlink: "That doesn't look like a valid link — it should start with http:// or https://.",
 };
 
-export default async function DocumentsPage({
-  searchParams,
-}: {
-  searchParams: { error?: string };
-}) {
+export default async function DocumentsPage(
+  props: {
+    searchParams: Promise<{ error?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const user = await requireUser();
   const attachments = await db.attachment.findMany({
     // Files shared inside a 1:1 chat or a group are private to that

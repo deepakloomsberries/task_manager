@@ -5,7 +5,8 @@ import PasswordField from "@/components/PasswordField";
 
 export const dynamic = "force-dynamic";
 
-export default async function PortalPassword({ searchParams }: { searchParams: { error?: string; first?: string } }) {
+export default async function PortalPassword(props: { searchParams: Promise<{ error?: string; first?: string }> }) {
+  const searchParams = await props.searchParams;
   const contact = await requireClient();
   const first = contact.mustChangePassword;
   return (

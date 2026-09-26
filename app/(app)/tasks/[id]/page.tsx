@@ -83,13 +83,14 @@ const STATUS_PILL: Record<string, { active: string; dot: string; hover: string }
   },
 };
 
-export default async function TaskDetailPage({
-  params,
-  searchParams,
-}: {
-  params: { id: string };
-  searchParams: { edit?: string; ok?: string; error?: string; back?: string; moved?: string };
-}) {
+export default async function TaskDetailPage(
+  props: {
+    params: Promise<{ id: string }>;
+    searchParams: Promise<{ edit?: string; ok?: string; error?: string; back?: string; moved?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const user = await requireUser();
   const id = Number(params.id);
   if (!id) notFound();

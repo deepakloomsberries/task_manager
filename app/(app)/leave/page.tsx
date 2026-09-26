@@ -25,7 +25,8 @@ const OK: Record<string, string> = {
   cancelled: "Leave cancelled.",
 };
 
-export default async function MyLeavePage({ searchParams }: { searchParams: { error?: string; ok?: string } }) {
+export default async function MyLeavePage(props: { searchParams: Promise<{ error?: string; ok?: string }> }) {
+  const searchParams = await props.searchParams;
   const user = await requireUser();
   const isManager = isManagerOrAdmin(user.role);
   const today = todayIn(companyTimezone(user.company));

@@ -21,7 +21,7 @@ export async function createClientSession(contactId: number) {
     .setIssuedAt()
     .setExpirationTime(`${SESSION_DAYS}d`)
     .sign(clientSecret());
-  cookies().set(CLIENT_COOKIE, token, {
+  (await cookies()).set(CLIENT_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -30,12 +30,12 @@ export async function createClientSession(contactId: number) {
   });
 }
 
-export function destroyClientSession() {
-  cookies().delete(CLIENT_COOKIE);
+export async function destroyClientSession() {
+  (await cookies()).delete(CLIENT_COOKIE);
 }
 
 export async function getClientSession(): Promise<{ contactId: number } | null> {
-  const token = cookies().get(CLIENT_COOKIE)?.value;
+  const token = (await cookies()).get(CLIENT_COOKIE)?.value;
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, clientSecret());

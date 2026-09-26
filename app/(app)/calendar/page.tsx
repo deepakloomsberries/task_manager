@@ -15,18 +15,19 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-export default async function CalendarPage({
-  searchParams,
-}: {
-  searchParams: {
-    m?: string;
-    scope?: string;
-    assignee?: string;
-    project?: string;
-    status?: string;
-    priority?: string;
-  };
-}) {
+export default async function CalendarPage(
+  props: {
+    searchParams: Promise<{
+      m?: string;
+      scope?: string;
+      assignee?: string;
+      project?: string;
+      status?: string;
+      priority?: string;
+    }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const user = await requireUser();
   const isManager = isManagerOrAdmin(user.role);
 

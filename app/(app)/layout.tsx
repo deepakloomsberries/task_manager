@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { headers, cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { SidebarProvider, DesktopSidebar, SidebarToggle } from "@/components/SidebarState";
 import MobileSidebar from "@/components/MobileSidebar";
 import ThemeToggle from "@/components/ThemeToggle";
 import StatusMenu from "@/components/StatusMenu";
+import SetupGate from "@/components/SetupGate";
 import Heartbeat from "@/components/Heartbeat";
 import HelpMenu from "@/components/HelpMenu";
 import LongTimerPrompt from "@/components/LongTimerPrompt";
@@ -22,16 +22,15 @@ import { companyTimezone } from "@/lib/tz";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
 
-  // Force a password change before any part of the app can be explored.
-  // Guard on a known path only, so a missing header can never cause a loop.
-  const pathname = headers().get("x-pathname") ?? "";
-  if (user.mustChangePassword && pathname && !pathname.startsWith("/settings")) {
-    redirect("/settings?first=1");
-  }
-  // Admins must turn on two-step sign-in before using the app (ADMIN_TWO_STEP=optional turns this off).
-  if (user.role === "ADMIN" && !user.totpEnabled && adminTwoStepRequired() && pathname && !pathname.startsWith("/settings")) {
-    redirect("/settings?twostep=1#two-step");
-  }
+  // Before anything else can be used: a first-login password change, and
+  // (for admins) two-step sign-in. <SetupGate> shows a "go to Settings" panel
+  // on other pages (a redirect from here loops in Next 15 — every background
+  // prefetch of a sidebar link hits it).
+  const gate: "password" | "two-step" | null = user.mustChangePassword
+    ? "password"
+    : user.role === "ADMIN" && !user.totpEnabled && adminTwoStepRequired()
+      ? "two-step"
+      : null;
 
   // Tasks assigned to me that need attention now — overdue or due by end of today.
   const endOfToday = new Date();
@@ -73,7 +72,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const isAdmin = user.role === "ADMIN";
   const isManager = user.role === "ADMIN" || user.role === "MANAGER";
-  const sidebarCollapsed = cookies().get("sidebar")?.value === "collapsed";
+  const sidebarCollapsed = (await cookies()).get("sidebar")?.value === "collapsed";
 
   return (
     <SidebarProvider initialCollapsed={sidebarCollapsed}>
@@ -138,7 +137,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </button>
           </form>
         </header>
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6"><SetupGate kind={gate}>{children}</SetupGate></main>
         {activeTimer && (
           <LongTimerPrompt
             taskId={activeTimer.task.id}
@@ -151,3 +150,4 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     </SidebarProvider>
   );
 }
+

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { jwtVerify } from "jose";
+import { jwtVerify } from "jose/jwt/verify";
 
 const secret = new TextEncoder().encode(
   process.env.AUTH_SECRET ?? "dev-secret-do-not-use-in-production"

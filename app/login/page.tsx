@@ -1,11 +1,12 @@
 import { login } from "@/lib/actions/auth";
 import PasswordField from "@/components/PasswordField";
 
-export default function LoginPage({
-  searchParams,
-}: {
-  searchParams: { error?: string; reset?: string };
-}) {
+export default async function LoginPage(
+  props: {
+    searchParams: Promise<{ error?: string; reset?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   return (
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-sky-50 via-slate-50 to-slate-100 p-4">
       <div className="card w-full max-w-md p-8">

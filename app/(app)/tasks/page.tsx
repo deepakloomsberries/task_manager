@@ -28,34 +28,35 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export default async function TasksPage({
-  searchParams,
-}: {
-  searchParams: {
-    status?: string;
-    assignee?: string;
-    owner?: string;
-    project?: string;
-    tag?: string;
-    q?: string;
-    new?: string;
-    import?: string;
-    view?: string;
-    open?: string;
-    overdue?: string;
-    due?: string;
-    blocked?: string;
-    watching?: string;
-    collaborating?: string;
-    sort?: string;
-  };
-}) {
+export default async function TasksPage(
+  props: {
+    searchParams: Promise<{
+      status?: string;
+      assignee?: string;
+      owner?: string;
+      project?: string;
+      tag?: string;
+      q?: string;
+      new?: string;
+      import?: string;
+      view?: string;
+      open?: string;
+      overdue?: string;
+      due?: string;
+      blocked?: string;
+      watching?: string;
+      collaborating?: string;
+      sort?: string;
+    }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const user = await requireUser();
   const canManage = isManagerOrAdmin(user.role);
 
   // Managers/admins don't see the daily recurring occurrences in this list by
   // default (they'd flood it) — a toggle, remembered in a cookie, shows them.
-  const showRecurring = cookies().get("showRecurring")?.value === "1";
+  const showRecurring = (await cookies()).get("showRecurring")?.value === "1";
   const hideRecurring = canManage && !showRecurring;
 
   const { where, orderBy } = buildTaskListQuery(
@@ -89,7 +90,7 @@ export default async function TasksPage({
   const showImport = searchParams.import === "1";
   // Remember the last view (list/board) between visits via a cookie, so
   // switching tabs and coming back doesn't reset the board to the list.
-  const cookieView = cookies().get("taskView")?.value;
+  const cookieView = (await cookies()).get("taskView")?.value;
   const boardView = searchParams.view ? searchParams.view === "board" : cookieView === "board";
   const viewParam = boardView ? "board" : "list";
 

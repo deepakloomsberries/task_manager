@@ -8,7 +8,8 @@ import PasswordField from "@/components/PasswordField";
 export const metadata: Metadata = { title: "Client portal · Looms & Berries" };
 export const dynamic = "force-dynamic";
 
-export default async function PortalLoginPage({ searchParams }: { searchParams: { error?: string } }) {
+export default async function PortalLoginPage(props: { searchParams: Promise<{ error?: string }> }) {
+  const searchParams = await props.searchParams;
   // Already signed in with a working account? Straight to the portal.
   const session = await getClientSession();
   if (session && !searchParams.error) {

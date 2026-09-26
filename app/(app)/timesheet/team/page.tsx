@@ -12,11 +12,12 @@ import { describeChange } from "@/lib/timeAudit";
 
 export const dynamic = "force-dynamic";
 
-export default async function TeamTimesheetPage({
-  searchParams,
-}: {
-  searchParams: { range?: string; from?: string; to?: string; user?: string };
-}) {
+export default async function TeamTimesheetPage(
+  props: {
+    searchParams: Promise<{ range?: string; from?: string; to?: string; user?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const user = await requireUser();
   if (!isManagerOrAdmin(user.role)) redirect("/timesheet");
 

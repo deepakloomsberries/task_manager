@@ -51,7 +51,7 @@ companies (India, UAE, Saudi Arabia). Fully self-hosted.
 
 ## Tech stack
 
-Next.js 14 (App Router, server actions) · TypeScript · Tailwind CSS · Prisma · PostgreSQL · JWT cookie auth (bcrypt-hashed passwords). No external services required.
+Next.js 15 + React 19 (App Router, server actions) · TypeScript · Tailwind CSS · Prisma · PostgreSQL · JWT cookie auth (bcrypt-hashed passwords). No external services required.
 
 ## Getting started
 

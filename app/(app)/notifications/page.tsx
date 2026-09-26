@@ -20,7 +20,8 @@ function pathOf(link: string | null) {
   return link ? link.split(/[?#]/)[0] : "";
 }
 
-export default async function InboxPage({ searchParams }: { searchParams: { filter?: string } }) {
+export default async function InboxPage(props: { searchParams: Promise<{ filter?: string }> }) {
+  const searchParams = await props.searchParams;
   const user = await requireUser();
   const onlyUnread = searchParams.filter === "unread";
   const backHref = onlyUnread ? "/notifications?filter=unread" : "/notifications";
