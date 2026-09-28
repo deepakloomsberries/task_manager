@@ -433,6 +433,18 @@ async function changeStatus(
       );
     }
 
+    // Last open task in an active project just finished → nudge the project's
+    // creator to mark the project complete.
+    if (task.projectId) {
+      const project = await db.project.findUnique({ where: { id: task.projectId }, select: { id: true, name: true, status: true, createdById: true } });
+      if (project?.status === "ACTIVE") {
+        const left = await db.task.count({ where: { projectId: project.id, deletedAt: null, status: { not: "DONE" } } });
+        if (left === 0) {
+          await pushNotification(project.createdById, `🎉 All tasks in "${project.name}" are done — mark the project complete?`, `/projects/${project.id}`);
+        }
+      }
+    }
+
     // Note: recurring tasks no longer spawn their next occurrence here. A
     // nightly job (scripts/recurring.ts) rolls each series forward once per
     // day — archiving the finished/missed instance and creating the new day's

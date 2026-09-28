@@ -9,7 +9,10 @@ import {
   removeProjectMember,
   deleteProject,
   linkTaskToProject,
+  setProjectStatus,
 } from "@/lib/actions/projects";
+import { HEALTH, colorOf, dueLabel, projectHealth } from "@/lib/projectHealth";
+import ColorPicker from "@/components/projects/ColorPicker";
 import { createTask } from "@/lib/actions/tasks";
 import { setProjectClient, shareProjectTasks } from "@/lib/actions/clients";
 import FlashToast from "@/components/FlashToast";
@@ -38,6 +41,10 @@ const PROJECT_OK: Record<string, string> = {
   client: "Client saved.",
   shared: "All tasks are now visible to the client.",
   unshared: "All tasks are hidden from the client.",
+  completed: "Project marked complete 🎉",
+  active: "Project reopened.",
+  on_hold: "Project put on hold.",
+  archived: "Project archived.",
 };
 
 export default async function ProjectDetailPage(
@@ -175,6 +182,20 @@ export default async function ProjectDetailPage(
   const done = project.tasks.filter((t) => t.status === "DONE").length;
   const sharedCount = project.tasks.filter((t) => t.clientVisible).length;
   const pct = project.tasks.length ? Math.round((done / project.tasks.length) * 100) : 0;
+  const overdueCount = project.tasks.filter((t) => isOverdue(t)).length;
+  const health = projectHealth(project, { total: project.tasks.length, done, overdue: overdueCount });
+  const completed = project.status === "COMPLETED";
+  const byStatus = [...TASK_STATUSES].reverse().map((st) => ({ ...st, n: project.tasks.filter((t) => t.status === st.value).length })).filter((x) => x.n);
+  const SEG: Record<string, string> = { TODO: "bg-slate-300 dark:bg-slate-600", IN_PROGRESS: "bg-sky-500", REVIEW: "bg-amber-400", DONE: "bg-emerald-500" };
+  const statusBtn = (st: string, label: string, cls = "btn-secondary") => (
+    <form action={setProjectStatus}>
+      <input type="hidden" name="id" value={project.id} />
+      <input type="hidden" name="status" value={st} />
+      <button type="submit" className={cls}>
+        {label}
+      </button>
+    </form>
+  );
 
   return (
     <div className="space-y-4">
@@ -184,13 +205,34 @@ export default async function ProjectDetailPage(
         ← Back to projects
       </Link>
 
-      <div className="card p-6">
+      {completed && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-lg text-white">✓</span>
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold">Project completed</div>
+            <div className="text-sm opacity-80">
+              {fmtDate(project.completedAt ?? project.updatedAt)} · {done}/{project.tasks.length} tasks done · {fmtHours(projectHours)} logged
+              {project.dueDate && ((project.completedAt ?? project.updatedAt) > new Date(project.dueDate.getTime() + 86_400_000) ? " · finished after the deadline" : " · on time")}
+            </div>
+          </div>
+          {canManage && statusBtn("ACTIVE", "Reopen")}
+        </div>
+      )}
+
+      <div className={`card relative overflow-hidden p-6 ${project.status === "ARCHIVED" ? "opacity-75" : ""}`}>
+        <span className={`absolute inset-x-0 top-0 h-1.5 ${completed ? "bg-emerald-500" : colorOf(project.color).bar}`} />
         {!editing ? (
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-3">
                 <h1 className="text-xl font-bold">{project.name}</h1>
                 <span className={`badge ${status.badge}`}>{status.label}</span>
+                {project.status === "ACTIVE" && <span className={`badge ${HEALTH[health].badge}`}>{HEALTH[health].label}</span>}
+                {project.dueDate && !completed && (
+                  <span className={`text-xs ${health === "LATE" ? "font-medium text-red-600" : "text-slate-500"}`} suppressHydrationWarning>
+                    📅 {fmtDate(project.dueDate)} · {dueLabel(project.dueDate)}
+                  </span>
+                )}
               </div>
               <p className="mt-2 text-sm text-slate-600">
                 {project.description || "No description"}
@@ -198,10 +240,16 @@ export default async function ProjectDetailPage(
               <p className="mt-2 text-xs text-slate-400">
                 {project.company.name} · Created by {project.createdBy.name} on{" "}
                 {fmtDate(project.createdAt)}
+                {project.startDate && <> · Starts {fmtDate(project.startDate)}</>}
               </p>
             </div>
             {canManage && (
               <div className="flex flex-wrap gap-2">
+                {project.status === "ACTIVE" && statusBtn("COMPLETED", "✓ Mark complete", pct === 100 && project.tasks.length ? "btn-primary !bg-emerald-600 hover:!bg-emerald-700" : "btn-secondary")}
+                {project.status === "ACTIVE" && statusBtn("ON_HOLD", "Pause")}
+                {project.status === "ON_HOLD" && statusBtn("ACTIVE", "Resume", "btn-primary")}
+                {project.status === "ARCHIVED" && statusBtn("ACTIVE", "Unarchive")}
+                {(completed || project.status === "ON_HOLD") && statusBtn("ARCHIVED", "Archive")}
                 <form action={saveProjectAsTemplate}>
                   <input type="hidden" name="projectId" value={project.id} />
                   <button type="submit" className="btn-secondary" title="Copy this project's tasks into a reusable template">
@@ -242,6 +290,18 @@ export default async function ProjectDetailPage(
                 className="input"
               />
             </div>
+            <div>
+              <label className="label">Start date</label>
+              <DatePicker name="startDate" defaultValue={project.startDate ? isoDay(project.startDate) : ""} placeholder="Optional" />
+            </div>
+            <div>
+              <label className="label">Deadline</label>
+              <DatePicker name="dueDate" defaultValue={project.dueDate ? isoDay(project.dueDate) : ""} placeholder="Optional" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="label">Colour</label>
+              <ColorPicker defaultValue={project.color} />
+            </div>
             <div className="flex gap-2 md:col-span-2">
               <button type="submit" className="btn-primary">
                 Save
@@ -257,12 +317,29 @@ export default async function ProjectDetailPage(
           <div className="mb-1 flex justify-between text-xs text-slate-500">
             <span>
               {done}/{project.tasks.length} tasks done
+              {overdueCount > 0 && !completed && (
+                <Link href={`/tasks?project=${project.id}&overdue=1`} className="ml-2 font-medium text-red-600 hover:underline">
+                  ⚠ {overdueCount} overdue
+                </Link>
+              )}
             </span>
-            <span>{pct}%</span>
+            <span className="font-medium">{pct}%</span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-            <div className="h-full rounded-full bg-sky-500" style={{ width: `${pct}%` }} />
+          <div className="flex h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+            {byStatus.map((x) => (
+              <div key={x.value} className={`h-full ${SEG[x.value] ?? "bg-slate-400"}`} style={{ width: `${(x.n / project.tasks.length) * 100}%` }} title={`${x.label}: ${x.n}`} />
+            ))}
           </div>
+          {byStatus.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+              {byStatus.map((x) => (
+                <span key={x.value} className="flex items-center gap-1">
+                  <span className={`h-2 w-2 rounded-full ${SEG[x.value] ?? "bg-slate-400"}`} />
+                  {x.label} {x.n}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {(canManage || project.client) && (
@@ -627,4 +704,9 @@ export default async function ProjectDetailPage(
       </div>
     </div>
   );
+}
+
+function isoDay(d: Date) {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }

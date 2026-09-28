@@ -152,7 +152,7 @@ const SHOTS = [
     id: "projects", path: "/projects",
     spots: {
       newproject: (p) => p.getByRole("link", { name: "+ New Project" }).or(p.getByRole("button", { name: "+ New Project" })).first(),
-      card: (p) => p.getByText("Festive Season Launch").first().locator("xpath=ancestor::a[1]"),
+      card: (p) => p.getByText("Festive Season Launch").first().locator("xpath=ancestor::div[contains(@class,'card')][1]"),
     },
   },
   {

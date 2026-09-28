@@ -495,11 +495,12 @@ export const CATEGORIES: Category[] = [
         id: "projects",
         title: "Projects",
         audience: "Everyone",
-        summary: "A project groups related tasks, members and time. Progress is calculated automatically.",
+        summary:
+          "A project groups related tasks, members and time. Each card shows its health (On track / At risk / Late), overdue tasks, deadline and team. Completed projects turn green with a ✓; use the Open / Completed / Archived tabs, search, company filter, sort and ☆ to pin favourites to the top.",
         shot: "projects",
         callouts: [
-          { spot: "newproject", title: "+ New Project", body: "Name, description, company and members — or start from a template.", side: "left" },
-          { spot: "card", title: "Project card", body: "Status, progress bar and member count. Click to open.", side: "right" },
+          { spot: "newproject", title: "+ New Project", body: "Name, company, start date, deadline, members and a colour — or start from a template.", side: "left" },
+          { spot: "card", title: "Project card", body: "Health, progress, overdue tasks, deadline countdown and team. When every task is done, managers get a “Mark complete” button right on the card.", side: "right" },
         ],
       },
       {
@@ -509,7 +510,7 @@ export const CATEGORIES: Category[] = [
         summary: "Everything for one project on one page.",
         shot: "project-detail",
         callouts: [
-          { spot: "progress", title: "Progress", body: "Done vs. total tasks, updated as work is completed.", side: "bottom" },
+          { spot: "progress", title: "Progress", body: "Done vs. total tasks, split by status. Managers can Mark complete, Pause, Resume or Archive from the header.", side: "bottom" },
           { spot: "template", title: "Save as template", body: "Reuse this project's task list next time — due dates are set relative to the start.", side: "left" },
           { spot: "addtask", title: "+ Add task", body: "Creates a task already linked to this project.", side: "top" },
           { spot: "tasks", title: "Task list", body: "Every task with its owner, priority, status and due date.", side: "inside" },

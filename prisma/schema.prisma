@@ -59,6 +59,7 @@ model User {
   notes                 Note[]
   timeEntries           TimeEntry[]
   projectMembers        ProjectMember[]
+  projectStars          ProjectStar[]
   projectsCreated       Project[]
   attachments           Attachment[]
   discussionMessages    DiscussionMessage[]
@@ -150,6 +151,25 @@ model Project {
   /// The client who can follow this project in the client portal.
   client      Client?         @relation(fields: [clientId], references: [id], onDelete: SetNull)
   clientId    Int?
+  /// Planned start / deadline for the whole project (optional).
+  startDate   DateTime?
+  dueDate     DateTime?
+  /// When it was marked COMPLETED (cleared if reopened).
+  completedAt DateTime?
+  /// Accent colour for the card (one of PROJECT_COLORS).
+  color       String?
+  stars       ProjectStar[]
+}
+
+/// A person's pinned projects — shown first on the Projects page.
+model ProjectStar {
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  createdAt DateTime @default(now())
+
+  @@id([projectId, userId])
 }
 
 model ProjectMember {
