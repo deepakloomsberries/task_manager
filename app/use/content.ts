@@ -535,13 +535,14 @@ export const CATEGORIES: Category[] = [
         id: "calendar",
         title: "Calendar",
         audience: "Everyone",
-        summary: "All due dates on a month grid. Drag a task to another day to reschedule it.",
+        summary:
+          "Month, Week or Agenda view of every due date, with holidays and leave. Drag a task to another day to reschedule it — or drag one from “No due date” to schedule it. Click any day (or its ＋) to see everything due and add a task right there. ← / → move between months, T jumps to today.",
         shot: "calendar",
         callouts: [
           { spot: "scope", title: "My tasks / Everyone", body: "Your own work, or the whole team's.", side: "bottom" },
-          { spot: "month", title: "Change month", body: "Use the arrows to move between months.", side: "bottom" },
+          { spot: "month", title: "Change month", body: "Arrows (or ← / → keys) move between months or weeks; Today jumps back. The counters show what's due, open, done and overdue.", side: "bottom" },
           { spot: "filters", title: "Filters", body: "Narrow by person, project, status or priority.", side: "inside" },
-          { spot: "chip", title: "Task chips", body: "Colour shows priority. Drag to a new day to change the due date.", side: "bottom" },
+          { spot: "chip", title: "Task chips", body: "The left stripe shows priority, red means overdue, ✓ means done, initials show who it's for. Drag to a new day to change the due date.", side: "bottom" },
         ],
       },
     ],

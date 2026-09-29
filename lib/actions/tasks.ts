@@ -183,6 +183,41 @@ export async function quickAddTask(formData: FormData) {
   revalidatePath("/tasks");
 }
 
+/**
+ * Calendar quick add: a To-Do due on `day` (YYYY-MM-DD). Employees add for
+ * themselves; managers can pick someone (who's notified).
+ */
+export async function createTaskOnDay(
+  title: string,
+  day: string,
+  opts: { assigneeId?: number | null; priority?: string } = {}
+): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
+  const user = await requireUser();
+  const clean = title.trim();
+  if (!clean) return { ok: false, error: "Give the task a title." };
+  if (clean.length > 300) return { ok: false, error: "That title is too long." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(new Date(day).getTime())) return { ok: false, error: "Pick a valid date." };
+  let assigneeId = user.id;
+  if (opts.assigneeId && opts.assigneeId !== user.id) {
+    if (!isManagerOrAdmin(user.role)) return { ok: false, error: "Only managers can assign tasks to others from here." };
+    const person = await db.user.findUnique({ where: { id: opts.assigneeId }, select: { id: true, active: true } });
+    if (!person?.active) return { ok: false, error: "That person isn't active." };
+    assigneeId = person.id;
+  }
+  const priority = opts.priority && PRIORITIES.includes(opts.priority) ? opts.priority : "MEDIUM";
+  const task = await db.task.create({
+    data: { title: clean, assigneeId, createdById: user.id, status: "TODO", priority, dueDate: new Date(day) },
+  });
+  await logActivity(task.id, user.id, "created");
+  if (assigneeId !== user.id) {
+    const assignee = await db.user.findUnique({ where: { id: assigneeId } });
+    if (assignee) await notifyAssignment({ assignee, task, actor: user });
+  }
+  await revalidateTaskViews(task.id);
+  revalidatePath("/calendar");
+  return { ok: true, id: task.id };
+}
+
 /** Creates a copy of a task (fields, tags and collaborators — not history). */
 export async function duplicateTask(formData: FormData) {
   const user = await requireUser();
