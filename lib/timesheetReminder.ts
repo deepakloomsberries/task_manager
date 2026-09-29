@@ -1,3 +1,4 @@
+import { emailAllowed } from "@/lib/emailPrefs";
 import { db } from "@/lib/db";
 import { weekStartOf } from "@/lib/timerange";
 import { fmtHours } from "@/lib/ui";
@@ -35,7 +36,7 @@ export async function findTimesheetReminders(
   const [users, subs, hours, alreadyReminded, away] = await Promise.all([
     db.user.findMany({
       where: { active: true, role: { in: roles } },
-      select: { id: true, name: true, email: true, emailNotifications: true },
+      select: { id: true, name: true, email: true, emailNotifications: true, emailMuted: true },
     }),
     db.timesheetSubmission.findMany({
       where: { weekStart, status: { in: ["SUBMITTED", "APPROVED"] } },
@@ -66,6 +67,6 @@ export async function findTimesheetReminders(
         h > 0
           ? `${REMINDER_PREFIX}: you've logged ${fmtHours(h)} this week — check it and submit it for approval.`
           : `${REMINDER_PREFIX}: you haven't logged any time this week yet — add your hours and submit them.`;
-      return { userId: u.id, name: u.name, email: u.email, emailNotifications: u.emailNotifications, hours: h, message };
+      return { userId: u.id, name: u.name, email: u.email, emailNotifications: emailAllowed(u, "REMINDER"), hours: h, message };
     });
 }

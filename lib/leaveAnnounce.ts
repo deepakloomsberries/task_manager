@@ -16,7 +16,7 @@ export async function leaveAnnouncementFor(leaveId: number, now: Date = new Date
   if (!leave) return null;
   if (ymd(leave.endDate) < todayIn(companyTimezone(leave.user.company), now)) return null;
   const people = await db.user.findMany({
-    where: { active: true, emailNotifications: true, id: { not: leave.userId } },
+    where: { active: true, emailNotifications: true, id: { not: leave.userId }, NOT: { emailMuted: { contains: "LEAVE" } } },
     select: { email: true },
   });
   return {

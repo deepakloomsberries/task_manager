@@ -10,13 +10,23 @@ import {
 } from "./mail";
 import { sendPushToUser } from "./push";
 import { chosenPresence } from "./presence";
+import { emailAllowed, inQuietHours, type EmailKind } from "./emailPrefs";
+import { companyTimezone } from "./tz";
 
 /** Creates an in-app notification and fires a matching Web Push (if enabled). */
 export async function pushNotification(userId: number, message: string, link?: string) {
   await db.notification.create({ data: { userId, message, link } });
   // "Do not disturb" keeps it in the Inbox but skips the pop-up.
-  const who = await db.user.findUnique({ where: { id: userId }, select: { presence: true, presenceUntil: true } });
+  const who = await db.user.findUnique({
+    where: { id: userId },
+    select: { presence: true, presenceUntil: true, quietStart: true, quietEnd: true, company: { select: { code: true } } },
+  });
   if (who && chosenPresence(who) === "DND") return;
+  // Quiet hours (Settings) — same: Inbox yes, pop-up no.
+  if (who && who.quietStart != null && who.quietEnd != null) {
+    const hour = Number(new Intl.DateTimeFormat("en-GB", { hour: "numeric", hourCycle: "h23", timeZone: companyTimezone(who.company) }).format(new Date()));
+    if (inQuietHours(who.quietStart, who.quietEnd, hour)) return;
+  }
   // Fire-and-forget browser push — a no-op unless VAPID keys are configured.
   void sendPushToUser(userId, {
     title: "Looms & Berries Tasks",
@@ -26,17 +36,19 @@ export async function pushNotification(userId: number, message: string, link?: s
 }
 
 /**
- * Whether a user should receive email. Users can turn email off in Settings
- * while still getting in-app notifications. `emailNotifications` is often
+ * Whether a user should receive email. Users can turn email off (all of it, or
+ * by kind) in Settings while still getting in-app notifications. `emailNotifications` is often
  * already loaded on the user row; when it isn't, we look it up.
  */
-async function wantsEmail(user: { id: number; emailNotifications?: boolean }) {
-  if (typeof user.emailNotifications === "boolean") return user.emailNotifications;
+async function wantsEmail(user: { id: number; emailNotifications?: boolean; emailMuted?: string }, kind: EmailKind) {
+  if (typeof user.emailNotifications === "boolean" && typeof user.emailMuted === "string") {
+    return emailAllowed({ emailNotifications: user.emailNotifications, emailMuted: user.emailMuted }, kind);
+  }
   const row = await db.user.findUnique({
     where: { id: user.id },
-    select: { emailNotifications: true },
+    select: { emailNotifications: true, emailMuted: true },
   });
-  return row?.emailNotifications ?? true;
+  return row ? emailAllowed(row, kind) : true;
 }
 
 /**
@@ -61,7 +73,7 @@ export async function notifyAssignment(opts: {
     `${opts.actor.name} assigned you: ${opts.task.title}`,
     `/tasks/${opts.task.id}`
   );
-  if (await wantsEmail(opts.assignee)) {
+  if (await wantsEmail(opts.assignee, "ASSIGN")) {
     notifyTaskAssigned({
       to: opts.assignee.email,
       assigneeName: opts.assignee.name,
@@ -87,7 +99,7 @@ export async function notifyReviewNeeded(opts: {
     `${opts.actor.name} sent "${opts.task.title}" for your review`,
     `/tasks/${opts.task.id}`
   );
-  if (await wantsEmail(opts.owner)) {
+  if (await wantsEmail(opts.owner, "REVIEW")) {
     notifyReviewRequested({
       to: opts.owner.email,
       ownerName: opts.owner.name,
@@ -111,7 +123,7 @@ export async function notifyCompletion(opts: {
     `${opts.actor.name} completed: ${opts.task.title}`,
     `/tasks/${opts.task.id}`
   );
-  if (await wantsEmail(opts.owner)) {
+  if (await wantsEmail(opts.owner, "REVIEW")) {
     notifyTaskCompleted({
       to: opts.owner.email,
       ownerName: opts.owner.name,
@@ -135,7 +147,7 @@ export async function notifyApproval(opts: {
     `${opts.actor.name} approved & completed your task: ${opts.task.title}`,
     `/tasks/${opts.task.id}`
   );
-  if (await wantsEmail(opts.assignee)) {
+  if (await wantsEmail(opts.assignee, "REVIEW")) {
     notifyTaskApproved({
       to: opts.assignee.email,
       assigneeName: opts.assignee.name,
@@ -163,7 +175,7 @@ export async function notifyReopened(opts: {
       : `${opts.actor.name} reopened: ${opts.task.title}`,
     `/tasks/${opts.task.id}`
   );
-  if (await wantsEmail(opts.assignee)) {
+  if (await wantsEmail(opts.assignee, "REVIEW")) {
     notifyTaskReopened({
       to: opts.assignee.email,
       assigneeName: opts.assignee.name,
@@ -189,7 +201,7 @@ export async function notifyComment(opts: {
       `${opts.actor.name} commented on: ${opts.task.title}`,
       `/tasks/${opts.task.id}`
     );
-    if (await wantsEmail(r)) {
+    if (await wantsEmail(r, "COMMENT")) {
       notifyTaskComment({
         to: r.email,
         recipientName: r.name,
@@ -214,7 +226,7 @@ export async function notifyReminder(opts: {
     `${opts.actor.name} sent a reminder: ${opts.task.title}`,
     `/tasks/${opts.task.id}`
   );
-  if (await wantsEmail(opts.recipient)) {
+  if (await wantsEmail(opts.recipient, "REMINDER")) {
     notifyTaskReminder({
       to: opts.recipient.email,
       recipientName: opts.recipient.name,

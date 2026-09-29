@@ -108,6 +108,14 @@ model User {
   /// deactivation, role change, "sign out other devices"). Sessions carry the
   /// version they were issued with and stop working once it moves on.
   sessionVersion        Int                    @default(0)
+  /// Email kinds this person switched off, comma-separated (see lib/emailPrefs).
+  emailMuted            String                 @default("")
+  /// Page to open after signing in (see lib/emailPrefs HOME_PAGES).
+  homePage              String?
+  /// Quiet hours for pop-up notifications, in their office's local time
+  /// (0–23). Both null = off. Inbox still gets everything.
+  quietStart            Int?
+  quietEnd              Int?
   clientComments        ClientComment[]
   fileShares            AttachmentShare[]
   docFolders            DocFolder[]

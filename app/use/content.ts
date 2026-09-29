@@ -113,10 +113,11 @@ export const CATEGORIES: Category[] = [
         id: "profile",
         title: "Set your photo, language and notifications",
         audience: "Everyone",
-        summary: "Open Settings from the bottom of the sidebar to personalise your account.",
+        summary:
+          "Open Settings from the bottom of the sidebar. Sections on the left: Profile, Notifications, Preferences (theme and start page), Calendar sync and Security (with a checklist of what’s protected).",
         shot: "settings",
         callouts: [
-          { spot: "avatar", title: "Profile picture", body: "Upload a JPG/PNG — it's auto-cropped to a square and shown next to your name everywhere.", side: "right" },
+          { spot: "avatar", title: "Profile picture", body: "Click your photo (or drop an image on it) — it's auto-cropped to a square and shown next to your name everywhere.", side: "right" },
           { spot: "language", title: "Preferred chat language", body: "Messages people send you are translated into this language automatically. “Show original” is always one tap away.", side: "right" },
         ],
         tips: [
@@ -630,11 +631,11 @@ export const CATEGORIES: Category[] = [
         id: "notification-settings",
         title: "Choose your notifications",
         audience: "Everyone",
-        summary: "In-app notifications are always on. You choose whether you also get emails.",
+        summary: "Your Inbox always gets everything. Choose which emails you get (by type), quiet hours for pop-ups, and send yourself a test.",
         shot: "notification-settings",
         callouts: [
-          { spot: "email", title: "Email notifications", body: "Assignments, comments, reminders and team leave announcements. Untick to stop emails.", side: "right" },
-          { spot: "save", title: "Save preferences", body: "Takes effect straight away.", side: "right" },
+          { spot: "email", title: "Email notifications", body: "A master switch plus one per type — assigned to me, reviews, comments, reminders, team leave and the morning summary.", side: "right" },
+          { spot: "save", title: "Save notification settings", body: "Takes effect straight away. Quiet hours stop pop-ups overnight; the Inbox still fills up.", side: "right" },
         ],
         tips: [
           "Browser pop-ups: allow notifications when the app asks, so you're alerted even when the tab is in the background.",

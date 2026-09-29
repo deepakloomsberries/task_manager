@@ -29,6 +29,8 @@ export const LIMITS = {
   twoStepPerUser: { max: 5, windowMs: 15 * 60_000 },
   /** Reset-code guesses from one IP (per-account guesses are capped separately). */
   resetVerifyPerIp: { max: 20, windowMs: 15 * 60_000 },
+  /** "Send me a test email" presses per person. */
+  testEmailPerUser: { max: 3, windowMs: 60 * 60_000 },
 } satisfies Record<string, Limit>;
 
 function live(key: string, now: number) {

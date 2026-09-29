@@ -6,8 +6,10 @@ import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { createSession, destroySession, requireUser, revokeSessions } from "@/lib/auth";
 import { isStrongPassword } from "@/lib/password";
-import { notifyPasswordOtp } from "@/lib/mail";
+import { emailShell, mailConfigured, notifyPasswordOtp, sendMailChecked } from "@/lib/mail";
+import { pushNotification } from "@/lib/notify";
 import { CHAT_LANGUAGES } from "@/lib/ui";
+import { EMAIL_KINDS, homePageOf } from "@/lib/emailPrefs";
 import { LIMITS, clientIp, hit, isLimited, reset as clearLimit } from "@/lib/rateLimit";
 import { adminTwoStepRequired, endTwoStep, pendingTwoStep, startTwoStep } from "@/lib/twoFactor";
 import { recoveryCodesLeft, consumeRecoveryCode, verifyTotp } from "@/lib/totp";
@@ -20,10 +22,10 @@ const OTP_MAX_SENDS = 5; // codes we'll email within one active window (resend c
 const DUMMY_HASH = "$2b$10$CC6rVNOW008B.W6HG3wfp.vMNi6Wy/w7CG0R24JCyCtPp8eV0j5vi";
 
 /** Where to go after signing in: Settings while a required setup step is open. */
-function landingFor(user: { mustChangePassword: boolean; role: string; totpEnabled: boolean }) {
+function landingFor(user: { mustChangePassword: boolean; role: string; totpEnabled: boolean; homePage?: string | null }) {
   if (user.mustChangePassword) return "/settings?first=1";
   if (user.role === "ADMIN" && !user.totpEnabled && adminTwoStepRequired()) return "/settings";
-  return "/dashboard";
+  return homePageOf(user.homePage);
 }
 
 export async function login(formData: FormData) {
@@ -241,11 +243,26 @@ export async function updateNotificationPrefs(formData: FormData) {
   const user = await requireUser();
   const emailNotifications = formData.get("emailNotifications") === "on";
   const dailyDigest = formData.get("dailyDigest") === "on";
+  // Checkboxes are "on" for kinds the person WANTS — store the rest as muted.
+  const emailMuted = EMAIL_KINDS.filter((k) => formData.get(`email_${k.key}`) !== "on").map((k) => k.key).join(",");
+  const hour = (v: FormDataEntryValue | null) => {
+    const n = Number(v);
+    return v !== null && v !== "" && Number.isInteger(n) && n >= 0 && n <= 23 ? n : null;
+  };
+  const quietOn = formData.get("quiet") === "on";
+  const quietStart = quietOn ? hour(formData.get("quietStart")) : null;
+  const quietEnd = quietOn ? hour(formData.get("quietEnd")) : null;
   await db.user.update({
     where: { id: user.id },
-    data: { emailNotifications, dailyDigest },
+    data: {
+      emailNotifications,
+      dailyDigest,
+      emailMuted,
+      quietStart: quietStart !== null && quietEnd !== null && quietStart !== quietEnd ? quietStart : null,
+      quietEnd: quietStart !== null && quietEnd !== null && quietStart !== quietEnd ? quietEnd : null,
+    },
   });
-  redirect("/settings?ok=1");
+  redirect("/settings?ok=1#notifications");
 }
 
 /** Settings → "Sign out of all other devices" (lost laptop, shared computer…). */
@@ -253,4 +270,34 @@ export async function signOutOtherDevices() {
   const user = await requireUser();
   await createSession(user.id, user.role, await revokeSessions(user.id));
   redirect("/settings?ok=signed-out");
+}
+
+/** Settings → Preferences: the page to open after signing in. */
+export async function updatePreferences(formData: FormData) {
+  const user = await requireUser();
+  const raw = String(formData.get("homePage") ?? "");
+  await db.user.update({ where: { id: user.id }, data: { homePage: homePageOf(raw) === "/dashboard" ? null : homePageOf(raw) } });
+  redirect("/settings?ok=1#preferences");
+}
+
+/** Settings → "Send me a test email", to check email reaches this inbox. */
+export async function sendTestEmail() {
+  const user = await requireUser();
+  if (!mailConfigured()) redirect("/settings?error=no-smtp#notifications");
+  const key = `testmail:${user.id}`;
+  if (isLimited(key, LIMITS.testEmailPerUser)) redirect("/settings?error=test-limit#notifications");
+  hit(key, LIMITS.testEmailPerUser);
+  const ok = await sendMailChecked(
+    user.email,
+    "Test email from Looms & Berries Tasks",
+    emailShell("Email is working ✅", [`Hi ${user.name.replace(/[<>&]/g, "")}, this is the test you asked for from Settings. Notifications will arrive at this address.`], `${process.env.APP_URL ?? ""}/settings#notifications`, "Open settings")
+  );
+  redirect(ok ? "/settings?ok=test-email#notifications" : "/settings?error=test-failed#notifications");
+}
+
+/** Settings → "Send a test notification" (Inbox + pop-up). */
+export async function sendTestPush() {
+  const user = await requireUser();
+  await pushNotification(user.id, "🔔 Test notification — pop-ups are working.", "/settings#notifications");
+  redirect("/settings?ok=test-push#notifications");
 }

@@ -257,7 +257,7 @@ const SHOTS = [
   {
     id: "settings", path: "/settings",
     spots: {
-      avatar: (p) => p.getByText("Profile picture").first().locator(".."),
+      avatar: (p) => p.locator("#profile .card").first(),
       language: (p) => p.getByText("Preferred chat language").first().locator(".."),
     },
   },
@@ -416,8 +416,8 @@ const SHOTS = [
       await p.evaluate(() => document.querySelector("main")?.scrollBy(0, 250));
     },
     spots: {
-      email: (p) => p.getByText("Email notifications", { exact: true }).locator("xpath=../.."),
-      save: (p) => p.getByRole("button", { name: "Save preferences" }),
+      email: (p) => p.getByText("Email me", { exact: true }).locator("xpath=ancestor::div[contains(@class,'rounded-lg')][1]"),
+      save: (p) => p.getByRole("button", { name: "Save notification settings" }),
       password: (p) => p.getByRole("heading", { name: /password/i }).first().locator("xpath=ancestor::div[contains(@class,'card')][1]"),
     },
   },

@@ -1,5 +1,6 @@
 "use server";
 
+import { emailAllowed } from "@/lib/emailPrefs";
 import { redirect } from "next/navigation";
 import { safeBack, localPath } from "@/lib/backLink";
 import { cookies } from "next/headers";
@@ -148,7 +149,7 @@ async function addCollaborator(
   await logActivity(taskId, actor.id, "details", `added ${person.name} as a collaborator`);
   if (userId !== actor.id) {
     await pushNotification(userId, `${actor.name} added you as a collaborator on: ${taskTitle}`, `/tasks/${taskId}`);
-    if (person.emailNotifications) {
+    if (emailAllowed(person, "ASSIGN")) {
       notifyCollaboratorAdded({ to: person.email, name: person.name, taskId, taskTitle, addedBy: actor.name });
     }
   }

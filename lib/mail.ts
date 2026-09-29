@@ -38,6 +38,23 @@ export function sendMail(to: string, subject: string, html: string): Promise<voi
     .catch((e) => console.error(`[mail failed] to=${to}:`, e?.message ?? e));
 }
 
+export function mailConfigured() {
+  return !!(process.env.SMTP_USER && process.env.SMTP_PASS);
+}
+
+/** Like sendMail, but waits and reports whether the server accepted it. */
+export async function sendMailChecked(to: string, subject: string, html: string): Promise<boolean> {
+  const transporter = getTransporter();
+  if (!transporter) return false;
+  try {
+    await transporter.sendMail({ from: process.env.SMTP_FROM ?? `"${APP_NAME}" <${process.env.SMTP_USER}>`, to, subject, html });
+    return true;
+  } catch (e) {
+    console.error(`[mail failed] to=${to}:`, (e as Error)?.message ?? e);
+    return false;
+  }
+}
+
 /**
  * Sends one email to many people at once, recipients in Bcc (so nobody sees
  * everyone's address), in chunks to stay well inside SMTP limits. Never throws.
