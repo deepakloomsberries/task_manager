@@ -144,7 +144,7 @@ export default async function DashboardPage() {
             </h1>
             <p className="mt-1 text-sky-50/90">{summary}</p>
           </div>
-          <Link href="/tasks?new=1" className="rounded-lg bg-white/95 px-4 py-2 text-sm font-semibold text-sky-700 shadow-sm hover:bg-white">
+          <Link href="/tasks?new=1" className="rounded-lg bg-white/95 px-4 py-2 text-sm font-semibold text-sky-700 shadow-sm hover:bg-white dark:!bg-white dark:!text-sky-800">
             + New task
           </Link>
         </div>

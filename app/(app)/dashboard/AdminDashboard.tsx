@@ -202,7 +202,7 @@ export default async function AdminDashboard({ user }: { user: AdminUser }) {
             <Link href="/reports" className="rounded-lg bg-white/15 px-4 py-2 text-sm font-semibold text-white hover:bg-white/25">
               Reports
             </Link>
-            <Link href="/tasks?new=1" className="rounded-lg bg-white/95 px-4 py-2 text-sm font-semibold text-sky-800 shadow-sm hover:bg-white">
+            <Link href="/tasks?new=1" className="rounded-lg bg-white/95 px-4 py-2 text-sm font-semibold text-sky-800 shadow-sm hover:bg-white dark:!bg-white dark:!text-sky-800">
               + New task
             </Link>
           </div>
