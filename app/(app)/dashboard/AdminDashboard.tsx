@@ -1,4 +1,4 @@
-import { PRESENCE, PRESENCE_SELECT, resolvePresence } from "@/lib/presence";
+import { PRESENCE_SELECT } from "@/lib/presence";
 import Link from "next/link";
 import GettingStarted from "@/components/GettingStarted";
 import WhosOff from "@/components/WhosOff";
@@ -137,10 +137,6 @@ export default async function AdminDashboard({ user }: { user: AdminUser }) {
     .sort((a, b) => b.overdue - a.overdue || b.open - a.open)
     .slice(0, 4);
 
-  const onlineUsers = people
-    .filter((p) => resolvePresence(p).key !== "OFFLINE")
-    .sort((a, b) => new Date(b.lastSeenAt ?? 0).getTime() - new Date(a.lastSeenAt ?? 0).getTime())
-.slice(0, 12);
 
   // Project progress.
   const projTasks = activeProjects.length
@@ -360,34 +356,6 @@ export default async function AdminDashboard({ user }: { user: AdminUser }) {
           {/* Office hours */}
           <OfficeClocks myCode={user.company.code} />
 
-          {/* Active now */}
-          <div className="card">
-            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-              <h2 className="flex items-center gap-2 font-semibold">
-                <span className="h-2 w-2 rounded-full bg-green-500" />
-                Active now
-                <span className="text-sm font-normal text-slate-400">({onlineUsers.length})</span>
-              </h2>
-              <Link href="/messages" className="text-sm text-sky-600 hover:underline">Message</Link>
-            </div>
-            <div className="p-4">
-              {onlineUsers.length === 0 ? (
-                <p className="py-3 text-center text-sm text-slate-400">No one is online right now.</p>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {onlineUsers.map((u) => (
-                    <Link key={u.id} href={`/messages/${u.id}`} title={`Message ${u.name}`} className="flex items-center gap-2 rounded-full border border-slate-200 py-1 pl-1 pr-3 hover:bg-slate-50">
-                      <UserAvatar user={u} size={28} presence={u} />
-                      <span className="text-sm">{u.name.split(" ")[0]}</span>
-                      {resolvePresence(u).key !== "AVAILABLE" && (
-                        <span className={`text-xs ${PRESENCE[resolvePresence(u).key].text}`}>· {PRESENCE[resolvePresence(u).key].label}</span>
-                      )}
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
         </div>
       </div>
     </div>

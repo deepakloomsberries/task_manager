@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { cookies } from "next/headers";
 import { SidebarProvider, DesktopSidebar, SidebarToggle } from "@/components/SidebarState";
 import MobileSidebar from "@/components/MobileSidebar";
@@ -18,6 +17,9 @@ import { reapStaleTimers } from "@/lib/timers";
 import { adminTwoStepRequired } from "@/lib/twoFactor";
 import { todayIn } from "@/lib/leave";
 import { companyTimezone } from "@/lib/tz";
+import TeamPresence from "@/components/TeamPresence";
+import NotificationBell from "@/components/NotificationBell";
+import { loadTeamPresence } from "@/lib/teamPresence";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
@@ -41,7 +43,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const todayDate = new Date(`${todayIn(companyTimezone(user.company))}T00:00:00Z`);
   const isApprover = user.role === "ADMIN" || user.role === "MANAGER";
-  const [unread, unreadMessages, activeTimer, myTasksDue, pendingLeave, onLeaveToday] =
+  const [unread, unreadMessages, activeTimer, myTasksDue, pendingLeave, onLeaveToday, team] =
     await Promise.all([
       db.notification.count({ where: { userId: user.id, read: false } }),
       db.directMessage.count({ where: { recipientId: user.id, read: false } }),
@@ -61,6 +63,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       db.leave
         .count({ where: { userId: user.id, status: "APPROVED", startDate: { lte: todayDate }, endDate: { gte: todayDate } } })
         .then((n) => n > 0),
+      loadTeamPresence(user.id),
     ]);
 
   const navBadges: Record<string, number> = {
@@ -86,7 +89,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <SidebarToggle />
           <MobileSidebar isAdmin={isAdmin} isManager={isManager} badges={navBadges} />
           <CommandButton />
-          <div className="hidden flex-1 sm:block" />
+          <div className="flex min-w-0 flex-1 items-center">
+            <TeamPresence initial={team} />
+          </div>
           {activeTimer && (
             <RunningTimerPill
               taskId={activeTimer.task.id}
@@ -96,30 +101,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           )}
           <ThemeToggle />
           <HelpMenu />
-          <Link
-            href="/notifications"
-            className="relative rounded-lg p-2 text-xl leading-none text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
-            title="Notifications"
-          >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-              <path d="M13.7 21a2 2 0 0 1-3.4 0" />
-            </svg>
-            {unread > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
-                {unread > 99 ? "99+" : unread}
-              </span>
-            )}
-          </Link>
+          <NotificationBell initialUnread={unread} />
           <StatusMenu
             user={{ id: user.id, name: user.name, avatarPath: user.avatarPath }}
             subtitle={`${user.company.code} · ${user.role.toLowerCase()}`}

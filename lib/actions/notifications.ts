@@ -54,3 +54,13 @@ export async function clearNotifications(formData: FormData) {
   revalidatePath("/notifications");
   redirect(backFrom(formData));
 }
+
+/** Header bell: mark one (or all, with no id) read without leaving the page. */
+export async function markReadQuietly(id?: number) {
+  const user = await requireUser();
+  await db.notification.updateMany({
+    where: { userId: user.id, read: false, ...(id ? { id } : {}) },
+    data: { read: true },
+  });
+  revalidatePath("/notifications");
+}

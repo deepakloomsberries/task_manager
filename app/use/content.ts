@@ -570,7 +570,9 @@ export const CATEGORIES: Category[] = [
         tips: [
           "Automatic: green when you're using the app, yellow (Away) when it's open in the background, grey when you're signed out.",
           "Approved leave shows a purple “On leave” dot — no need to set anything.",
-          "Colleagues see your status on your photo in chats, task pages, the Dashboard and your profile.",
+          "Colleagues see your status on your photo in chats, task pages, the top bar and your profile.",
+          "Top bar: who's online right now (click a face to message them). Click “N online” for the whole team — status, message, office and local time, last seen — with search.",
+          "The 🔔 bell opens your latest notifications; mark them all read from there. The unread count also shows in the browser tab.",
         ],
       },
       {
