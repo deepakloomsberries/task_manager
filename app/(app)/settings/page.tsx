@@ -1,4 +1,8 @@
+import Link from "next/link";
 import { requireUser } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { parseResponsibilities } from "@/lib/responsibilities";
+import { weekStartOf } from "@/lib/timerange";
 import ConfirmButton from "@/components/ConfirmButton";
 import CopyField from "@/components/CopyField";
 import { disableCalendarLink, resetCalendarLink } from "@/lib/actions/calendar";
@@ -24,7 +28,7 @@ import SettingsNav from "@/components/settings/SettingsNav";
 import ThemeChoice from "@/components/settings/ThemeChoice";
 import PushStatus from "@/components/settings/PushStatus";
 import { PASSWORD_RULES } from "@/lib/password";
-import { CHAT_LANGUAGES, ROLES, fmtDate, lookup } from "@/lib/ui";
+import { CHAT_LANGUAGES, ROLES, fmtDate, fmtHours, lookup } from "@/lib/ui";
 import { EMAIL_KINDS, HOME_PAGES, homePageOf, hourLabel, mutedKinds } from "@/lib/emailPrefs";
 import { mailConfigured } from "@/lib/mail";
 import { companyTimezone } from "@/lib/tz";
@@ -75,11 +79,62 @@ export default async function SettingsPage(props: {
     },
     ...(user.totpEnabled ? [{ ok: codesLeft >= 3, label: "Backup codes", hint: codesLeft >= 3 ? "Enough left" : "Running low — make new ones below" }] : []),
   ];
+  // ── My role: responsibilities, reporting line, recurring jobs, projects, workload ──
+  const now = new Date();
+  const weekStart = weekStartOf(now);
+  const weekAhead = new Date(now.getTime() + 7 * 86_400_000);
+  const mine = { deletedAt: null, OR: [{ assigneeId: user.id }, { collaborators: { some: { userId: user.id } } }] };
+  const [org, recurringRows, memberships, openCount, overdueCount, dueSoonCount, reviewCount, doneWeekCount, hoursAgg] = await Promise.all([
+    db.user.findUnique({
+      where: { id: user.id },
+      select: {
+        reportsTo: { select: { id: true, name: true, jobTitle: true, avatarPath: true } },
+        directReports: { where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } },
+      },
+    }),
+    db.task.findMany({
+      where: { assigneeId: user.id, deletedAt: null, seriesId: { not: null }, recurrence: { not: null } },
+      select: { seriesId: true, title: true, recurrence: true },
+      orderBy: { dueDate: "desc" },
+      distinct: ["seriesId"],
+      take: 12,
+    }),
+    db.projectMember.findMany({
+      where: { userId: user.id, project: { status: { in: ["ACTIVE", "ON_HOLD"] } } },
+      select: { project: { select: { id: true, name: true, status: true } } },
+      orderBy: { project: { name: "asc" } },
+      take: 24,
+    }),
+    db.task.count({ where: { ...mine, status: { not: "DONE" } } }),
+    db.task.count({ where: { ...mine, status: { not: "DONE" }, dueDate: { lt: now } } }),
+    db.task.count({ where: { ...mine, status: { not: "DONE" }, dueDate: { gte: now, lt: weekAhead } } }),
+    db.task.count({ where: { ...mine, status: "REVIEW" } }),
+    db.task.count({ where: { ...mine, status: "DONE", completedAt: { gte: weekStart } } }),
+    db.timeEntry.aggregate({ _sum: { hours: true }, where: { userId: user.id, date: { gte: weekStart } } }),
+  ]);
+  const duties = parseResponsibilities(user.responsibilities);
+  const workload = [
+    { label: "Open tasks", value: openCount, href: "/my-tasks" },
+    { label: "Overdue", value: overdueCount, href: "/my-tasks", accent: overdueCount ? "text-red-600" : "" },
+    { label: "Due in 7 days", value: dueSoonCount, href: "/my-tasks", accent: dueSoonCount ? "text-amber-600" : "" },
+    { label: "In review", value: reviewCount, href: "/my-tasks" },
+    { label: "Done this week", value: doneWeekCount, href: "/my-tasks", accent: "text-emerald-600" },
+    { label: "Logged this week", value: fmtHours(hoursAgg._sum.hours ?? 0), href: "/timesheet" },
+  ];
+  const profileChecks = [
+    { ok: !!user.avatarPath, label: "Photo" },
+    { ok: !!user.jobTitle, label: "Job title" },
+    { ok: !!user.preferredLanguage, label: "Chat language" },
+    { ok: duties.length > 0, label: "Responsibilities" },
+  ];
+  const profilePct = Math.round((profileChecks.filter((c) => c.ok).length / profileChecks.length) * 100);
+
   const securityScore = checks.filter((c) => c.ok).length;
   const securityNeedsWork = securityScore < checks.length;
 
   const nav = [
     { id: "profile", label: "Profile", icon: "👤" },
+    { id: "role", label: "My role", icon: "🎯", badge: duties.length === 0 },
     { id: "notifications", label: "Notifications", icon: "🔔" },
     { id: "preferences", label: "Preferences", icon: "🎨" },
     { id: "calendar", label: "Calendar sync", icon: "📅" },
@@ -133,7 +188,7 @@ export default async function SettingsPage(props: {
                   </p>
                 </div>
               </div>
-              <dl className="grid gap-3 border-t border-slate-100 px-6 py-4 text-sm sm:grid-cols-3 dark:border-slate-800">
+              <dl className="grid gap-3 border-t border-slate-100 px-6 py-4 text-sm sm:grid-cols-2 lg:grid-cols-4 dark:border-slate-800">
                 <div className="min-w-0">
                   <dt className="text-xs text-slate-500">Email</dt>
                   <dd className="truncate font-medium" title={user.email}>
@@ -148,7 +203,33 @@ export default async function SettingsPage(props: {
                   <dt className="text-xs text-slate-500">Member since</dt>
                   <dd className="font-medium">{fmtDate(user.createdAt)}</dd>
                 </div>
+                <div className="min-w-0">
+                  <dt className="text-xs text-slate-500">Reports to</dt>
+                  <dd className="truncate font-medium">
+                    {org?.reportsTo ? (
+                      <Link href={`/people/${org.reportsTo.id}`} className="hover:underline">
+                        {org.reportsTo.name}
+                      </Link>
+                    ) : (
+                      <span className="text-slate-400">Not set</span>
+                    )}
+                  </dd>
+                </div>
               </dl>
+              <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 px-6 py-3 text-xs dark:border-slate-800">
+                <span className="font-medium text-slate-600 dark:text-slate-300">Profile {profilePct}% complete</span>
+                <span className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700" aria-hidden>
+                  <span className="block h-full rounded-full bg-sky-500" style={{ width: `${profilePct}%` }} />
+                </span>
+                {profileChecks.map((c) => (
+                  <span key={c.label} className={c.ok ? "text-emerald-600" : "text-slate-400"}>
+                    {c.ok ? "✓" : "○"} {c.label}
+                  </span>
+                ))}
+                <Link href={`/people/${user.id}`} className="ml-auto text-sky-700 hover:underline dark:text-sky-400">
+                  View my profile as others see it →
+                </Link>
+              </div>
               {user.avatarPath && (
                 <form action={removeAvatar} className="px-6 pb-4">
                   <button type="submit" className="text-xs text-red-600 hover:underline">
@@ -191,6 +272,127 @@ export default async function SettingsPage(props: {
                   </button>
                 </div>
               </form>
+            </div>
+          </section>
+
+          {/* ───────── My role ───────── */}
+          <section id="role" className="card scroll-mt-20 p-6">
+            <SectionTitle title="My role & responsibilities" hint="What you're accountable for, who you report to, and how your week looks. Set by your admin." />
+            <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_220px]">
+              <div className="min-w-0">
+                <h3 className="mb-2 text-sm font-semibold">Responsibilities</h3>
+                {duties.length ? (
+                  <ol className="space-y-2">
+                    {duties.map((d, i) => (
+                      <li key={d} className="flex gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-sky-100 text-[11px] font-semibold text-sky-700 dark:bg-sky-900/50 dark:text-sky-300">
+                          {i + 1}
+                        </span>
+                        <span>{d}</span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="rounded-lg border border-dashed border-slate-300 px-4 py-3 text-sm text-slate-500 dark:border-slate-700">
+                    No responsibilities have been listed for you yet.
+                    {user.role === "ADMIN" ? (
+                      <>
+                        {" "}
+                        Add them from{" "}
+                        <Link href={`/users?edit=${user.id}`} className="text-sky-700 hover:underline dark:text-sky-400">
+                          Users
+                        </Link>
+                        .
+                      </>
+                    ) : (
+                      " Ask your admin or manager to add them."
+                    )}
+                  </p>
+                )}
+
+                {recurringRows.length > 0 && (
+                  <div className="mt-5">
+                    <h3 className="mb-2 text-sm font-semibold">Recurring jobs</h3>
+                    <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 text-sm dark:divide-slate-800 dark:border-slate-700">
+                      {recurringRows.map((r) => (
+                        <li key={r.seriesId} className="flex items-center justify-between gap-3 px-3 py-2">
+                          <span className="min-w-0 truncate">{r.title}</span>
+                          <span className="badge shrink-0 bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                            {r.recurrence === "DAILY" ? "Daily" : r.recurrence === "WEEKLY" ? "Weekly" : r.recurrence === "MONTHLY" ? "Monthly" : r.recurrence}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    <Link href="/recurring" className="mt-1 inline-block text-xs text-sky-700 hover:underline dark:text-sky-400">
+                      See recurring tracker →
+                    </Link>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-5 text-sm">
+                <div>
+                  <h3 className="mb-1 text-sm font-semibold">Reports to</h3>
+                  {org?.reportsTo ? (
+                    <Link href={`/people/${org.reportsTo.id}`} className="hover:underline">
+                      <span className="font-medium">{org.reportsTo.name}</span>
+                      {org.reportsTo.jobTitle && <span className="block text-xs text-slate-500">{org.reportsTo.jobTitle}</span>}
+                    </Link>
+                  ) : (
+                    <p className="text-slate-400">Not set</p>
+                  )}
+                </div>
+                {org && org.directReports.length > 0 && (
+                  <div>
+                    <h3 className="mb-1 text-sm font-semibold">My team ({org.directReports.length})</h3>
+                    <div className="flex flex-wrap gap-1">
+                      {org.directReports.map((r) => (
+                        <Link
+                          key={r.id}
+                          href={`/people/${r.id}`}
+                          className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600"
+                        >
+                          {r.name}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {memberships.length > 0 && (
+                  <div>
+                    <h3 className="mb-1 text-sm font-semibold">Projects</h3>
+                    <div className="flex flex-wrap gap-1">
+                      {memberships.map(({ project: p }) => (
+                        <Link
+                          key={p.id}
+                          href={`/projects/${p.id}`}
+                          className="rounded-full bg-sky-50 px-2.5 py-0.5 text-xs text-sky-800 hover:bg-sky-100 dark:bg-sky-950/40 dark:text-sky-200"
+                          title={p.status === "ON_HOLD" ? "On hold" : undefined}
+                        >
+                          {p.name}
+                          {p.status === "ON_HOLD" ? " ⏸" : ""}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800">
+              <h3 className="mb-2 text-sm font-semibold">My workload</h3>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                {workload.map((w) => (
+                  <Link
+                    key={w.label}
+                    href={w.href}
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-center hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800/40"
+                  >
+                    <div className={`text-xl font-bold ${w.accent ?? ""}`}>{w.value}</div>
+                    <div className="text-[11px] text-slate-500">{w.label}</div>
+                  </Link>
+                ))}
+              </div>
             </div>
           </section>
 

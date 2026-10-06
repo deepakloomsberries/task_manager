@@ -15,6 +15,7 @@ import DeleteUserButton from "@/components/DeleteUserButton";
 import ConfirmButton from "@/components/ConfirmButton";
 import { adminResetTwoStep } from "@/lib/actions/twoStep";
 import SearchSelect from "@/components/SearchSelect";
+import ResponsibilityFields from "@/components/ResponsibilityFields";
 import { PASSWORD_RULES } from "@/lib/password";
 import { USER_DATA_COUNT_SELECT, userHasData } from "@/lib/userData";
 
@@ -58,6 +59,7 @@ export default async function UsersPage(
       ? MESSAGES[msgKey]
       : null;
 
+  const activePeople = users.filter((u) => u.active);
   const showNew = searchParams.new === "1";
   const showImport = searchParams.import === "1";
   const editId = searchParams.edit ? Number(searchParams.edit) : null;
@@ -138,6 +140,7 @@ export default async function UsersPage(
               <label className="label">Job title</label>
               <input name="jobTitle" className="input" placeholder="e.g. Sales Executive" />
             </div>
+            <ResponsibilityFields people={activePeople} />
             <label className="flex items-center gap-2 md:col-span-3">
               <input type="checkbox" name="requiresApproval" className="h-4 w-4 rounded border-slate-300" />
               <span className="text-sm text-slate-600">
@@ -210,6 +213,7 @@ export default async function UsersPage(
                           <label className="label">Job title</label>
                           <input name="jobTitle" defaultValue={u.jobTitle ?? ""} className="input" />
                         </div>
+                        <ResponsibilityFields people={activePeople} selfId={u.id} reportsToId={u.reportsToId} responsibilities={u.responsibilities} className="md:col-span-2" />
                         <label className="col-span-full flex items-center gap-2">
                           <input
                             type="checkbox"

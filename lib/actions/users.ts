@@ -9,6 +9,8 @@ import { requireAdmin } from "@/lib/auth";
 import { notifyUserWelcome, notifyPasswordReset } from "@/lib/mail";
 import { isStrongPassword } from "@/lib/password";
 import { USER_DATA_COUNT_SELECT, userHasData } from "@/lib/userData";
+import { normalizeResponsibilities } from "@/lib/responsibilities";
+import { pushNotification } from "@/lib/notify";
 
 const ROLES = ["ADMIN", "MANAGER", "EMPLOYEE"];
 
@@ -17,6 +19,14 @@ const ROLES = ["ADMIN", "MANAGER", "EMPLOYEE"];
  * form may pass a `redirectTo` internal path (e.g. a person's profile) to stay
  * in place. The status query (?updated=1 etc.) from the fallback is preserved.
  */
+/** Manager picked on the form — must be another existing user. */
+async function readReportsTo(formData: FormData, selfId?: number): Promise<number | null> {
+  const id = Number(formData.get("reportsToId"));
+  if (!id || id === selfId) return null;
+  const found = await db.user.findUnique({ where: { id }, select: { id: true } });
+  return found ? found.id : null;
+}
+
 function returnTo(formData: FormData, fallbackWithQuery: string): string {
   const to = String(formData.get("redirectTo") ?? "");
   if (localPath(to, "") === "") return fallbackWithQuery;
@@ -37,6 +47,8 @@ export async function createUser(formData: FormData) {
     : null;
   const jobTitle = String(formData.get("jobTitle") ?? "").trim();
   const requiresApproval = formData.get("requiresApproval") === "on";
+  const responsibilities = normalizeResponsibilities(String(formData.get("responsibilities") ?? ""));
+  const reportsToId = await readReportsTo(formData);
 
   if (!email || !name || !ROLES.includes(role) || !companyId) {
     redirect("/users?error=invalid");
@@ -55,6 +67,8 @@ export async function createUser(formData: FormData) {
       departmentId: departmentId || null,
       jobTitle: jobTitle || null,
       requiresApproval,
+      responsibilities,
+      reportsToId,
       passwordHash: await bcrypt.hash(password, 10),
       mustChangePassword: true,
     },
@@ -78,6 +92,8 @@ export async function updateUser(formData: FormData) {
     : null;
   const jobTitle = String(formData.get("jobTitle") ?? "").trim();
   const requiresApproval = formData.get("requiresApproval") === "on";
+  const responsibilities = normalizeResponsibilities(String(formData.get("responsibilities") ?? ""));
+  const reportsToId = await readReportsTo(formData, id);
 
   if (!id || !name || !email || !ROLES.includes(role) || !companyId) redirect(returnTo(formData, "/users?error=invalid"));
   // An admin cannot demote themselves — prevents locking everyone out.
@@ -86,7 +102,7 @@ export async function updateUser(formData: FormData) {
   const clash = await db.user.findUnique({ where: { email }, select: { id: true } });
   if (clash && clash.id !== id) redirect(returnTo(formData, `/users?error=exists&edit=${id}`));
 
-  const before = await db.user.findUnique({ where: { id }, select: { role: true } });
+  const before = await db.user.findUnique({ where: { id }, select: { role: true, responsibilities: true } });
   await db.user.update({
     where: { id },
     data: {
@@ -99,8 +115,15 @@ export async function updateUser(formData: FormData) {
       departmentId: departmentId || null,
       jobTitle: jobTitle || null,
       requiresApproval,
+      // Only touch these when the form sent them, so other forms can't wipe them.
+      ...(formData.has("responsibilities") ? { responsibilities } : {}),
+      ...(formData.has("reportsToId") ? { reportsToId } : {}),
     },
   });
+  // Let them know their responsibilities changed (not when an admin edits their own).
+  if (before && id !== admin.id && formData.has("responsibilities") && (before.responsibilities ?? null) !== responsibilities) {
+    await pushNotification(id, `${admin.name} updated your responsibilities`, "/settings#role");
+  }
   revalidatePath("/users");
   revalidatePath(`/people/${id}`);
   redirect(returnTo(formData, "/users?updated=1"));

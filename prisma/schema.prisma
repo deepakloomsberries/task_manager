@@ -51,6 +51,13 @@ model User {
   department         Department? @relation(fields: [departmentId], references: [id])
   departmentId       Int?
   createdAt          DateTime    @default(now())
+  /// What this person is accountable for, one item per line. Set by an admin;
+  /// shown on their Settings page and profile (see lib/responsibilities).
+  responsibilities   String?
+  /// Their manager / lead. Shown on Settings and the profile.
+  reportsTo          User?       @relation("reportsTo", fields: [reportsToId], references: [id], onDelete: SetNull)
+  reportsToId        Int?
+  directReports      User[]      @relation("reportsTo")
 
   tasksAssigned         Task[]                 @relation("assignee")
   tasksCreated          Task[]                 @relation("creator")

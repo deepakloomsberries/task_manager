@@ -13,6 +13,8 @@ import PasswordField from "@/components/PasswordField";
 import SearchSelect from "@/components/SearchSelect";
 import DeleteUserButton from "@/components/DeleteUserButton";
 import AutoRefresh from "@/components/AutoRefresh";
+import ResponsibilityFields from "@/components/ResponsibilityFields";
+import { parseResponsibilities } from "@/lib/responsibilities";
 import { updateUser, resetUserPassword, toggleUserActive } from "@/lib/actions/users";
 import {
   TASK_STATUSES,
@@ -65,6 +67,8 @@ export default async function PersonProfilePage(
       company: true,
       department: true,
       activeTimer: { include: { task: true } },
+      reportsTo: { select: { id: true, name: true, jobTitle: true } },
+      directReports: { where: { active: true }, select: { id: true, name: true, jobTitle: true }, orderBy: { name: "asc" } },
       _count: { select: USER_DATA_COUNT_SELECT },
     },
   });
@@ -75,12 +79,14 @@ export default async function PersonProfilePage(
 
   // Admin-only account management on the profile: edit details, reset password,
   // (de)activate, and delete mistakenly-created empty accounts.
-  const [companies, departments] = isAdmin
+  const [companies, departments, people] = isAdmin
     ? await Promise.all([
         db.company.findMany({ orderBy: { name: "asc" } }),
         db.department.findMany({ include: { company: true }, orderBy: { name: "asc" } }),
+        db.user.findMany({ where: { active: true }, select: { id: true, name: true, jobTitle: true }, orderBy: { name: "asc" } }),
       ])
-    : [[], []];
+    : [[], [], []];
+  const duties = parseResponsibilities(person.responsibilities);
   const onLeave = (await usersOnLeave(todayIn(companyTimezone(person.company)))).has(person.id);
   const status = resolvePresence({ ...person, onLeave });
   const deletable = isAdmin && person.id !== viewer.id && !person.lastSeenAt && !userHasData(person._count);
@@ -285,6 +291,7 @@ export default async function PersonProfilePage(
               <label className="label">Job title</label>
               <input name="jobTitle" defaultValue={person.jobTitle ?? ""} className="input" />
             </div>
+            <ResponsibilityFields people={people} selfId={person.id} reportsToId={person.reportsToId} responsibilities={person.responsibilities} />
             <label className="flex items-center gap-2 md:col-span-2">
               <input type="checkbox" name="requiresApproval" defaultChecked={person.requiresApproval} className="h-4 w-4 rounded border-slate-300" />
               <span className="text-sm text-slate-600 dark:text-slate-300">
@@ -334,6 +341,55 @@ export default async function PersonProfilePage(
             </span>
           </div>
         </details>
+      )}
+
+      {/* Role: responsibilities and reporting line */}
+      {(duties.length > 0 || person.reportsTo || person.directReports.length > 0) && (
+        <div className="card p-5">
+          <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_220px]">
+            <div className="min-w-0">
+              <div className="mb-2 text-xs font-medium text-slate-500">Responsibilities</div>
+              {duties.length ? (
+                <ul className="space-y-1.5 text-sm">
+                  {duties.map((d) => (
+                    <li key={d} className="flex gap-2">
+                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500" aria-hidden />
+                      <span>{d}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-slate-400">None listed yet.</p>
+              )}
+            </div>
+            <div className="space-y-3 text-sm">
+              {person.reportsTo && (
+                <div>
+                  <div className="text-xs font-medium text-slate-500">Reports to</div>
+                  <Link href={`/people/${person.reportsTo.id}`} className="font-medium hover:underline">
+                    {person.reportsTo.name}
+                  </Link>
+                </div>
+              )}
+              {person.directReports.length > 0 && (
+                <div>
+                  <div className="text-xs font-medium text-slate-500">Team ({person.directReports.length})</div>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {person.directReports.map((r) => (
+                      <Link
+                        key={r.id}
+                        href={`/people/${r.id}`}
+                        className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600"
+                      >
+                        {r.name}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Stat tiles */}
