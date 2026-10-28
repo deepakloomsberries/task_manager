@@ -16,7 +16,7 @@ const nextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           // Links out of the app don't leak internal URLs (task ids, filters).
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          // Video calls run on Jitsi's own site, so this app never needs the camera itself.
+          // Video calls run on Google Meet's / Jitsi's own site, so this app never needs the camera itself.
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
         ],
       },

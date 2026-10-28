@@ -31,6 +31,8 @@ export const LIMITS = {
   resetVerifyPerIp: { max: 20, windowMs: 15 * 60_000 },
   /** "Send me a test email" presses per person. */
   testEmailPerUser: { max: 3, windowMs: 60 * 60_000 },
+  /** Google Meet spaces one person can create (calls + tests). */
+  meetCreatePerUser: { max: 40, windowMs: 60 * 60_000 },
 } satisfies Record<string, Limit>;
 
 function live(key: string, now: number) {

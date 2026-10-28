@@ -652,6 +652,46 @@ up in Sentry with the stack trace. Set an alert rule there to email you on new i
 
 ---
 
+## Part 9 — Google Meet for video calls (optional)
+
+Without this, the 📹 Call button uses Jitsi. With it, every call gets a real
+Google Meet link (everyone who clicks the same chat link lands in the same
+meeting). If Google ever fails, calls fall back to Jitsi automatically.
+
+In the [Google Cloud console](https://console.cloud.google.com), in your project:
+
+1. **APIs & Services → Library** → search **Google Meet REST API** → **Enable**.
+2. **APIs & Services → OAuth consent screen**:
+   - User type **Internal** if the project belongs to your Google Workspace
+     (loomsberries.com). If it can only be **External**, finish the setup and
+     click **Publish app** (status *In production*) — in *Testing* Google cuts the
+     connection after 7 days. Google may show an "unverified app" warning;
+     click *Advanced → continue*. That's fine for your own team.
+   - **Scopes → Add**: `https://www.googleapis.com/auth/meetings.space.created`
+     (plus `openid` and `email`).
+3. **APIs & Services → Credentials → Create credentials → OAuth client ID**:
+   - Application type: **Web application**
+   - Authorized redirect URI: `https://task.donetella.com/api/google/callback`
+4. Copy the client ID and secret into `.env`:
+
+   ```
+   GOOGLE_CLIENT_ID="1234…apps.googleusercontent.com"
+   GOOGLE_CLIENT_SECRET="GOCSPX-…"
+   GOOGLE_MEET_ACCESS="OPEN"   # OPEN = anyone with the link joins (like Jitsi); TRUSTED = only your Workspace joins without knocking
+   ```
+
+5. `systemctl restart task-manager`.
+6. Sign in as an admin → **Settings → Video calls → Connect Google account** →
+   pick the account that should host calls → Allow. Press **Test: create a
+   meeting** to confirm.
+
+Anyone can also connect **their own** Google account there, so their calls are
+created as them and they are the host (mute, remove, admit). The saved Google
+token is encrypted with `AUTH_SECRET` — changing `AUTH_SECRET` means
+reconnecting.
+
+---
+
 ## Prohibited actions
 
 - Do not drop or modify the `task_manager` Postgres database, `uploads/`, or `.env` — this is the live data. Keep `prisma/dev.db` as the pre-Postgres archive.

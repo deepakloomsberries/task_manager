@@ -603,6 +603,8 @@ export const CATEGORIES: Category[] = [
           "Open a chat and click 📹 Call in the top-right corner.",
           "Allow camera and microphone when your browser asks. On a phone, use Chrome or Safari.",
           "Calls work best on office Wi-Fi; if video freezes, turn your camera off and keep the audio.",
+          "Calls open in Google Meet once an admin connects a Google account (Settings → Video calls); otherwise Jitsi. Everyone who clicks the same link joins the same meeting.",
+          "Connect your own Google account in Settings → Video calls to be the host of the calls you start.",
         ],
       },
       {

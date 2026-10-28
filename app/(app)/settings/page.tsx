@@ -27,6 +27,7 @@ import SearchSelect from "@/components/SearchSelect";
 import SettingsNav from "@/components/settings/SettingsNav";
 import ThemeChoice from "@/components/settings/ThemeChoice";
 import PushStatus from "@/components/settings/PushStatus";
+import VideoCallsCard from "@/components/settings/VideoCallsCard";
 import { PASSWORD_RULES } from "@/lib/password";
 import { CHAT_LANGUAGES, ROLES, fmtDate, fmtHours, lookup } from "@/lib/ui";
 import { EMAIL_KINDS, HOME_PAGES, homePageOf, hourLabel, mutedKinds } from "@/lib/emailPrefs";
@@ -46,12 +47,19 @@ const MESSAGES: Record<string, { text: string; error?: boolean }> = {
   "no-smtp": { text: "Email isn't set up on the server yet (SMTP settings), so nothing can be sent.", error: true },
   "test-limit": { text: "You've sent a few test emails already — try again in an hour.", error: true },
   "test-failed": { text: "The mail server refused the test email. Ask your admin to check the SMTP settings.", error: true },
+  google: { text: "Google account connected — chat calls now use Google Meet." },
+  "google-off": { text: "Google account disconnected." },
+  "google-setup": { text: "Google Meet isn't set up on the server yet (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).", error: true },
+  "google-admin": { text: "Only admins can connect the team's Google account.", error: true },
+  "google-state": { text: "That Google sign-in expired or came from another browser — please try again.", error: true },
+  "google-denied": { text: "Google access wasn't allowed, so nothing changed.", error: true },
+  "google-failed": { text: "Google didn't accept the connection.", error: true },
 };
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 
 export default async function SettingsPage(props: {
-  searchParams: Promise<{ ok?: string; error?: string; first?: string; twostep?: string; recovery?: string }>;
+  searchParams: Promise<{ ok?: string; error?: string; why?: string; first?: string; twostep?: string; recovery?: string }>;
 }) {
   const searchParams = await props.searchParams;
   const user = await requireUser();
@@ -60,9 +68,11 @@ export default async function SettingsPage(props: {
   const feedUrl = user.calendarToken ? `${appUrl}/api/calendar/${user.calendarToken}.ics` : null;
   const msg = searchParams.ok
     ? MESSAGES[searchParams.ok] ?? MESSAGES.ok
-    : searchParams.error
-      ? MESSAGES[searchParams.error]
-      : null;
+    : searchParams.error === "google-failed" && searchParams.why
+      ? { text: `Google didn't accept the connection: ${searchParams.why.slice(0, 200)}`, error: true }
+      : searchParams.error
+        ? MESSAGES[searchParams.error]
+        : null;
   const muted = new Set(mutedKinds(user.emailMuted));
   const codesLeft = recoveryCodesLeft(user.totpRecovery);
   const role = lookup(ROLES, user.role);
@@ -138,6 +148,7 @@ export default async function SettingsPage(props: {
     { id: "notifications", label: "Notifications", icon: "🔔" },
     { id: "preferences", label: "Preferences", icon: "🎨" },
     { id: "calendar", label: "Calendar sync", icon: "📅" },
+    { id: "calls", label: "Video calls", icon: "📹" },
     { id: "security", label: "Security", icon: "🔐", badge: securityNeedsWork },
   ];
 
@@ -547,6 +558,9 @@ export default async function SettingsPage(props: {
               </form>
             )}
           </section>
+
+          {/* ───────── Video calls ───────── */}
+          <VideoCallsCard user={user} />
 
           {/* ───────── Security ───────── */}
           <section id="security" className="scroll-mt-20 space-y-4">

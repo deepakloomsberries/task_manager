@@ -26,7 +26,8 @@ export default function FlashToast({
       url.searchParams.delete("ok");
       url.searchParams.delete("error");
       url.searchParams.delete("moved");
-      window.history.replaceState(null, "", url.pathname + url.search);
+      url.searchParams.delete("why");
+      window.history.replaceState(null, "", url.pathname + url.search + url.hash);
     }
     // Success is transient; errors stay until dismissed so they can't be missed.
     if (!error) {

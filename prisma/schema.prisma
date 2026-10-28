@@ -67,6 +67,7 @@ model User {
   timeEntries           TimeEntry[]
   projectMembers        ProjectMember[]
   projectStars          ProjectStar[]
+  googleConnection      GoogleConnection?
   projectsCreated       Project[]
   attachments           Attachment[]
   discussionMessages    DiscussionMessage[]
@@ -1003,4 +1004,34 @@ model ClientFileShare {
 
   @@id([attachmentId, clientId])
   @@index([clientId])
+}
+
+/// A Google account connected for Google Meet calls: the organisation's
+/// (userId null, key "org") or a person's own (key "user:<id>") so they host
+/// their calls. The refresh token is encrypted (lib/secretBox).
+model GoogleConnection {
+  id           Int       @id @default(autoincrement())
+  key          String    @unique
+  user         User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       Int?      @unique
+  email        String
+  refreshToken String
+  /// Set when Google rejects the token (revoked / expired) — reconnect to fix.
+  error        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  lastUsedAt   DateTime?
+}
+
+/// A chat call link (/call/<room>) and the Google Meet space made for it, so
+/// everyone who clicks the same link lands in the same meeting.
+model CallRoom {
+  room        String   @id
+  provider    String   @default("MEET")
+  meetingUri  String
+  meetingCode String
+  spaceName   String
+  hostEmail   String
+  createdById Int
+  createdAt   DateTime @default(now())
 }
