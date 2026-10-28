@@ -173,3 +173,18 @@ export async function meetLinkForRoom(room: string, userId: number): Promise<str
     throw e;
   }
 }
+
+export type MeetStatus = { available: boolean; host: string | null; reason: string | null };
+
+/** Whether this person's calls can use Google Meet right now (for the Call menu). */
+export async function meetStatusFor(userId: number): Promise<MeetStatus> {
+  if (!googleConfigured()) return { available: false, host: null, reason: "Google Meet isn't set up yet" };
+  const conns = await db.googleConnection.findMany({ where: { key: { in: [`user:${userId}`, "org"] }, error: null }, select: { key: true, email: true } });
+  const pick = conns.find((c) => c.key !== "org") ?? conns.find((c) => c.key === "org");
+  return pick ? { available: true, host: pick.email, reason: null } : { available: false, host: null, reason: "No Google account connected (Settings → Video calls)" };
+}
+
+/** Call links say which app they're for: lbm-… Google Meet, lbj-… Jitsi, lb-… (older links) Meet when available. */
+export function callAppOf(room: string): "meet" | "jitsi" | "auto" {
+  return room.startsWith("lbj-") ? "jitsi" : room.startsWith("lbm-") ? "meet" : "auto";
+}

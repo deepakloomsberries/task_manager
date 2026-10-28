@@ -600,7 +600,7 @@ export const CATEGORIES: Category[] = [
         summary:
           "Start a video call from any chat or group — no meeting link or extra app needed. Everyone in the conversation gets a ring.",
         tips: [
-          "Open a chat and click 📹 Call in the top-right corner.",
+          "Open a chat, click 📹 Call in the top-right corner and pick Google Meet or Jitsi — the link is posted in the chat for everyone.",
           "Allow camera and microphone when your browser asks. On a phone, use Chrome or Safari.",
           "Calls work best on office Wi-Fi; if video freezes, turn your camera off and keep the audio.",
           "Calls open in Google Meet once an admin connects a Google account (Settings → Video calls); otherwise Jitsi. Everyone who clicks the same link joins the same meeting.",

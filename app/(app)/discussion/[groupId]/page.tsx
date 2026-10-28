@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { meetStatusFor } from "@/lib/googleMeet";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import GroupChatThread from "@/components/GroupChatThread";
@@ -77,6 +78,7 @@ export default async function GroupPage(props: { params: Promise<{ groupId: stri
   return (
     <GroupChatThread
       key={group.id}
+      meet={await meetStatusFor(user.id)}
       meId={user.id}
       group={{ id: group.id, name: group.name }}
       initialMembers={members.map((m) => m.user)}

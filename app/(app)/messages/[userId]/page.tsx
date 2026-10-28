@@ -1,4 +1,5 @@
 import { usersOnLeave } from "@/lib/leaveData";
+import { meetStatusFor } from "@/lib/googleMeet";
 import { todayIn } from "@/lib/leave";
 import { companyTimezone } from "@/lib/tz";
 import { notFound } from "next/navigation";
@@ -80,6 +81,7 @@ export default async function ConversationPage(props: { params: Promise<{ userId
       // below (scroll-to-bottom, unread-badge refresh) would only ever fire
       // once instead of on every chat switch.
       key={other.id}
+      meet={await meetStatusFor(user.id)}
       meId={user.id}
       other={{
         id: other.id,

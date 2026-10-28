@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import CallRedirect from "@/components/CallRedirect";
-import { googleConfigured, meetLinkForRoom } from "@/lib/googleMeet";
+import { callAppOf, googleConfigured, meetLinkForRoom } from "@/lib/googleMeet";
 import { LIMITS, hit, isLimited } from "@/lib/rateLimit";
 import { db } from "@/lib/db";
 
@@ -21,7 +21,8 @@ export default async function CallPage(props: { params: Promise<{ room: string }
   const room = params.room.replace(/[^A-Za-z0-9-]/g, "").slice(0, 64);
   if (!room) notFound();
 
-  if (googleConfigured()) {
+  // lbj-… links were started as Jitsi calls; everything else tries Google Meet first.
+  if (callAppOf(room) !== "jitsi" && googleConfigured()) {
     const key = `meet:${user.id}`;
     const known = await db.callRoom.findUnique({ where: { room }, select: { meetingUri: true } });
     if (known) return <CallRedirect url={known.meetingUri} app="Google Meet" />;

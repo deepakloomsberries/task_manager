@@ -1,6 +1,8 @@
 "use client";
 
 import ForwardDialog from "@/components/ForwardDialog";
+import CallButton from "@/components/CallButton";
+import type { MeetStatus } from "@/lib/googleMeet";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -220,6 +222,7 @@ export default function GroupChatThread({
   initialMembers,
   initialMessages,
   allUsers,
+  meet,
 }: {
   meId: number;
   group: { id: number; name: string };
@@ -227,6 +230,7 @@ export default function GroupChatThread({
   initialMessages: Msg[];
   /** Whole company directory, for the "add members" picker in GroupMembersPanel. */
   allUsers: Person[];
+  meet: MeetStatus;
 }) {
   const router = useRouter();
   const [messages, setMessages] = useState<Msg[]>(initialMessages);
@@ -464,12 +468,6 @@ export default function GroupChatThread({
     void sendBody(body, sending, replyId);
   }
 
-  function startCall() {
-    const room = `lb-${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 8)}`;
-    const url = `${window.location.origin}/call/${room}`;
-    void sendBody(`📹 I started a video call — join here: ${url}`);
-    window.open(url, "_blank", "noopener,noreferrer");
-  }
 
   function onDelete(id: number) {
     setPendingDelete(id);
@@ -653,19 +651,7 @@ export default function GroupChatThread({
               <path d="M12 16v-4M12 8h.01" />
             </svg>
           </button>
-          <button
-            type="button"
-            onClick={startCall}
-            title="Start a video call"
-            aria-label="Start a video call"
-            className="flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="m23 7-7 5 7 5V7Z" />
-              <rect x="1" y="5" width="15" height="14" rx="2" />
-            </svg>
-            <span className="hidden sm:inline">Call</span>
-          </button>
+          <CallButton meet={meet} onSend={(body) => void sendBody(body)} />
         </div>
       </div>
 

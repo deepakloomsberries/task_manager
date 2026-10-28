@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/lib/db";
 import { open, seal } from "@/lib/secretBox";
-import { meetLinkForRoom, newMeetSpace, saveConnection } from "@/lib/googleMeet";
+import { callAppOf, meetLinkForRoom, meetStatusFor, newMeetSpace, saveConnection } from "@/lib/googleMeet";
 import { makeUser } from "./helpers";
 
 type Call = { url: string; body: string; auth: string | null };
@@ -104,5 +104,33 @@ describe("google meet calls", () => {
     expect("error" in s).toBe(false);
     const spaceCalls = g.calls.filter((c) => c.url.includes("meet.googleapis.com"));
     expect(spaceCalls.map((c) => c.body)).toEqual([expect.stringContaining("accessType"), "{}"]);
+  });
+});
+
+describe("call menu", () => {
+  afterEach(async () => {
+    delete process.env.GOOGLE_CLIENT_ID;
+    delete process.env.GOOGLE_CLIENT_SECRET;
+    await db.googleConnection.deleteMany({});
+  });
+
+  it("call links carry the chosen app", () => {
+    expect(callAppOf("lbj-abc")).toBe("jitsi");
+    expect(callAppOf("lbm-abc")).toBe("meet");
+    expect(callAppOf("lb-abc")).toBe("auto");
+  });
+
+  it("Meet is offered only when set up and connected, hosted by your own account first", async () => {
+    const u = await makeUser();
+    expect((await meetStatusFor(u.id)).available).toBe(false);
+    process.env.GOOGLE_CLIENT_ID = "cid";
+    process.env.GOOGLE_CLIENT_SECRET = "secret";
+    expect(await meetStatusFor(u.id)).toMatchObject({ available: false, reason: expect.stringContaining("Settings") });
+    await saveConnection("org", null, "team@lb.test", "rt");
+    expect(await meetStatusFor(u.id)).toMatchObject({ available: true, host: "team@lb.test" });
+    await saveConnection(`user:${u.id}`, u.id, "me@lb.test", "rt2");
+    expect((await meetStatusFor(u.id)).host).toBe("me@lb.test");
+    await db.googleConnection.updateMany({ data: { error: "revoked" } });
+    expect((await meetStatusFor(u.id)).available).toBe(false);
   });
 });
